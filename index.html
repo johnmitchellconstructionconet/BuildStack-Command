@@ -190,6 +190,29 @@ tr:last-child td{border-bottom:none;}
 .ob-task-check{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--line);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
 .ob-task-check.done{background:var(--jade);border-color:var(--jade);color:#fff;font-size:11px;}
 .ob-quiz-gate{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.cs-hero{background:linear-gradient(135deg,var(--ink) 0%,#2A2E35 100%);border-radius:var(--radius-l);padding:40px 36px;margin-top:4px;position:relative;overflow:hidden;}
+.cs-hero::before{content:'';position:absolute;top:-40%;right:-10%;width:400px;height:400px;background:radial-gradient(circle,rgba(140,128,121,0.25),transparent 70%);}
+.cs-hero-inner{position:relative;z-index:1;}
+.cs-hero-eyebrow{color:var(--bronze);font-family:'Montserrat',sans-serif;font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:10px;}
+.cs-hero-title{color:#fff;font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:700;line-height:1.25;max-width:560px;margin-bottom:26px;}
+.cs-hero-stats{display:flex;gap:36px;flex-wrap:wrap;}
+.cs-stat-num{color:#fff;font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;line-height:1;}
+.cs-stat-label{color:#B9B2A4;font-size:12px;margin-top:6px;}
+.cs-pillar-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:24px;box-shadow:var(--shadow-soft);}
+.cs-pillar-icon{font-size:28px;margin-bottom:10px;}
+.cs-pillar-label{font-family:'Montserrat',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--bronze-dark);font-weight:700;margin-bottom:10px;}
+.cs-pillar-text{font-size:15px;line-height:1.65;color:var(--ink);}
+.cs-timeline{position:relative;padding-left:8px;}
+.cs-timeline-item{display:flex;gap:18px;position:relative;padding-bottom:28px;}
+.cs-timeline-item:last-child{padding-bottom:0;}
+.cs-timeline-item::before{content:'';position:absolute;left:19px;top:40px;bottom:0;width:2px;background:var(--line);}
+.cs-timeline-item:last-child::before{display:none;}
+.cs-timeline-dot{width:40px;height:40px;border-radius:50%;background:var(--panel);border:2px solid var(--bronze);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;z-index:1;box-shadow:var(--shadow-soft);}
+.cs-timeline-content{flex:1;background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:14px 18px;box-shadow:var(--shadow-soft);}
+.cs-timeline-date{font-family:'Montserrat',sans-serif;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--bronze-dark);font-weight:700;margin-bottom:3px;}
+.cs-timeline-title{font-weight:700;font-size:14.5px;}
+.cs-goal-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:16px 18px;box-shadow:var(--shadow-soft);margin-bottom:12px;}
+.cs-roadmap-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:14px 16px;box-shadow:var(--shadow-soft);margin-bottom:10px;}
 
 .empty{text-align:center;padding:50px 20px;color:var(--slate);}
 .empty h3{color:var(--ink);margin-bottom:6px;font-size:15px;}
@@ -426,6 +449,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
     <div class="nav-section" data-section-key="workspace">
       <div class="nav-label" onclick="toggleNavSection('workspace')">Workspace<span class="chev">▾</span></div>
       <div class="nav-item" data-nav="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard<span class="dot"></span></div>
+      <div class="nav-item" data-nav="companyStory"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>Company<span class="dot"></span></div>
       <div class="nav-item" data-nav="mytraining"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>My Training<span class="dot"></span></div>
       <div class="nav-item" data-nav="library"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H9v18H5.5A1.5 1.5 0 0 1 4 19.5Z"/><path d="M20 4.5A1.5 1.5 0 0 0 18.5 3H15v18h3.5a1.5 1.5 0 0 0 1.5-1.5Z"/></svg>Knowledge Library<span class="dot"></span></div>
       <div class="nav-item" data-nav="policies"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg>Policies<span class="dot"></span></div>
@@ -576,6 +600,14 @@ function seedData(){
       {id:'tpl4', title:'New Hire Acknowledgment Form', category:'HR & Onboarding', description:'Confirms a new hire has received and reviewed their offer terms and equipment agreement.', url:'', fileName:'', requiresSignature:true, uploadedBy:'u1', uploadedAt:'2026-01-15'}
     ],
     templateCategories: ['Contracts & Forms','Job Templates','HR & Onboarding'],
+    companyStory: {
+      mission: '',
+      vision: '',
+      founded: '2019-01-01',
+      timeline: [],
+      goals: [],
+      roadmap: []
+    },
     templateSignatures: [],
     individualTasks: [],
     gearCatalog: [
@@ -760,6 +792,7 @@ function migrateState(parsed){
         const existingCats = [...new Set((parsed.templates||[]).map(t=>t.category).filter(Boolean))];
         parsed.templateCategories = existingCats.length ? existingCats : ['Contracts & Forms','Job Templates','HR & Onboarding'];
       }
+      if(!parsed.companyStory) parsed.companyStory = { mission:'', vision:'', founded:'2019-01-01', timeline:[], goals:[], roadmap:[] };
       (parsed.templates||[]).forEach(t=>{ if(t.requiresSignature===undefined) t.requiresSignature = false; });
       if(!parsed.templateSignatures) parsed.templateSignatures = [];
       if(!parsed.gearCatalog) parsed.gearCatalog = [];
@@ -943,7 +976,8 @@ function initials(name){ return name.split(' ').map(p=>p[0]).slice(0,2).join('')
 function avatarHtml(person, size, fontSize){
   size = size || 28; fontSize = fontSize || Math.round(size*0.42);
   if(person && person.photo){
-    return `<div class="avatar" style="width:${size}px;height:${size}px;padding:0;overflow:hidden;background:none;box-shadow:none;flex-shrink:0;"><img src="${person.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"></div>`;
+    const posY = person.photoPositionY!=null ? person.photoPositionY : 25;
+    return `<div class="avatar" style="width:${size}px;height:${size}px;padding:0;overflow:hidden;background:none;box-shadow:none;flex-shrink:0;"><img src="${person.photo}" style="width:100%;height:100%;object-fit:cover;object-position:center ${posY}%;border-radius:50%;display:block;"></div>`;
   }
   const emptyStyle = person ? '' : 'background:var(--slate-light);';
   return `<div class="avatar" style="width:${size}px;height:${size}px;font-size:${fontSize}px;flex-shrink:0;${emptyStyle}">${person?initials(person.name):'?'}</div>`;
@@ -1515,6 +1549,7 @@ function render(){
   if(!u){ return; }
   const renderers = {
     dashboard: renderDashboard,
+    companyStory: renderCompanyStory,
     mytraining: renderMyTraining,
     library: renderLibrary,
     librarySubject: renderSubjectDetail,
@@ -1572,6 +1607,348 @@ function renderDashboard(){
   if(!isAdmin) return renderEmployeeDashboard();
   if(workMode==='admin') return u.accessLevel==='owner' ? renderOwnerDashboard() : renderAdminDashboard();
   return renderEmployeeDashboard();
+}
+function companyYearsInBusiness(){
+  const founded = state.companyStory.founded;
+  if(!founded) return null;
+  const ms = new Date() - new Date(founded+'T00:00:00');
+  return Math.max(0, ms / (1000*60*60*24*365.25));
+}
+function renderCompanyStory(){
+  const cs = state.companyStory;
+  const years = companyYearsInBusiness();
+  const teamSize = state.people.filter(p=>p.status!=='offboarded').length;
+  const locCount = state.locations.length;
+  const sopCount = state.topics.filter(t=>t.status!=='Draft').length;
+  const storyTab = companyStoryTab;
+  return `
+    <div class="cs-hero">
+      <div class="cs-hero-inner">
+        <div class="cs-hero-eyebrow">${state.companySettings.companyName || 'Our Company'}</div>
+        <div class="cs-hero-title">Where we've been, where we're headed.</div>
+        <div class="cs-hero-stats">
+          ${years!=null?`<div class="cs-stat"><div class="cs-stat-num">${years<1?'<1':Math.floor(years)}</div><div class="cs-stat-label">Year${years>=2?'s':''} in business</div></div>`:''}
+          <div class="cs-stat"><div class="cs-stat-num">${teamSize}</div><div class="cs-stat-label">Team members</div></div>
+          <div class="cs-stat"><div class="cs-stat-num">${locCount}</div><div class="cs-stat-label">Location${locCount!==1?'s':''}</div></div>
+          <div class="cs-stat"><div class="cs-stat-num">${sopCount}</div><div class="cs-stat-label">Processes documented</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="tabs mt-3">
+      <div class="tab ${storyTab==='overview'?'active':''}" onclick="companyStoryTab='overview';render();">Mission &amp; Vision</div>
+      <div class="tab ${storyTab==='history'?'active':''}" onclick="companyStoryTab='history';render();">Where We Came From</div>
+      <div class="tab ${storyTab==='goals'?'active':''}" onclick="companyStoryTab='goals';render();">Goals</div>
+      <div class="tab ${storyTab==='roadmap'?'active':''}" onclick="companyStoryTab='roadmap';render();">Roadmap</div>
+    </div>
+    ${storyTab==='overview'?renderCompanyOverviewTab():storyTab==='history'?renderCompanyHistoryTab():storyTab==='goals'?renderCompanyGoalsTab():renderCompanyRoadmapTab()}
+  `;
+}
+let companyStoryTab = 'overview';
+function renderCompanyOverviewTab(){
+  const cs = state.companyStory;
+  return `
+    ${canEdit()? `<div class="flex gap-2 mt-3" style="align-items:center;">
+      <label style="margin:0;">Founded</label>
+      <input type="date" id="m-cs-founded" value="${cs.founded||''}" style="margin:0;width:auto;" onchange="saveCompanyFoundedDate(this.value)">
+      <span class="small" style="color:var(--slate-light);">Drives the "years in business" stat up top.</span>
+    </div>`:''}
+    <div class="grid cols-2 mt-3">
+      <div class="cs-pillar-card">
+        <div class="cs-pillar-icon">🎯</div>
+        <div class="cs-pillar-label">Mission</div>
+        ${cs.mission? `<div class="cs-pillar-text">${cs.mission}</div>` : `<div class="empty-inline">No mission statement yet.${canEdit()?` <span onclick="openCompanyStoryTextModal('mission')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
+        ${canEdit() && cs.mission?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('mission')">Edit</span>`:''}
+      </div>
+      <div class="cs-pillar-card">
+        <div class="cs-pillar-icon">🔭</div>
+        <div class="cs-pillar-label">Vision</div>
+        ${cs.vision? `<div class="cs-pillar-text">${cs.vision}</div>` : `<div class="empty-inline">No vision statement yet.${canEdit()?` <span onclick="openCompanyStoryTextModal('vision')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
+        ${canEdit() && cs.vision?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('vision')">Edit</span>`:''}
+      </div>
+    </div>
+    ${state.companySettings.cultureStory? `<div class="section-title mt-3">Who We Are</div><div class="card">${state.companySettings.cultureStory}</div>`:''}
+  `;
+}
+function saveCompanyFoundedDate(val){
+  if(!canEdit()){ toast('Admins only'); return; }
+  state.companyStory.founded = val || null;
+  saveState(); render();
+}
+function openCompanyStoryTextModal(field){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const cs = state.companyStory;
+  const label = field==='mission'?'Mission':'Vision';
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${label} Statement</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>${label}</label>
+          <textarea id="m-cs-text" style="min-height:120px;">${cs[field]||''}</textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveCompanyStoryText('${field}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+function saveCompanyStoryText(field, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  state.companyStory[field] = document.getElementById('m-cs-text').value.trim();
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function renderCompanyHistoryTab(){
+  const timeline = [...state.companyStory.timeline].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
+      <div class="small" style="flex:1;">The milestones that got us here — funding, first hires, big jobs, whatever mattered.</div>
+      ${canEdit()?`<button class="btn secondary sm" onclick="openTimelineMilestoneModal()">+ Add Milestone</button>`:''}
+    </div>
+    ${!timeline.length? `<div class="empty mt-2"><h3>No history yet</h3><p>Add the first milestone — when the company started is a good one.</p></div>` : `
+    <div class="cs-timeline mt-3">
+      ${timeline.map((m,i)=>`
+        <div class="cs-timeline-item">
+          <div class="cs-timeline-dot">${m.icon||'📍'}</div>
+          <div class="cs-timeline-content">
+            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+              <div>
+                <div class="cs-timeline-date">${fmtDate(m.date)}</div>
+                <div class="cs-timeline-title">${m.title}</div>
+              </div>
+              ${canEdit()?`<div class="flex gap-1">
+                <span class="miniBtn" onclick="openTimelineMilestoneModal('${m.id}')" title="Edit">✎</span>
+                <span class="miniBtn" onclick="deleteTimelineMilestone('${m.id}')" title="Delete" style="color:var(--rust);">✕</span>
+              </div>`:''}
+            </div>
+            ${m.description?`<div class="small mt-1">${m.description}</div>`:''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`}
+  `;
+}
+function openTimelineMilestoneModal(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const m = id ? byId(state.companyStory.timeline, id) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${m?'Edit Milestone':'Add Milestone'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="field-row">
+            <div><label>Date</label><input type="date" id="m-ms-date" value="${m?.date||''}"></div>
+            <div><label>Icon <span class="small" style="font-weight:400;">(optional emoji)</span></label><input type="text" id="m-ms-icon" value="${escAttr(m?.icon)}" placeholder="🚀"></div>
+          </div>
+          <label>Title</label><input type="text" id="m-ms-title" value="${escAttr(m?.title)}" placeholder="e.g. Company founded">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
+          <textarea id="m-ms-desc">${m?.description||''}</textarea>
+        </div>
+        <div class="modal-foot">
+          ${m?`<button class="btn danger" style="margin-right:auto;" onclick="deleteTimelineMilestone('${m.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveTimelineMilestone('${id||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function saveTimelineMilestone(id, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const date = document.getElementById('m-ms-date').value;
+  const title = document.getElementById('m-ms-title').value.trim();
+  if(!date || !title){ toast('Date and title are required'); return; }
+  const data = { date, title, icon: document.getElementById('m-ms-icon').value.trim(), description: document.getElementById('m-ms-desc').value.trim() };
+  if(id){ Object.assign(byId(state.companyStory.timeline, id), data); }
+  else { data.id = 'cms'+Date.now(); state.companyStory.timeline.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteTimelineMilestone(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this milestone?', ()=>{
+    state.companyStory.timeline = state.companyStory.timeline.filter(m=>m.id!==id);
+    saveState(); toast('Removed'); render();
+  });
+}
+function renderCompanyGoalsTab(){
+  const goals = state.companyStory.goals;
+  const shortTerm = goals.filter(g=>g.timeframe==='short');
+  const longTerm = goals.filter(g=>g.timeframe==='long');
+  const renderGoalCard = (g)=>{
+    const statusMeta = {not_started:{label:'Not Started',pill:'gray'}, in_progress:{label:'In Progress',pill:'amber'}, achieved:{label:'Achieved',pill:'jade'}}[g.status] || {label:g.status,pill:'gray'};
+    return `<div class="cs-goal-card">
+      <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+        <strong>${g.title}</strong>
+        <span class="pill ${statusMeta.pill}">${statusMeta.label}</span>
+      </div>
+      ${g.description?`<div class="small mt-1">${g.description}</div>`:''}
+      <div class="progress-track mt-2"><div class="progress-fill ${g.status==='achieved'?'jade':'bronze'}" style="width:${g.progress||0}%;"></div></div>
+      <div class="flex" style="justify-content:space-between;align-items:center;margin-top:6px;">
+        <div class="small" style="color:var(--slate-light);">${g.progress||0}% ${g.targetDate?'· Target: '+fmtDate(g.targetDate):''}</div>
+        ${canEdit()?`<div class="flex gap-1">
+          <span class="miniBtn" onclick="openGoalModal('${g.id}')" title="Edit">✎</span>
+          <span class="miniBtn" onclick="deleteGoal('${g.id}')" title="Delete" style="color:var(--rust);">✕</span>
+        </div>`:''}
+      </div>
+    </div>`;
+  };
+  return `
+    <div class="grid cols-2 mt-3">
+      <div>
+        <div class="section-title" style="margin-top:0;">Short-Term<span class="count">${shortTerm.length}</span>
+          ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'short')">+ Add Goal</span>`:''}
+        </div>
+        ${shortTerm.length? shortTerm.map(renderGoalCard).join('') : `<div class="empty-inline">No short-term goals set yet.</div>`}
+      </div>
+      <div>
+        <div class="section-title" style="margin-top:0;">Long-Term<span class="count">${longTerm.length}</span>
+          ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'long')">+ Add Goal</span>`:''}
+        </div>
+        ${longTerm.length? longTerm.map(renderGoalCard).join('') : `<div class="empty-inline">No long-term goals set yet.</div>`}
+      </div>
+    </div>
+  `;
+}
+function openGoalModal(id, defaultTimeframe){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const g = id ? byId(state.companyStory.goals, id) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${g?'Edit Goal':'Add Goal'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Title</label><input type="text" id="m-goal-title" value="${escAttr(g?.title)}" placeholder="e.g. Expand into Lake of the Ozarks">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label><textarea id="m-goal-desc">${g?.description||''}</textarea>
+          <div class="field-row">
+            <div><label>Timeframe</label><select id="m-goal-timeframe"><option value="short" ${(g?.timeframe||defaultTimeframe)==='short'?'selected':''}>Short-term</option><option value="long" ${(g?.timeframe||defaultTimeframe)==='long'?'selected':''}>Long-term</option></select></div>
+            <div><label>Target date <span class="small" style="font-weight:400;">(optional)</span></label><input type="date" id="m-goal-target" value="${g?.targetDate||''}"></div>
+          </div>
+          <div class="field-row">
+            <div><label>Status</label><select id="m-goal-status">
+              <option value="not_started" ${g?.status==='not_started'?'selected':''}>Not Started</option>
+              <option value="in_progress" ${g?.status==='in_progress'?'selected':''}>In Progress</option>
+              <option value="achieved" ${g?.status==='achieved'?'selected':''}>Achieved</option>
+            </select></div>
+            <div><label>Progress (%)</label><input type="text" id="m-goal-progress" value="${g?.progress!=null?g.progress:'0'}"></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          ${g?`<button class="btn danger" style="margin-right:auto;" onclick="deleteGoal('${g.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveGoal('${id||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function saveGoal(id, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const title = document.getElementById('m-goal-title').value.trim();
+  if(!title){ toast('Title is required'); return; }
+  const progress = Math.max(0, Math.min(100, parseInt(document.getElementById('m-goal-progress').value)||0));
+  const data = {
+    title, description: document.getElementById('m-goal-desc').value.trim(),
+    timeframe: document.getElementById('m-goal-timeframe').value,
+    targetDate: document.getElementById('m-goal-target').value || null,
+    status: document.getElementById('m-goal-status').value,
+    progress
+  };
+  if(id){ Object.assign(byId(state.companyStory.goals, id), data); }
+  else { data.id = 'goal'+Date.now(); state.companyStory.goals.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteGoal(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this goal?', ()=>{
+    state.companyStory.goals = state.companyStory.goals.filter(g=>g.id!==id);
+    saveState(); toast('Removed'); render();
+  });
+}
+function renderCompanyRoadmapTab(){
+  const roadmap = state.companyStory.roadmap;
+  const cols = [
+    {key:'planned', label:'Planned', pill:'gray'},
+    {key:'in_progress', label:'In Progress', pill:'amber'},
+    {key:'done', label:'Done', pill:'jade'}
+  ];
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
+      <div class="small" style="flex:1;">What we're actually working on right now, and what's next.</div>
+      ${canEdit()?`<button class="btn secondary sm" onclick="openRoadmapItemModal()">+ Add Item</button>`:''}
+    </div>
+    <div class="grid cols-3 mt-2">
+      ${cols.map(col=>{
+        const items = roadmap.filter(r=>r.status===col.key);
+        return `<div>
+          <div class="small" style="font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span class="pill ${col.pill}">${col.label}</span><span class="count">${items.length}</span></div>
+          ${items.length? items.map(r=>`
+            <div class="cs-roadmap-card">
+              <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+                <strong>${r.title}</strong>
+                ${canEdit()?`<div class="flex gap-1">
+                  <span class="miniBtn" onclick="openRoadmapItemModal('${r.id}')" title="Edit">✎</span>
+                  <span class="miniBtn" onclick="deleteRoadmapItem('${r.id}')" title="Delete" style="color:var(--rust);">✕</span>
+                </div>`:''}
+              </div>
+              ${r.description?`<div class="small mt-1">${r.description}</div>`:''}
+              ${r.quarter?`<div class="small mt-2" style="color:var(--slate-light);">${r.quarter}</div>`:''}
+              ${canEdit()?`<div class="flex gap-1 mt-2">
+                ${cols.filter(c=>c.key!==r.status).map(c=>`<span class="btn secondary sm" onclick="moveRoadmapItem('${r.id}','${c.key}')">→ ${c.label}</span>`).join('')}
+              </div>`:''}
+            </div>
+          `).join('') : `<div class="empty-inline">Nothing here.</div>`}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+function openRoadmapItemModal(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const r = id ? byId(state.companyStory.roadmap, id) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${r?'Edit Roadmap Item':'Add Roadmap Item'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Title</label><input type="text" id="m-rm-title" value="${escAttr(r?.title)}" placeholder="e.g. Launch client portal">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label><textarea id="m-rm-desc">${r?.description||''}</textarea>
+          <div class="field-row">
+            <div><label>Timeframe <span class="small" style="font-weight:400;">(optional, e.g. Q3 2026)</span></label><input type="text" id="m-rm-quarter" value="${escAttr(r?.quarter)}"></div>
+            <div><label>Status</label><select id="m-rm-status">
+              <option value="planned" ${(!r||r.status==='planned')?'selected':''}>Planned</option>
+              <option value="in_progress" ${r?.status==='in_progress'?'selected':''}>In Progress</option>
+              <option value="done" ${r?.status==='done'?'selected':''}>Done</option>
+            </select></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          ${r?`<button class="btn danger" style="margin-right:auto;" onclick="deleteRoadmapItem('${r.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveRoadmapItem('${id||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function saveRoadmapItem(id, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const title = document.getElementById('m-rm-title').value.trim();
+  if(!title){ toast('Title is required'); return; }
+  const data = {
+    title, description: document.getElementById('m-rm-desc').value.trim(),
+    quarter: document.getElementById('m-rm-quarter').value.trim(),
+    status: document.getElementById('m-rm-status').value
+  };
+  if(id){ Object.assign(byId(state.companyStory.roadmap, id), data); }
+  else { data.id = 'rm'+Date.now(); state.companyStory.roadmap.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteRoadmapItem(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this roadmap item?', ()=>{
+    state.companyStory.roadmap = state.companyStory.roadmap.filter(r=>r.id!==id);
+    saveState(); toast('Removed'); render();
+  });
+}
+function moveRoadmapItem(id, newStatus){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const r = byId(state.companyStory.roadmap, id);
+  r.status = newStatus;
+  saveState(); render();
 }
 let workMode = localStorage.getItem('buildstack_workmode') || 'mine';
 function setWorkMode(mode){
@@ -2298,7 +2675,7 @@ function renderPeople(){
         return `
         <div class="card people-card ${!p.isPlaceholder?'hover':''}" style="padding:0;overflow:hidden;" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
-          <div style="width:100%;height:190px;${p.photo?`background:url('${escAttr(p.photo)}') center/cover;`:`background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));display:flex;align-items:center;justify-content:center;`}">
+          <div style="width:100%;height:190px;${p.photo?`background:url('${escAttr(p.photo)}') center ${p.photoPositionY!=null?p.photoPositionY:25}%/cover;`:`background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));display:flex;align-items:center;justify-content:center;`}">
             ${!p.photo?`<span style="color:#fff;font-size:52px;font-weight:700;font-family:'Space Grotesk',sans-serif;">${p?initials(p.name):'?'}</span>`:''}
           </div>
           <div style="padding:18px 20px 20px;text-align:center;">
@@ -3036,17 +3413,18 @@ function openMyBioModal(personId){
 function openMyPhotoModal(personId){
   if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
   const p = byId(state.people, personId);
+  const currentPos = p.photoPositionY!=null ? p.photoPositionY : 25;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
         <div class="modal-head"><strong>Profile Photo</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <div class="flex gap-3" style="align-items:center;margin-bottom:14px;">
-            ${avatarHtml(p, 64, 22)}
-            <div class="small">This is what your teammates see on the People page and your profile.</div>
-          </div>
           <label>Upload a photo</label>
-          <input type="file" id="m-my-photo" accept="image/*">
+          <input type="file" id="m-my-photo" accept="image/*" onchange="previewMyPhotoFile(this)">
+          <label class="mt-2">Preview <span class="small" style="font-weight:400;">(this is exactly how it'll look on the People page)</span></label>
+          <div style="width:100%;height:160px;border-radius:10px;overflow:hidden;background:${p.photo?`url('${escAttr(p.photo)}')`:'var(--line-soft)'};background-size:cover;background-position:center ${currentPos}%;" id="m-my-photo-preview"></div>
+          <label class="mt-2">Vertical position <span class="small" style="font-weight:400;">(drag until nothing important is cut off)</span></label>
+          <input type="range" id="m-my-photo-pos" min="0" max="100" value="${currentPos}" style="width:100%;" oninput="document.getElementById('m-my-photo-preview').style.backgroundPosition='center '+this.value+'%';">
         </div>
         <div class="modal-foot">
           ${p.photo?`<button class="btn danger" style="margin-right:auto;" onclick="removeMyPhoto('${personId}',this)">Remove Photo</button>`:''}
@@ -3056,10 +3434,17 @@ function openMyPhotoModal(personId){
       </div>
     </div>`);
 }
+function previewMyPhotoFile(input){
+  if(!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById('m-my-photo-preview').style.backgroundImage = `url('${reader.result}')`; };
+  reader.readAsDataURL(input.files[0]);
+}
 function removeMyPhoto(personId, el){
   if(!canEdit() && personId!==currentUser().id){ toast('You can only remove your own profile photo'); return; }
   const p = byId(state.people, personId);
   p.photo = null;
+  p.photoPositionY = null;
   saveState();
   if(personId===currentUser().id) refreshSidebarChrome();
   closeModal(el); toast('Removed'); render();
@@ -3067,9 +3452,11 @@ function removeMyPhoto(personId, el){
 async function saveMyPhoto(personId, el){
   if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
   const photo = await readPhotoFile('m-my-photo');
-  if(!photo){ toast('Choose a photo first'); return; }
   const p = byId(state.people, personId);
-  p.photo = photo;
+  const posInput = document.getElementById('m-my-photo-pos');
+  if(!photo && !p.photo){ toast('Choose a photo first'); return; }
+  if(photo) p.photo = photo;
+  p.photoPositionY = posInput ? parseInt(posInput.value) : 25;
   saveState();
   if(personId===currentUser().id) refreshSidebarChrome();
   closeModal(el); toast('Saved'); render();
