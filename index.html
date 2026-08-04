@@ -282,8 +282,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
 .gear-thumb{width:100%;height:140px;background:var(--paper);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .gear-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 .gear-thumb-empty{font-size:32px;opacity:.35;}
-.people-card-edit{position:absolute;top:14px;right:14px;font-size:11px;color:var(--slate-light);font-weight:500;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;}
-.people-card-edit:hover{text-decoration-color:var(--slate-light);}
+.people-card-edit{position:absolute;top:12px;right:12px;font-size:11px;color:#fff;font-weight:600;cursor:pointer;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:20px;backdrop-filter:blur(2px);z-index:2;}
+.people-card-edit:hover{background:rgba(0,0,0,.6);}
 .orgnode:hover{border-color:var(--bronze);}
 .orgnode .avatar{margin:0 auto 6px;}
 .orgnode-name{font-weight:700;font-size:12.5px;}
@@ -1589,7 +1589,7 @@ function renderEmployeeDashboard(){
     <div class="grid cols-2 mt-2">
       <div class="card">
         <div class="stat-label">Gear allowance</div>
-        <div style="font-weight:700;font-size:20px;margin-top:4px;">${fmtMoney(gearStats.available)} <span class="small" style="font-weight:500;color:var(--slate-light);">available of ${fmtMoney(gearStats.allowance)}</span></div>
+        <div style="font-weight:700;font-size:20px;margin-top:4px;">${gearStats.allowance===Infinity? '<span style="color:var(--jade);">Unlimited</span>' : `${fmtMoney(gearStats.available)} <span class="small" style="font-weight:500;color:var(--slate-light);">available of ${fmtMoney(gearStats.allowance)}</span>`}</div>
         <div class="flex gap-2 mt-2">
           <button class="btn bronze sm" onclick="requestReimbursementModal('${u.id}')">+ Submit Receipt</button>
           <button class="btn secondary sm" onclick="navigate('gearCatalog',{personId:'${u.id}'})">🛒 Catalog</button>
@@ -1730,8 +1730,9 @@ function renderLibrary(){
     <div class="tabs">
       <div class="tab ${libraryTab==='category'?'active':''}" onclick="libraryTab='category';render();">By Category</div>
       <div class="tab ${libraryTab==='timeline'?'active':''}" onclick="libraryTab='timeline';render();">By Project Phase</div>
+      <div class="tab ${libraryTab==='role'?'active':''}" onclick="libraryTab='role';render();">By Role</div>
     </div>
-    ${libraryTab==='timeline'? renderPhaseTimeline() : `
+    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : `
     <div class="grid cols-3">
       ${subs.map(s=>{
         const topicCount = state.topics.filter(t=>t.subjectId===s.id).length;
@@ -1780,6 +1781,28 @@ function renderPhaseTimeline(){
       }).join('')}
     </div>
     ${unassigned.length? `<div class="section-title">Not yet mapped to a phase<span class="count">${unassigned.length}</span></div>
+      <div class="grid cols-3">${unassigned.map(t=>`<div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
+        <div style="font-weight:600;font-size:13.3px;">${t.name}</div>
+        <div class="small mt-1">${byId(state.subjects,t.subjectId)?.name||''}</div>
+      </div>`).join('')}</div>` : ''}
+  `;
+}
+function renderRoleTimeline(){
+  const unassigned = state.topics.filter(t=>!(t.tags||[]).some(tag=>state.roles.some(r=>r.title===tag)));
+  return `
+    <div class="small mt-1" style="margin-bottom:14px;">A process can be relevant to more than one role — tag it from the SOP's own page (🏷 Add tags) rather than here.</div>
+    ${!state.roles.length? `<div class="empty"><h3>No roles defined yet</h3><p>Add roles from the Org Chart, then come back and tag SOPs to them.</p></div>` :
+      state.roles.map(r=>{
+        const topics = state.topics.filter(t=>(t.tags||[]).includes(r.title));
+        return `
+        <div class="section-title" style="cursor:pointer;" onclick="navigate('roleDetail',{id:'${r.id}'})">${r.title}<span class="count">${topics.length}</span></div>
+        ${topics.length? `<div class="grid cols-3">${topics.map(t=>`
+          <div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
+            <div style="font-weight:600;font-size:13.3px;">${t.name}</div>
+            <div class="small mt-1">${byId(state.subjects,t.subjectId)?.name||''}</div>
+          </div>`).join('')}</div>` : `<div class="small" style="color:var(--slate-light);margin-bottom:8px;">No SOPs tagged to this role yet.</div>`}
+      `;}).join('')}
+    ${unassigned.length? `<div class="section-title">Not yet tagged to a role<span class="count">${unassigned.length}</span></div>
       <div class="grid cols-3">${unassigned.map(t=>`<div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
         <div style="font-weight:600;font-size:13.3px;">${t.name}</div>
         <div class="small mt-1">${byId(state.subjects,t.subjectId)?.name||''}</div>
@@ -2211,21 +2234,21 @@ function renderPeople(){
         const mine = myAssignments(p.id);
         const pct = mine.length? Math.round(mine.filter(a=>a.status==='completed').length/mine.length*100) : null;
         return `
-        <div class="card people-card ${!p.isPlaceholder?'hover':''}" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
+        <div class="card people-card ${!p.isPlaceholder?'hover':''}" style="padding:0;overflow:hidden;" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
-          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;">
-            <div style="border-radius:50%;padding:3px;background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));margin-bottom:14px;">
-              ${avatarHtml(p, 96, 30)}
-            </div>
+          <div style="width:100%;height:190px;${p.photo?`background:url('${escAttr(p.photo)}') center/cover;`:`background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));display:flex;align-items:center;justify-content:center;`}">
+            ${!p.photo?`<span style="color:#fff;font-size:52px;font-weight:700;font-family:'Space Grotesk',sans-serif;">${p?initials(p.name):'?'}</span>`:''}
+          </div>
+          <div style="padding:18px 20px 20px;text-align:center;">
             <div style="font-weight:700;font-size:16px;">${p.name}${p.isPlaceholder?`<div class="mt-1"><span class="pill amber">${p.positionStatus}</span></div>`:''}${p.isTestAccount?`<div class="mt-1"><span class="pill gray">🧪 Test Account</span></div>`:''}</div>
             <div class="small mt-1">${p.title}</div>
             ${byId(state.departments,p.departmentId)? `<div class="mt-2"><span class="pill gray">${byId(state.departments,p.departmentId).name}</span>${byId(state.locations,p.primaryLocationId)?` <span class="pill gray">${byId(state.locations,p.primaryLocationId).name}</span>`:''}</div>`:''}
+            ${!p.isPlaceholder? `
+            <div class="flex" style="justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft);">
+              <div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Started</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${fmtDate(p.startDate)}</div></div>
+              ${canSeeCompletionOf(p.id)? `<div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Training</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${pct!==null?pct+'%':'—'}</div></div>`:''}
+            </div>` : ''}
           </div>
-          ${!p.isPlaceholder? `
-          <div class="flex" style="justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft);">
-            <div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Started</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${fmtDate(p.startDate)}</div></div>
-            ${canSeeCompletionOf(p.id)? `<div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Training</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${pct!==null?pct+'%':'—'}</div></div>`:''}
-          </div>` : ''}
         </div>`;
       }).join('')}
     </div>
@@ -2256,6 +2279,7 @@ function renderPersonDetail(){
       </div>
       <div class="flex gap-2">
         ${canEdit() && !isOwnProfile && !viewAsPersonId && p.status!=='offboarded'? `<button class="btn secondary" onclick="startViewAs('${p.id}')">👁 View as ${p.name.split(' ')[0]}</button>`:''}
+        ${canEdit()?`<button class="btn secondary" onclick="openMyPhotoModal('${p.id}')">${p.photo?'Change Photo':'Add Photo'}</button>`:''}
         ${canEdit()?`<button class="btn secondary" onclick="openPersonModal('${p.id}')">Edit</button>`:''}
         ${canEdit() && !isOwnProfile && p.status!=='offboarded'? `<button class="btn danger" onclick="offboardEmployeeModal('${p.id}')">Offboard</button>`:''}
       </div>
@@ -2272,13 +2296,13 @@ function renderPersonDetail(){
     ${p.bio? `<div class="card mt-2" style="background:var(--paper);">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;">
         <div class="small" style="font-weight:600;color:var(--slate);margin-bottom:6px;">🌤 Outside of work</div>
-        ${isOwnProfile?`<span class="btn secondary sm" onclick="openMyBioModal('${p.id}')">Edit</span>`:''}
+        ${(isOwnProfile || canEdit())?`<span class="btn secondary sm" onclick="openMyBioModal('${p.id}')">Edit</span>`:''}
       </div>
       <div style="font-size:13.5px;line-height:1.6;">${p.bio}</div>
       ${(p.bioPhotoKeys||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
         ${p.bioPhotoKeys.map(k=>`<img data-bio-photo-key="${k}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
       </div>`:''}
-    </div>` : isOwnProfile? `<div class="empty-inline mt-2">Haven't added anything about yourself yet. <span class="btn bronze sm" style="margin-left:8px;" onclick="openMyBioModal('${p.id}')">Write One</span></div>` : ''}
+    </div>` : (isOwnProfile || canEdit())? `<div class="empty-inline mt-2">${isOwnProfile?"Haven't added anything about yourself yet.":`No bio for ${p.name.split(' ')[0]} yet.`} <span class="btn bronze sm" style="margin-left:8px;" onclick="openMyBioModal('${p.id}')">Write One</span></div>` : ''}
     ${isOwnProfile && canEdit() ? `
     <div class="admin-tools-card mt-2">
       <div class="admin-tools-label">Admin tools — only visible to you</div>
@@ -2881,8 +2905,12 @@ function openPersonModal(personId){
             <div><label>Start date</label><input type="date" id="m-p-start" value="${p?.startDate||''}"></div>
           </div>
           <label>Location</label><input type="text" id="m-p-location" value="${escAttr(p?.location)}" placeholder="e.g. Springfield, MO">
-          <label>Annual gear allowance <span class="small" style="font-weight:400;">(leave blank to use the company default of ${fmtMoney(state.companySettings.annualGearAllowance)})</span></label>
-          <input type="text" id="m-p-allowance" value="${p&&p.gearAllowanceOverride!=null?p.gearAllowanceOverride:''}" placeholder="${state.companySettings.annualGearAllowance}">
+          <label>Annual gear allowance <span class="small" style="font-weight:400;">(leave blank to use the company default of ${fmtAllowance(state.companySettings.annualGearAllowance)})</span></label>
+          <input type="text" id="m-p-allowance" value="${p&&p.gearAllowanceOverride!=null&&p.gearAllowanceOverride!==-1?p.gearAllowanceOverride:''}" placeholder="${state.companySettings.annualGearAllowance===-1?'':state.companySettings.annualGearAllowance}" ${p&&p.gearAllowanceOverride===-1?'disabled':''}>
+          <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;width:auto;">
+            <input type="checkbox" id="m-p-allowance-unlimited" style="width:auto;margin:0;" ${p&&p.gearAllowanceOverride===-1?'checked':''} onchange="document.getElementById('m-p-allowance').disabled=this.checked;">
+            Unlimited for this person
+          </label>
           <label>About them <span class="small" style="font-weight:400;">(optional — shown on their profile)</span></label>
           <textarea id="m-p-bio" placeholder="Hobbies, family, weekend plans — whatever personal touch they're comfortable sharing.">${p?.bio||''}</textarea>
           <label>Access level</label>
@@ -2942,6 +2970,47 @@ function openMyBioModal(personId){
       </div>
     </div>`);
   hydrateBioPhotos();
+}
+function openMyPhotoModal(personId){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
+  const p = byId(state.people, personId);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Profile Photo</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="flex gap-3" style="align-items:center;margin-bottom:14px;">
+            ${avatarHtml(p, 64, 22)}
+            <div class="small">This is what your teammates see on the People page and your profile.</div>
+          </div>
+          <label>Upload a photo</label>
+          <input type="file" id="m-my-photo" accept="image/*">
+        </div>
+        <div class="modal-foot">
+          ${p.photo?`<button class="btn danger" style="margin-right:auto;" onclick="removeMyPhoto('${personId}',this)">Remove Photo</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveMyPhoto('${personId}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function removeMyPhoto(personId, el){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only remove your own profile photo'); return; }
+  const p = byId(state.people, personId);
+  p.photo = null;
+  saveState();
+  if(personId===currentUser().id) refreshSidebarChrome();
+  closeModal(el); toast('Removed'); render();
+}
+async function saveMyPhoto(personId, el){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
+  const photo = await readPhotoFile('m-my-photo');
+  if(!photo){ toast('Choose a photo first'); return; }
+  const p = byId(state.people, personId);
+  p.photo = photo;
+  saveState();
+  if(personId===currentUser().id) refreshSidebarChrome();
+  closeModal(el); toast('Saved'); render();
 }
 async function aiImproveBio(btn){
   const provider = state.companySettings.aiProvider || 'claude';
@@ -3006,12 +3075,13 @@ async function savePersonModal(existingId){
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('m-p-feat-'+f.key).checked).map(f=>f.key);
   const approvalPermissions = APPROVAL_PERMISSIONS.filter(perm=>document.getElementById('m-p-approve-'+perm.key).checked).map(perm=>perm.key);
   const allowanceVal = document.getElementById('m-p-allowance').value.trim();
+  const allowanceUnlimited = document.getElementById('m-p-allowance-unlimited').checked;
   const data = {
     name, email,
     employmentType: document.getElementById('m-p-empl').value,
     startDate: document.getElementById('m-p-start').value || new Date().toISOString().slice(0,10),
     location: document.getElementById('m-p-location').value.trim(),
-    gearAllowanceOverride: allowanceVal==='' ? null : parseFloat(allowanceVal),
+    gearAllowanceOverride: allowanceUnlimited ? -1 : (allowanceVal==='' ? null : parseFloat(allowanceVal)),
     bio: document.getElementById('m-p-bio').value.trim(),
     accessLevel: document.getElementById('m-p-access').value,
     hiddenFeatures, approvalPermissions
@@ -3705,8 +3775,8 @@ function renderAssetDetail(){
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
     </div>
     ${maintLog.length? `<div class="tbl-card"><table>
-      <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th></tr>
-      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${m.notes}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td></tr>`).join('')}
+      <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th><th></th></tr>
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${m.notes}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td><td>${canLogMaintenance?`<span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
@@ -3890,6 +3960,14 @@ function logMaintenance(assetId, el){
   a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
   saveState(); closeModal(el); toast('Logged'); render();
 }
+function deleteMaintenanceLogEntry(entryId, assetId){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can remove a service entry'); return; }
+  confirmAction('Delete this service entry? This does not undo any usage-reading update it made.', ()=>{
+    state.maintenanceLog = state.maintenanceLog.filter(m=>m.id!==entryId);
+    saveState(); toast('Deleted'); render();
+  });
+}
 function openLocationModal(locationId){
   const loc = locationId ? byId(state.locations, locationId) : null;
   openModal(`
@@ -3926,9 +4004,11 @@ function removeLocation(id){
 }
 
 /* ================= GEAR ALLOWANCE & CATALOG ================= */
+function fmtAllowance(v){ return v===-1 ? 'Unlimited' : fmtMoney(v); }
 function gearAllowanceFor(personId){
   const p = byId(state.people, personId);
-  return (p && p.gearAllowanceOverride!=null) ? p.gearAllowanceOverride : (state.companySettings.annualGearAllowance || 0);
+  const raw = (p && p.gearAllowanceOverride!=null) ? p.gearAllowanceOverride : (state.companySettings.annualGearAllowance || 0);
+  return raw===-1 ? Infinity : raw;
 }
 function currentGearYear(){ return new Date().getFullYear(); }
 function gearClaimsFor(personId, year){
@@ -3939,7 +4019,7 @@ function gearYearStats(personId, year){
   const allowance = gearAllowanceFor(personId);
   const approved = claims.filter(c=>c.status==='approved').reduce((s,c)=>s+c.amount,0);
   const pending = claims.filter(c=>c.status==='pending').reduce((s,c)=>s+c.amount,0);
-  return { allowance, approved, pending, available: Math.max(0, allowance - approved - pending) };
+  return { allowance, approved, pending, available: allowance===Infinity ? Infinity : Math.max(0, allowance - approved - pending) };
 }
 function canSeeGearOf(personId){ return personId===currentUser().id || canEdit(); }
 /* Role KPIs and expectations can include real numbers (margin targets, quotas) — an employee
@@ -4236,7 +4316,8 @@ function renderGearSection(personId, canManage){
   const year = currentGearYear();
   const stats = gearYearStats(personId, year);
   const spent = stats.approved + stats.pending;
-  const pct = stats.allowance? Math.min(100, Math.round(spent/stats.allowance*100)) : 0;
+  const isUnlimited = stats.allowance===Infinity;
+  const pct = (!isUnlimited && stats.allowance)? Math.min(100, Math.round(spent/stats.allowance*100)) : 0;
   const allClaims = state.gearClaims.filter(c=>c.personId===personId).sort((a,b)=> new Date(b.requestedDate)-new Date(a.requestedDate));
   return `
     <div class="section-title">Gear Allowance</div>
@@ -4244,11 +4325,11 @@ function renderGearSection(personId, canManage){
       <div class="flex" style="justify-content:space-between;align-items:flex-end;">
         <div>
           <div class="stat-label">${year} allowance</div>
-          <div style="font-weight:700;font-size:26px;margin-top:4px;font-family:'Space Grotesk',sans-serif;">${fmtMoney(stats.available)} <span class="small" style="font-weight:500;color:var(--slate-light);">available of ${fmtMoney(stats.allowance)}</span></div>
+          <div style="font-weight:700;font-size:26px;margin-top:4px;font-family:'Space Grotesk',sans-serif;">${isUnlimited? '<span style="color:var(--jade);">Unlimited</span>' : fmtMoney(stats.available) + ' <span class="small" style="font-weight:500;color:var(--slate-light);">available of ' + fmtMoney(stats.allowance) + '</span>'}</div>
         </div>
         ${canEdit()? `<button class="btn secondary sm" onclick="editAllowanceModal('${personId}')">Edit Allowance</button>`:''}
       </div>
-      <div class="progress-track mt-2"><div class="progress-fill bronze" style="width:${pct}%;"></div></div>
+      ${isUnlimited? '' : `<div class="progress-track mt-2"><div class="progress-fill bronze" style="width:${pct}%;"></div></div>`}
       <div class="small mt-2" style="color:var(--slate-light);">${fmtMoney(stats.approved)} approved · ${fmtMoney(stats.pending)} pending approval. Resets automatically every January 1 — nothing to do manually.</div>
       <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
         <button class="btn bronze sm" onclick="requestReimbursementModal('${personId}')">+ Request Reimbursement</button>
@@ -4263,15 +4344,24 @@ function renderGearSection(personId, canManage){
         <td>${c.year}</td>
         <td>${fmtMoney(c.amount)}</td>
         <td>${fmtDate(c.requestedDate)}</td>
-        <td>${c.status==='approved'?'<span class="pill jade">Approved</span>':c.status==='denied'?'<span class="pill rust">Denied</span>':'<span class="pill amber">Pending</span>'}</td>
+        <td>${c.status==='approved'?'<span class="pill jade">Approved</span>':c.status==='denied'?'<span class="pill rust">Denied</span>':c.status==='withdrawn'?'<span class="pill gray">Withdrawn</span>':'<span class="pill amber">Pending</span>'}</td>
         <td>${c.status!=='approved'?'—':c.paidDate?`<span class="pill jade">Paid ${fmtDate(c.paidDate)}</span>${c.paymentMethod?` <span class="small" style="color:var(--slate-light);">${c.paymentMethod}</span>`:''}`:`<span class="pill amber">Payment pending</span>`}</td>
         <td class="flex gap-2">
           ${c.receiptKey?`<span class="btn secondary sm" onclick="downloadGearReceipt('${c.id}')">Receipt</span>`:''}
           ${canManage && c.status==='approved' && !c.paidDate?`<span class="btn bronze sm" onclick="markGearClaimPaidModal('${c.id}')">Log Payment</span>`:''}
+          ${c.status==='pending' && c.personId===currentUser().id?`<span class="btn secondary sm" onclick="withdrawGearClaim('${c.id}')">Withdraw</span>`:''}
         </td>
       </tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No gear requests yet.</div>`}
   `;
+}
+function withdrawGearClaim(claimId){
+  const c = byId(state.gearClaims, claimId);
+  if(c.personId!==currentUser().id){ toast('You can only withdraw your own requests'); return; }
+  confirmAction('Withdraw this request?', ()=>{
+    c.status = 'withdrawn';
+    saveState(); toast('Withdrawn'); render();
+  });
 }
 
 /* ================= TIME OFF ================= */
@@ -4341,7 +4431,7 @@ function renderTimeOffSection(personId, canManage){
     </div>
     <div class="subsection-title" style="margin-top:20px;">Request history<span class="count">${allRequests.length}</span></div>
     ${allRequests.length? `<div class="tbl-card"><table>
-      <tr><th>Type</th><th>Dates</th><th>Days</th><th>Requested</th><th>Status</th>${canManage?'<th></th>':''}</tr>
+      <tr><th>Type</th><th>Dates</th><th>Days</th><th>Requested</th><th>Status</th>${canManage || allRequests.some(r=>r.status==='pending')?'<th></th>':''}</tr>
       ${allRequests.map(r=>{
         const type = byId(state.timeOffTypes, r.typeId);
         return `<tr>
@@ -4349,12 +4439,23 @@ function renderTimeOffSection(personId, canManage){
           <td>${fmtDate(r.startDate)}${r.startDate!==r.endDate?' – '+fmtDate(r.endDate):''}</td>
           <td>${r.days}</td>
           <td>${fmtDate(r.requestedDate)}</td>
-          <td>${r.status==='approved'?'<span class="pill jade">Approved</span>':r.status==='denied'?'<span class="pill rust">Denied</span>':'<span class="pill amber">Pending</span>'}</td>
-          ${canManage? `<td class="flex gap-2">${r.status==='pending'?`<span class="btn bronze sm" onclick="approveTimeOffRequest('${r.id}')">Approve</span><span class="btn secondary sm" onclick="denyTimeOffRequestModal('${r.id}')">Deny</span>`:''}</td>`:''}
+          <td>${r.status==='approved'?'<span class="pill jade">Approved</span>':r.status==='denied'?'<span class="pill rust">Denied</span>':r.status==='withdrawn'?'<span class="pill gray">Withdrawn</span>':'<span class="pill amber">Pending</span>'}</td>
+          ${canManage || allRequests.some(x=>x.status==='pending') ? `<td class="flex gap-2">
+            ${canManage && r.status==='pending'? `<span class="btn bronze sm" onclick="approveTimeOffRequest('${r.id}')">Approve</span><span class="btn secondary sm" onclick="denyTimeOffRequestModal('${r.id}')">Deny</span>`:''}
+            ${r.status==='pending' && personId===currentUser().id? `<span class="btn secondary sm" onclick="withdrawTimeOffRequest('${r.id}')">Withdraw</span>`:''}
+          </td>` : ''}
         </tr>`;
       }).join('')}
     </table></div>` : `<div class="empty-inline">No time off requested yet.</div>`}
   `;
+}
+function withdrawTimeOffRequest(requestId){
+  const r = byId(state.timeOffRequests, requestId);
+  if(r.personId!==currentUser().id){ toast('You can only withdraw your own requests'); return; }
+  confirmAction('Withdraw this time off request?', ()=>{
+    r.status = 'withdrawn';
+    saveState(); toast('Withdrawn'); render();
+  });
 }
 function requestTimeOffModal(personId){
   if(personId!==currentUser().id && !canEdit()){ toast('You can only request time off for yourself'); return; }
@@ -4497,14 +4598,19 @@ async function downloadGearReceipt(claimId){
 function editAllowanceModal(personId){
   if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
+  const isUnlimited = p.gearAllowanceOverride===-1;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:400px;">
         <div class="modal-head"><strong>Edit Allowance</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <div class="small" style="margin-bottom:10px;">Company default is ${fmtMoney(state.companySettings.annualGearAllowance)}/year. Override just for ${p.name}, or clear it to go back to the default.</div>
+          <div class="small" style="margin-bottom:10px;">Company default is ${fmtAllowance(state.companySettings.annualGearAllowance)}/year. Override just for ${p.name}, or clear it to go back to the default.</div>
           <label>Annual allowance for ${p.name}</label>
-          <input type="text" id="m-allow-amount" value="${p.gearAllowanceOverride!=null?p.gearAllowanceOverride:''}" placeholder="${state.companySettings.annualGearAllowance}">
+          <input type="text" id="m-allow-amount" value="${p.gearAllowanceOverride!=null && !isUnlimited?p.gearAllowanceOverride:''}" placeholder="${state.companySettings.annualGearAllowance}" ${isUnlimited?'disabled':''}>
+          <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;width:auto;">
+            <input type="checkbox" id="m-allow-unlimited" style="width:auto;margin:0;" ${isUnlimited?'checked':''} onchange="document.getElementById('m-allow-amount').disabled=this.checked;">
+            Unlimited for ${p.name.split(' ')[0]}
+          </label>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveAllowanceOverride('${personId}',this)">Save</button></div>
       </div>
@@ -4512,8 +4618,13 @@ function editAllowanceModal(personId){
 }
 function saveAllowanceOverride(personId, el){
   if(!canEdit()){ toast('Admins only'); return; }
-  const val = document.getElementById('m-allow-amount').value.trim();
   const p = byId(state.people, personId);
+  if(document.getElementById('m-allow-unlimited').checked){
+    p.gearAllowanceOverride = -1;
+    saveState(); closeModal(el); toast('Saved — unlimited for '+p.name.split(' ')[0]); render();
+    return;
+  }
+  const val = document.getElementById('m-allow-amount').value.trim();
   p.gearAllowanceOverride = val==='' ? null : parseFloat(val);
   saveState(); closeModal(el); toast('Saved'); render();
 }
@@ -4580,7 +4691,7 @@ function renderGearCatalog(){
       ${canEdit()?`<button class="btn bronze" onclick="openGearItemModal()">+ Add Item</button>`:''}
     </div>
     <div class="card mt-2" style="background:var(--paper);">
-      <div class="small">Requesting for <strong>${byId(state.people,requestingFor)?.name}</strong> — available to spend this year: <strong style="color:var(--jade);">${fmtMoney(stats.available)}</strong></div>
+      <div class="small">Requesting for <strong>${byId(state.people,requestingFor)?.name}</strong> — available to spend this year: <strong style="color:var(--jade);">${stats.available===Infinity?'Unlimited':fmtMoney(stats.available)}</strong></div>
     </div>
     ${!state.gearCatalog.length? `<div class="empty"><h3>No catalog items yet</h3><p>Add work boots, tools, uniforms — whatever the company pre-approves for reimbursement-free requesting.</p></div>` :
       cats.map(cat=>`
@@ -6053,6 +6164,9 @@ function openTagEditor(topicId){
   const existing = allExistingTags();
   const roleNames = new Set(state.roles.map(r=>r.title));
   const plainTags = existing.filter(tag=>!roleNames.has(tag));
+  const t = byId(state.topics, topicId);
+  const currentPhaseIds = new Set(t.phaseIds||[]);
+  const availablePhases = [...state.projectPhases].sort((a,b)=>a.order-b.order).filter(ph=>!currentPhaseIds.has(ph.id));
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:380px;">
@@ -6061,6 +6175,9 @@ function openTagEditor(topicId){
           <label>Pick a tag</label>
           <select id="m-tag-select" onchange="document.getElementById('m-tag-new-wrap').style.display=this.value==='__new__'?'block':'none';">
             <option value="">— choose —</option>
+            ${availablePhases.length? `<optgroup label="Project Phases">
+              ${availablePhases.map(ph=>`<option value="phase:${ph.id}">${ph.name}</option>`).join('')}
+            </optgroup>`:''}
             ${state.roles.length? `<optgroup label="Roles — also links this SOP as a Reference for that role">
               ${state.roles.map(r=>`<option value="${escAttr(r.title)}">${r.title}</option>`).join('')}
             </optgroup>`:''}
@@ -6081,9 +6198,16 @@ function openTagEditor(topicId){
 function doAddTag(topicId, modalEl){
   const selectEl = document.getElementById('m-tag-select');
   const selected = selectEl ? selectEl.value : '';
+  const t = byId(state.topics, topicId);
+  if(selected && selected.startsWith('phase:')){
+    const phaseId = selected.slice(6);
+    t.phaseIds = t.phaseIds || [];
+    if(!t.phaseIds.includes(phaseId)) t.phaseIds.push(phaseId);
+    saveState(); modalEl.remove(); toast('Tagged'); render();
+    return;
+  }
   const tag = (selected && selected!=='__new__') ? selected : document.getElementById('m-tag-input').value.trim();
   if(!tag){ toast('Pick or enter a tag'); return; }
-  const t = byId(state.topics, topicId);
   t.tags = t.tags || [];
   if(!t.tags.includes(tag)) t.tags.push(tag);
   const matchingRole = state.roles.find(r=>r.title===tag);
@@ -6103,6 +6227,10 @@ function removeTag(topicId, tag){
   const t = byId(state.topics, topicId);
   t.tags = (t.tags||[]).filter(x=>x!==tag);
   saveState(); render();
+}
+function removePhaseTagChip(topicId, phaseId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  togglePhaseTag(topicId, phaseId, false);
 }
 
 /* ---- Legacy step/block -> continuous doc conversion ---- */
@@ -6195,20 +6323,13 @@ function renderTopicEditor(){
     <div class="editor-canvas" id="editor-canvas" contenteditable="true">${canvasHtml}</div>
     <div class="mt-3 flex gap-2" style="align-items:center;flex-wrap:wrap;">
       <span class="btn secondary sm" onclick="openTagEditor('${t.id}')">🏷 Add tags</span>
+      ${(t.phaseIds||[]).map(pid=>{
+        const ph = byId(state.projectPhases, pid);
+        return ph? `<span class="pill jade">${ph.name} <span style="cursor:pointer;margin-left:4px;" onclick="removePhaseTagChip('${t.id}','${pid}')">✕</span></span>` : '';
+      }).join('')}
       ${(t.tags||[]).map(tag=>`<span class="pill gray">${tag} <span style="cursor:pointer;margin-left:4px;" onclick="removeTag('${t.id}','${tag}')">✕</span></span>`).join('')}
     </div>
-    <div class="section-title">Project phase(s) this applies to</div>
-    <div class="card">
-      <div class="small" style="margin-bottom:10px;">Check every phase this process is actually used in — most are one, some (like Change Orders) apply across the whole job.</div>
-      <div class="flex gap-3" style="flex-wrap:wrap;">
-        ${[...state.projectPhases].sort((a,b)=>a.order-b.order).map(ph=>`
-          <label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-bottom:0;">
-            <input type="checkbox" style="width:auto;margin:0;" ${(t.phaseIds||[]).includes(ph.id)?'checked':''} onchange="togglePhaseTag('${t.id}','${ph.id}',this.checked)">
-            ${ph.name}
-          </label>
-        `).join('')}
-      </div>
-    </div>
+    <div class="small mt-1" style="color:var(--slate-light);">Tag every project phase this actually applies to — most SOPs are one phase, some (like Change Orders) span most of the job.</div>
   `;
 }
 function togglePhaseTag(topicId, phaseId, checked){
@@ -6267,6 +6388,9 @@ function taskIsDone(personId, task){
   }
   if(task.type==='bio'){
     return !!byId(state.people, personId)?.bio;
+  }
+  if(task.type==='photo'){
+    return !!byId(state.people, personId)?.photo;
   }
   if(task.type==='form'){
     return !!state.formSubmissions.find(s=>s.personId===personId && s.formId===task.refId);
@@ -6327,6 +6451,7 @@ function addIndividualTaskModal(personId, type){
               <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','video')">📹 Video</button>
               <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','external')">🔗 External link</button>
               <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','bio')">✍️ Write a bio</button>
+              <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','photo')">📷 Add a photo</button>
               <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','form')">📝 Fill out a form</button>
               <button class="btn secondary sm" onclick="closeModal(this);addIndividualTaskModal('${personId}','custom')">☑ Custom task</button>
             </div>
@@ -6371,6 +6496,10 @@ function addIndividualTaskModal(personId, type){
   } else if(type==='bio'){
     state.individualTasks = state.individualTasks || [];
     state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2), personId, type:'bio', title:'Write a short bio about yourself', description:"Something about yourself outside of work — hobbies, family, whatever you're comfortable sharing.", addedDate:new Date().toISOString().slice(0,10)});
+    saveState(); toast('Added'); render();
+  } else if(type==='photo'){
+    state.individualTasks = state.individualTasks || [];
+    state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2), personId, type:'photo', title:'Add a profile photo', description:"Upload a photo so your teammates can put a face to your name on the People page.", addedDate:new Date().toISOString().slice(0,10)});
     saveState(); toast('Added'); render();
   } else if(type==='form'){
     const forms = state.fillableForms||[];
@@ -6538,7 +6667,7 @@ function renderOnboarding(){
 function renderTaskRow(personId, t, locked){
   const done = taskIsDone(personId,t);
   const tpl = t.type==='template' ? byId(state.templates, t.refId) : null;
-  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='form' || (tpl && tpl.requiresSignature);
+  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form' || (tpl && tpl.requiresSignature);
   const checkClick = (!isAuto && !locked) ? `toggleCustomTask('${personId}','${t.id}')` : '';
   let titleClick = '';
   if(t.type==='topic') titleClick = `navigate('topicDetail',{id:'${t.refId}'})`;
@@ -6547,6 +6676,7 @@ function renderTaskRow(personId, t, locked){
   else if(t.type==='template') titleClick = tpl && tpl.requiresSignature ? `openSignTemplateModal('${personId}','${t.refId}')` : `downloadTemplate('${t.refId}')`;
   else if(t.type==='external') titleClick = `window.open('${escJs(t.url)}','_blank')`;
   else if(t.type==='bio') titleClick = `openMyBioModal('${personId}')`;
+  else if(t.type==='photo') titleClick = `openMyPhotoModal('${personId}')`;
   else if(t.type==='form'){
     const submission = state.formSubmissions.find(s=>s.personId===personId && s.formId===t.refId);
     titleClick = submission ? `viewFormSubmission('${submission.id}')` : `openFillFormModal('${personId}','${t.refId}')`;
@@ -7056,11 +7186,20 @@ function renderReviewsSection(personId, canManage){
             <span class="btn secondary sm" onclick="downloadReviewIcs('${r.id}')">📅 .ics</span>
             ${r.status==='completed'? `<span class="btn secondary sm" onclick="viewCompletedReview('${r.id}')">View</span>`:''}
             ${canManage && r.status==='scheduled'?`<span class="btn bronze sm" onclick="completeReviewModal('${r.id}')">Conduct Review →</span>`:''}
+            ${canManage && r.status==='scheduled'?`<span class="btn secondary sm" onclick="cancelReview('${r.id}')">Cancel</span>`:''}
           </td>
         </tr>`;
       }).join('')}
     </table></div>` : `<div class="empty-inline">No reviews scheduled yet.${canManage?' New hires get the standard 3/6/12-month cycle automatically — use "+ Schedule a Review" for anything extra.':''}</div>`}
   `;
+}
+function cancelReview(reviewId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const r = byId(state.performanceReviews, reviewId);
+  confirmAction(`Cancel this ${reviewTypeLabel(r.type)}? It'll stay in the record as cancelled rather than disappearing — schedule a new one if it just needs to move.`, ()=>{
+    r.status = 'cancelled';
+    saveState(); toast('Cancelled'); render();
+  });
 }
 function viewCompletedReview(reviewId){
   const r = byId(state.performanceReviews, reviewId);
@@ -7609,9 +7748,7 @@ function openNewEmployeeWizard(){
       <div class="modal" style="max-width:560px;">
         <div class="modal-head"><strong>Add New Employee</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <div class="small" style="margin-bottom:14px;">This creates their profile, gives them a seat on the org chart, and auto-assigns training tied to their role — all in one step.</div>
-          <label>Profile photo (optional)</label>
-          <input type="file" id="nw-photo" accept="image/*">
+          <div class="small" style="margin-bottom:14px;">This creates their profile, gives them a seat on the org chart, and auto-assigns training tied to their role — all in one step. Their photo and bio are theirs to add during onboarding, not something you fill in for them.</div>
           <label>Full name</label>
           <input type="text" id="nw-name" placeholder="Full name">
           <label>Email <span class="small" style="font-weight:400;">(required — this is what they'll use to create their login)</span></label>
@@ -7624,9 +7761,6 @@ function openNewEmployeeWizard(){
             <div><label>Location</label><input type="text" id="nw-location" placeholder="e.g. Springfield, MO"></div>
             <div><label>Access level</label><select id="nw-access">${['employee','manager','admin','owner'].map(s=>`<option value="${s}">${s}</option>`).join('')}</select></div>
           </div>
-          <label>About them <span class="small" style="font-weight:400;">(optional — shown on their profile)</span></label>
-          <textarea id="nw-bio" placeholder="Hobbies, family, weekend plans — a nice personal touch for their profile."></textarea>
-
           <div class="section-title" style="margin-top:22px;">Time Off <span class="small" style="font-weight:400;">(leave blank for company defaults — starts 90 days after their start date either way)</span></div>
           ${state.timeOffTypes.map(t=>`
             <label>${t.name} <span class="small" style="font-weight:400;">(default: ${t.defaultAnnualAmount} days/year)</span></label>
@@ -7675,7 +7809,6 @@ async function saveNewEmployee(el){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
   if(state.people.some(p=>p.status!=='offboarded' && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file'); return; }
   if(!title){ toast('Seat / job title is required'); return; }
-  const photo = await readPhotoFile('nw-photo');
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('nw-feat-'+f.key).checked).map(f=>f.key);
   const personId = 'u'+Date.now();
   const startDate = document.getElementById('nw-start').value || new Date().toISOString().slice(0,10);
@@ -7685,11 +7818,11 @@ async function saveNewEmployee(el){
     if(val!=='') timeOffOverrides[input.dataset.type] = parseFloat(val);
   });
   state.people.push({
-    id: personId, name, email, photo,
+    id: personId, name, email, photo:null,
     employmentType: document.getElementById('nw-empl').value,
     startDate,
     location: document.getElementById('nw-location').value.trim(),
-    bio: document.getElementById('nw-bio').value.trim(),
+    bio: '',
     accessLevel: document.getElementById('nw-access').value,
     hiddenFeatures, timeOffOverrides,
     title, departmentId:null, roleId:null, managerId:null
@@ -7707,10 +7840,9 @@ async function saveNewEmployee(el){
   syncPersonPrimaryFields(personId);
   if(roleId) syncRoleAssignments(personId);
   state.policies.forEach(p=>ensurePolicyAssignedToEveryone(p.id));
-  if(!state.people.find(p=>p.id===personId).bio){
-    state.individualTasks = state.individualTasks || [];
-    state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2), personId, type:'bio', title:'Write a short bio about yourself', description:"Tell your teammates something about yourself outside of work — hobbies, family, whatever you're comfortable sharing. You can use the AI button to help polish it.", addedDate:startDate});
-  }
+  state.individualTasks = state.individualTasks || [];
+  state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2), personId, type:'bio', title:'Write a short bio about yourself', description:"Tell your teammates something about yourself outside of work — hobbies, family, whatever you're comfortable sharing. You can use the AI button to help polish it.", addedDate:startDate});
+  state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2)+'p', personId, type:'photo', title:'Add a profile photo', description:"Upload a photo so your teammates can put a face to your name on the People page.", addedDate:startDate});
   const onboardingPathId = document.getElementById('nw-onboarding').value;
   if(onboardingPathId) enrollPersonInPath(personId, onboardingPathId, startDate);
   scheduleStandardReviews(personId, startDate);
@@ -7813,8 +7945,12 @@ function renderCompanySettings(){
     <div class="section-title">Gear &amp; Allowance</div>
     <div class="card">
       <label>Default annual gear allowance (per employee)</label>
-      <input type="text" id="cs-gear-allowance" value="${cs.annualGearAllowance}" placeholder="500">
-      <button class="btn secondary sm" onclick="saveGearAllowanceDefault()">Save</button>
+      <input type="text" id="cs-gear-allowance" value="${cs.annualGearAllowance===-1?'':cs.annualGearAllowance}" placeholder="500" ${cs.annualGearAllowance===-1?'disabled':''}>
+      <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;width:auto;">
+        <input type="checkbox" id="cs-gear-unlimited" style="width:auto;margin:0;" ${cs.annualGearAllowance===-1?'checked':''} onchange="document.getElementById('cs-gear-allowance').disabled=this.checked;">
+        Unlimited (no cap for anyone using the company default)
+      </label>
+      <button class="btn secondary sm mt-2" onclick="saveGearAllowanceDefault()">Save</button>
       <div class="small mt-2">Resets automatically every calendar year — nothing to do manually. Override for a specific person from their own profile.</div>
     </div>
 
@@ -7883,10 +8019,15 @@ function toggleRestrictByLocation(checked){
   saveState(); toast('Saved');
 }
 function saveGearAllowanceDefault(){
+  if(document.getElementById('cs-gear-unlimited').checked){
+    state.companySettings.annualGearAllowance = -1;
+    saveState(); toast('Saved — company default is now unlimited'); render();
+    return;
+  }
   const val = parseFloat(document.getElementById('cs-gear-allowance').value);
   if(!val || val<0){ toast('Enter a valid amount'); return; }
   state.companySettings.annualGearAllowance = val;
-  saveState(); toast('Saved');
+  saveState(); toast('Saved'); render();
 }
 function openTimeOffTypeModal(typeId){
   const t = typeId ? byId(state.timeOffTypes, typeId) : null;
