@@ -570,6 +570,7 @@ function seedData(){
       {id:'tpl3', title:'Punch List Template', category:'Job Templates', description:'Standard closeout punch list format used on every job.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-02-01'},
       {id:'tpl4', title:'New Hire Acknowledgment Form', category:'HR & Onboarding', description:'Confirms a new hire has received and reviewed their offer terms and equipment agreement.', url:'', fileName:'', requiresSignature:true, uploadedBy:'u1', uploadedAt:'2026-01-15'}
     ],
+    templateCategories: ['Contracts & Forms','Job Templates','HR & Onboarding'],
     templateSignatures: [],
     individualTasks: [],
     gearCatalog: [
@@ -750,6 +751,10 @@ function migrateState(parsed){
       (parsed.onboardingPaths||[]).forEach(p=>{ if(p.roleId===undefined) p.roleId = null; });
       if(!parsed.onboardingEnrollments) parsed.onboardingEnrollments = [];
       if(!parsed.templates) parsed.templates = [];
+      if(!parsed.templateCategories){
+        const existingCats = [...new Set((parsed.templates||[]).map(t=>t.category).filter(Boolean))];
+        parsed.templateCategories = existingCats.length ? existingCats : ['Contracts & Forms','Job Templates','HR & Onboarding'];
+      }
       (parsed.templates||[]).forEach(t=>{ if(t.requiresSignature===undefined) t.requiresSignature = false; });
       if(!parsed.templateSignatures) parsed.templateSignatures = [];
       if(!parsed.gearCatalog) parsed.gearCatalog = [];
@@ -1361,6 +1366,8 @@ async function supabaseSignOut(){
   if(supabaseClient) await supabaseClient.auth.signOut();
 }
 function login(personId){
+  const p = byId(state.people, personId);
+  if(p) p.lastLoginAt = new Date().toISOString();
   state.currentUserId = personId; saveState();
   navHistory = []; currentView = null; orgEditMode = false;
   document.getElementById('login-screen').classList.add('hidden');
@@ -1638,6 +1645,7 @@ function renderAdminDashboard(){
   const needsUpdateTopics = state.topics.filter(t=>t.needsUpdate);
   const team = state.people.filter(p=>p.status!=='offboarded');
   const overdueMaintenance = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
+  const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Dashboard</div><div class="page-title">Admin overview</div><div class="page-desc">Company-wide training and content health.</div></div>
@@ -1648,6 +1656,9 @@ function renderAdminDashboard(){
     </div>
     ${overdueMaintenance.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
       <strong>⚠ ${overdueMaintenance.length} item${overdueMaintenance.length!==1?'s':''} due for maintenance</strong> — ${overdueMaintenance.map(a=>a.name).join(', ')}
+    </div>`:''}
+    ${complianceIssues.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
+      <strong>📋 ${complianceIssues.length} item${complianceIssues.length!==1?'s':''} with insurance or registration expiring</strong> — ${complianceIssues.map(a=>a.name).join(', ')}
     </div>`:''}
     <div class="grid cols-4">
       ${statCard('Active people', team.length, '')}
@@ -2250,6 +2261,14 @@ function renderPersonDetail(){
       </div>
     </div>
     ${renderOffboardingBanner(p.id)}
+    ${canEdit() && !p.lastLoginAt && p.status!=='offboarded' && p.email ? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;">
+      <div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><strong>⚠ ${p.name.split(' ')[0]} hasn't logged in yet.</strong> <span class="small">Their profile exists but no login has been created — nothing's usable for them until they self-serve at ${escAttr(p.email)}.</span></div>
+        <button class="btn secondary sm" onclick="showInviteModal('${p.id}')">Send Login Instructions</button>
+      </div>
+    </div>`: (canEdit() && !p.email && p.status!=='offboarded' ? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
+      <strong>⚠ No email on file.</strong> <span class="small">They can't self-serve a login without one — <span onclick="openPersonModal('${p.id}')" style="text-decoration:underline;cursor:pointer;">add one from Edit</span>.</span>
+    </div>` : '')}
     ${p.bio? `<div class="card mt-2" style="background:var(--paper);">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;">
         <div class="small" style="font-weight:600;color:var(--slate);margin-bottom:6px;">🌤 Outside of work</div>
@@ -2855,6 +2874,7 @@ function openPersonModal(personId){
             </div>
           </div>
           <label>Name</label><input type="text" id="m-p-name" value="${escAttr(p?.name)}" placeholder="Full name">
+          <label>Email <span class="small" style="font-weight:400;">(required for them to create a login)</span></label><input type="email" id="m-p-email" value="${escAttr(p?.email)}" placeholder="name@company.com">
           <div class="small mt-1" style="margin-bottom:12px;">Job title, department, and reporting line are set from the Org Chart — assign this person a seat there once they're created.</div>
           <div class="field-row">
             <div><label>Employment type</label><select id="m-p-empl">${['Full-time','Part-time','Contractor'].map(s=>`<option ${p?.employmentType===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -2977,12 +2997,17 @@ async function savePersonModal(existingId){
   if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-p-name').value.trim();
   if(!name){ toast('Name is required'); return; }
+  const email = document.getElementById('m-p-email').value.trim();
+  if(email){
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
+    if(state.people.some(p=>p.id!==existingId && p.status!=='offboarded' && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file'); return; }
+  }
   const photo = await readPhotoFile('m-p-photo');
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('m-p-feat-'+f.key).checked).map(f=>f.key);
   const approvalPermissions = APPROVAL_PERMISSIONS.filter(perm=>document.getElementById('m-p-approve-'+perm.key).checked).map(perm=>perm.key);
   const allowanceVal = document.getElementById('m-p-allowance').value.trim();
   const data = {
-    name,
+    name, email,
     employmentType: document.getElementById('m-p-empl').value,
     startDate: document.getElementById('m-p-start').value || new Date().toISOString().slice(0,10),
     location: document.getElementById('m-p-location').value.trim(),
@@ -2994,7 +3019,7 @@ async function savePersonModal(existingId){
   if(photo) data.photo = photo;
   let id = existingId;
   if(id){ Object.assign(byId(state.people, id), data); }
-  else { id='u'+Date.now(); data.id=id; data.email=''; data.title='Unassigned'; data.departmentId=null; data.roleId=null; data.managerId=null; state.people.push(data); }
+  else { id='u'+Date.now(); data.id=id; data.title='Unassigned'; data.departmentId=null; data.roleId=null; data.managerId=null; state.people.push(data); }
   saveState();
   document.querySelector('.modal-backdrop')?.remove();
   if(id===currentUser().id) refreshSidebarChrome();
@@ -3340,6 +3365,19 @@ function assetMaintenanceDue(asset){
   if(asset.nextMaintenanceUsage!=null && asset.currentUsage!=null && asset.currentUsage >= asset.nextMaintenanceUsage) return 'usage';
   return null;
 }
+function assetComplianceIssues(asset){
+  const issues = [];
+  const today = new Date().toISOString().slice(0,10);
+  const soon = new Date(); soon.setDate(soon.getDate()+30);
+  const soonStr = soon.toISOString().slice(0,10);
+  if(asset.insuranceExpiry && asset.insuranceExpiry <= soonStr){
+    issues.push({type:'insurance', label: asset.insuranceExpiry<=today ? 'Insurance expired' : 'Insurance expiring soon', date: asset.insuranceExpiry});
+  }
+  if(asset.registrationExpiry && asset.registrationExpiry <= soonStr){
+    issues.push({type:'registration', label: asset.registrationExpiry<=today ? 'Registration/plate expired' : 'Registration/plate expiring soon', date: asset.registrationExpiry});
+  }
+  return issues;
+}
 function assetSubtitle(a){
   const bits = [a.category];
   if(a.make || a.model) bits.push([a.make,a.model].filter(Boolean).join(' '));
@@ -3353,6 +3391,7 @@ function renderCompanyAssets(){
   const view = currentParams.view || 'items';
   const assets = state.companyAssets.filter(a=>a.status!=='retired' && (cat==='all' || a.category===cat));
   const overdue = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
+  const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
   const maintainableAssets = state.companyAssets.filter(a=>a.status!=='retired' && MAINTAINABLE_CATEGORIES.includes(a.category));
   return `
     <div class="page-head">
@@ -3362,6 +3401,10 @@ function renderCompanyAssets(){
     ${overdue.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
       <strong>⚠ ${overdue.length} item${overdue.length!==1?'s':''} due for maintenance:</strong>
       ${overdue.map(a=>`<span class="pill rust" style="cursor:pointer;margin-left:6px;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
+    </div>`:''}
+    ${complianceIssues.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;">
+      <strong>📋 ${complianceIssues.length} item${complianceIssues.length!==1?'s':''} with insurance or registration expiring:</strong>
+      ${complianceIssues.map(a=>`<span class="pill amber" style="cursor:pointer;margin-left:6px;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
     </div>`:''}
     <div class="flex gap-2 mt-2">
       <span class="btn ${view==='items'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'${cat}'})">Equipment List</span>
@@ -3464,11 +3507,7 @@ function openAssetModal(assetId, defaultCat){
                 </select>
               </div>
             </div>
-            <div class="field-row">
-              <div><label>Insurance policy #</label><input type="text" id="m-asset-insurance" value="${escAttr(a?.insurancePolicy)}"></div>
-              <div><label>Insurance expires</label><input type="date" id="m-asset-insurance-exp" value="${a?.insuranceExpiry||''}"></div>
-            </div>
-            <label>Registration expires</label><input type="date" id="m-asset-reg-exp" value="${a?.registrationExpiry||''}">
+            <label>Registration/plate expires</label><input type="date" id="m-asset-reg-exp" value="${a?.registrationExpiry||''}">
           </div>
 
           <div id="m-asset-equipment-fields" style="display:${cat==='Equipment'?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:10px;">
@@ -3477,6 +3516,17 @@ function openAssetModal(assetId, defaultCat){
             <select id="m-asset-power">
               ${['Gas','Diesel','Electric','Battery','Manual/Other'].map(f=>`<option value="${f}" ${a?.fuelType===f?'selected':''}>${f}</option>`).join('')}
             </select>
+          </div>
+
+          <div id="m-asset-insurance-fields" style="display:${MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:10px;">
+            <div class="block-label">Insurance</div>
+            <div class="field-row">
+              <div><label>Policy #</label><input type="text" id="m-asset-insurance" value="${escAttr(a?.insurancePolicy)}"></div>
+              <div><label>Expires</label><input type="date" id="m-asset-insurance-exp" value="${a?.insuranceExpiry||''}"></div>
+            </div>
+            <label>Insurance document <span class="small" style="font-weight:400;">(optional — upload the policy PDF or a photo of the card)</span></label>
+            ${a?.insuranceDocKey? `<div class="small mt-1" style="margin-bottom:6px;">📄 A document is already on file. <span onclick="viewAssetDoc('${a.insuranceDocKey}')" style="text-decoration:underline;cursor:pointer;">View it</span> — uploading a new one below will replace it.</div>`:''}
+            <input type="file" id="m-asset-insurance-doc" accept="image/*,application/pdf">
           </div>
 
           <div id="m-asset-maint-fields" style="display:${MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:10px;">
@@ -3505,16 +3555,25 @@ function openAssetModal(assetId, defaultCat){
 function onAssetCategoryChange(cat){
   document.getElementById('m-asset-vehicle-fields').style.display = cat==='Vehicle'?'block':'none';
   document.getElementById('m-asset-equipment-fields').style.display = cat==='Equipment'?'block':'none';
+  document.getElementById('m-asset-insurance-fields').style.display = MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none';
   document.getElementById('m-asset-maint-fields').style.display = MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none';
   const labelInput = document.getElementById('m-asset-usagelabel');
   if(labelInput && !labelInput.dataset.touched) labelInput.value = defaultUsageLabel(cat);
 }
-function saveAsset(assetId, el){
+async function viewAssetDoc(key){
+  try{
+    const blob = await idbGet(key);
+    if(!blob){ toast('Document not found in this browser'); return; }
+    window.open(URL.createObjectURL(blob), '_blank');
+  }catch(e){ toast('Could not open document'); }
+}
+async function saveAsset(assetId, el){
   if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-asset-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const category = document.getElementById('m-asset-cat').value;
   const num = (v)=> v.trim()==='' ? null : parseFloat(v);
+  const existing = assetId ? byId(state.companyAssets, assetId) : null;
   const data = {
     name, category,
     make: document.getElementById('m-asset-make').value.trim(),
@@ -3532,6 +3591,7 @@ function saveAsset(assetId, el){
     data.licensePlate = document.getElementById('m-asset-plate').value.trim();
     data.color = document.getElementById('m-asset-color').value.trim();
     data.fuelType = document.getElementById('m-asset-fuel').value;
+    data.registrationExpiry = document.getElementById('m-asset-reg-exp').value || null;
   } else if(category==='Equipment'){
     data.fuelType = document.getElementById('m-asset-power').value;
   }
@@ -3543,6 +3603,16 @@ function saveAsset(assetId, el){
     data.nextMaintenanceDate = document.getElementById('m-asset-nextdate').value || null;
     data.nextMaintenanceUsage = num(document.getElementById('m-asset-nextusage').value);
     data.specialRequirements = document.getElementById('m-asset-special-reqs').value.trim();
+    data.insurancePolicy = document.getElementById('m-asset-insurance').value.trim();
+    data.insuranceExpiry = document.getElementById('m-asset-insurance-exp').value || null;
+    const docInput = document.getElementById('m-asset-insurance-doc');
+    if(docInput.files[0]){
+      const docKey = 'insurance_'+(assetId||'new'+Date.now())+'_'+Date.now();
+      await idbPut(docKey, docInput.files[0]);
+      data.insuranceDocKey = docKey;
+    } else if(existing && existing.insuranceDocKey){
+      data.insuranceDocKey = existing.insuranceDocKey;
+    }
   }
   if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
   else { data.id = 'asset'+Date.now(); data.status = 'available'; data.assignedTo = null; data.locationId = null; data.addedDate = new Date().toISOString().slice(0,10); state.companyAssets.push(data); }
@@ -3594,11 +3664,23 @@ function renderAssetDetail(){
         <div><div class="small" style="color:var(--slate-light);">VIN</div><div>${a.vin||'—'}</div></div>
         <div><div class="small" style="color:var(--slate-light);">License plate</div><div>${a.licensePlate||'—'}</div></div>
         <div><div class="small" style="color:var(--slate-light);">Color</div><div>${a.color||'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Insurance policy #</div><div>${a.insurancePolicy||'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Insurance expires</div><div>${a.insuranceExpiry?fmtDate(a.insuranceExpiry):'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Registration expires</div><div>${a.registrationExpiry?fmtDate(a.registrationExpiry):'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">Registration/plate expires</div><div style="${a.registrationExpiry && a.registrationExpiry<=new Date().toISOString().slice(0,10)?'color:var(--rust);font-weight:600;':''}">${a.registrationExpiry?fmtDate(a.registrationExpiry):'—'}</div></div>
       </div>`:''}
     </div>
+
+    ${isMaintainable ? (()=>{
+      const compIssues = assetComplianceIssues(a);
+      return `
+      <div class="section-title">Insurance</div>
+      <div class="card">
+        <div class="grid cols-3">
+          <div><div class="small" style="color:var(--slate-light);">Policy #</div><div>${a.insurancePolicy||'—'}</div></div>
+          <div><div class="small" style="color:var(--slate-light);">Expires</div><div style="${compIssues.find(i=>i.type==='insurance')?'color:var(--rust);font-weight:600;':''}">${a.insuranceExpiry?fmtDate(a.insuranceExpiry):'—'}</div></div>
+          <div><div class="small" style="color:var(--slate-light);">Document</div><div>${a.insuranceDocKey?`<span onclick="viewAssetDoc('${a.insuranceDocKey}')" style="text-decoration:underline;cursor:pointer;">📄 View</span>`:'—'}</div></div>
+        </div>
+        ${compIssues.length? `<div class="mt-2">${compIssues.map(i=>`<span class="pill amber" style="margin-right:6px;">${i.label} — ${fmtDate(i.date)}</span>`).join('')}</div>`:''}
+      </div>`;
+    })() : ''}
 
     ${isMaintainable ? `
     <div class="section-title">Maintenance</div>
@@ -4203,20 +4285,36 @@ function timeOffAllowanceFor(personId, typeId){
   const override = p.timeOffOverrides && p.timeOffOverrides[typeId];
   return (override!=null) ? override : type.defaultAnnualAmount;
 }
-function currentTimeOffYear(){ return new Date().getFullYear(); }
-function timeOffYearStats(personId, typeId, year){
-  year = year || currentTimeOffYear();
-  const reqs = state.timeOffRequests.filter(r=>r.personId===personId && r.typeId===typeId && new Date(r.startDate).getFullYear()===year);
+function personTimeOffPeriod(person, referenceDate){
+  referenceDate = referenceDate || new Date();
+  const start = new Date(person.startDate+'T00:00:00');
+  let periodStart = new Date(start);
+  periodStart.setFullYear(referenceDate.getFullYear());
+  if(periodStart > referenceDate){
+    periodStart.setFullYear(periodStart.getFullYear()-1);
+  }
+  const periodEnd = new Date(periodStart);
+  periodEnd.setFullYear(periodEnd.getFullYear()+1);
+  periodEnd.setDate(periodEnd.getDate()-1);
+  return { start: periodStart, end: periodEnd };
+}
+function timeOffYearStats(personId, typeId){
+  const p = byId(state.people, personId);
+  const period = personTimeOffPeriod(p);
+  const reqs = state.timeOffRequests.filter(r=>{
+    if(r.personId!==personId || r.typeId!==typeId) return false;
+    const d = new Date(r.startDate+'T00:00:00');
+    return d >= period.start && d <= period.end;
+  });
   const allowance = timeOffAllowanceFor(personId, typeId);
   const approved = reqs.filter(r=>r.status==='approved').reduce((s,r)=>s+r.days,0);
   const pending = reqs.filter(r=>r.status==='pending').reduce((s,r)=>s+r.days,0);
-  return { allowance, approved, pending, available: Math.max(0, allowance - approved - pending) };
+  return { allowance, approved, pending, available: Math.max(0, allowance - approved - pending), periodStart: period.start, periodEnd: period.end };
 }
 function renderTimeOffSection(personId, canManage){
   if(!canSeeTimeOffOf(personId)) return '';
   const p = byId(state.people, personId);
   const eligible = isEligibleForTimeOff(p);
-  const year = currentTimeOffYear();
   const allRequests = state.timeOffRequests.filter(r=>r.personId===personId).sort((a,b)=> new Date(b.requestedDate)-new Date(a.requestedDate));
   return `
     <div class="section-title">Time Off
@@ -4225,14 +4323,16 @@ function renderTimeOffSection(personId, canManage){
     ${!eligible? `<div class="empty-inline">Time off starts 90 days after their start date — available beginning <strong>${fmtDate(timeOffEligibilityDate(p))}</strong>.</div>`:''}
     <div class="grid cols-2">
       ${state.timeOffTypes.map(t=>{
-        const stats = timeOffYearStats(personId, t.id, year);
+        const stats = timeOffYearStats(personId, t.id);
         const spent = stats.approved + stats.pending;
         const pct = stats.allowance? Math.min(100, Math.round(spent/stats.allowance*100)) : 0;
+        const renewDate = new Date(stats.periodEnd); renewDate.setDate(renewDate.getDate()+1);
         return `<div class="card">
-          <div class="stat-label">${t.name} — ${year}</div>
+          <div class="stat-label">${t.name}</div>
           <div style="font-weight:700;font-size:22px;margin-top:4px;font-family:'Space Grotesk',sans-serif;">${stats.available} <span class="small" style="font-weight:500;color:var(--slate-light);">days available of ${stats.allowance}</span></div>
           <div class="progress-track mt-2"><div class="progress-fill bronze" style="width:${pct}%;"></div></div>
           <div class="small mt-2" style="color:var(--slate-light);">${stats.approved} used · ${stats.pending} pending approval</div>
+          <div class="small mt-1" style="color:var(--slate-light);">Current cycle: ${fmtDate(stats.periodStart.toISOString().slice(0,10))} – ${fmtDate(stats.periodEnd.toISOString().slice(0,10))} · renews ${fmtDate(renewDate.toISOString().slice(0,10))}</div>
         </div>`;
       }).join('')}
     </div>
@@ -6327,6 +6427,7 @@ function removeIndividualTask(taskId){
 
 /* ---- Import an entire Role's onboarding-relevant content in one click ---- */
 function importRoleTasksModal(mode, a, b){
+  if(!canEdit()){ toast('Admins only'); return; }
   const personId = mode==='individual' ? a : null;
   const suggestedRoleId = personId ? (byId(state.people,personId)?.roleId || '') : '';
   openModal(`
@@ -6604,33 +6705,57 @@ function renderOnboardingPathEditor(){
     </table></div>` : `<div class="empty"><h3>Nobody enrolled yet</h3><p>Enroll a new hire to auto-assign every linked topic and policy in this path.</p></div>`}
   `;
 }
+const OB_TASK_TYPE_META = {
+  topic: {label:'Training', icon:'📘', pill:'jade'},
+  policy: {label:'Policy', icon:'📝', pill:'bronze'},
+  video: {label:'Video', icon:'🎬', pill:'gray'},
+  template: {label:'Template', icon:'📄', pill:'gray'},
+  form: {label:'Form', icon:'🖊', pill:'amber'},
+  external: {label:'External', icon:'🔗', pill:'gray'},
+  custom: {label:'Custom', icon:'✅', pill:'gray'},
+  bio: {label:'Bio', icon:'🌤', pill:'gray'}
+};
+let obAddMenuOpenFor = null;
+function toggleObAddMenu(sectionId){
+  obAddMenuOpenFor = (obAddMenuOpenFor===sectionId) ? null : sectionId;
+  render();
+}
 function renderSectionEditor(pathId, section, idx, total){
+  const menuOpen = obAddMenuOpenFor===section.id;
   return `
     <div class="ob-section">
-      <div class="flex gap-2" style="align-items:center;margin-bottom:12px;">
-        <input type="text" value="${escAttr(section.title)}" onchange="updateSectionTitle('${pathId}','${section.id}',this.value)" style="margin:0;font-weight:700;">
-        <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',-1)">↑</span>
-        <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',1)">↓</span>
-        <span class="miniBtn" onclick="removeSection('${pathId}','${section.id}')">✕</span>
+      <div class="flex gap-2" style="align-items:center;margin-bottom:14px;">
+        <input type="text" value="${escAttr(section.title)}" onchange="updateSectionTitle('${pathId}','${section.id}',this.value)" style="margin:0;font-weight:700;font-size:15px;">
+        <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',-1)" title="Move up">↑</span>
+        <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',1)" title="Move down">↓</span>
+        <span class="miniBtn" onclick="removeSection('${pathId}','${section.id}')" title="Remove section" style="color:var(--rust);">✕</span>
       </div>
-      ${section.tasks.map(t=>`
+      ${section.tasks.length? section.tasks.map(t=>{
+        const meta = OB_TASK_TYPE_META[t.type] || {label:t.type, icon:'•', pill:'gray'};
+        return `
         <div class="ob-task">
           <div style="flex:1;">
-            <span class="pill gray">${t.type}</span> ${t.title}
-            ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
+            <span class="pill ${meta.pill}">${meta.icon} ${meta.label}</span> <span style="font-weight:600;">${t.title}</span>
+            ${t.description?`<div class="small mt-1" style="color:var(--slate-light);">${t.description}</div>`:''}
           </div>
-          <span class="miniBtn" onclick="removeTaskFromSection('${pathId}','${section.id}','${t.id}')">✕</span>
+          <div class="flex gap-1">
+            <span class="miniBtn" onclick="editTaskModal('${pathId}','${section.id}','${t.id}')" title="Edit">✎</span>
+            <span class="miniBtn" onclick="removeTaskFromSection('${pathId}','${section.id}','${t.id}')" title="Remove" style="color:var(--rust);">✕</span>
+          </div>
         </div>
-      `).join('')}
-      <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      `;}).join('') : `<div class="empty-inline">No tasks in this section yet — add one below.</div>`}
+      <div class="flex gap-2 mt-2" style="flex-wrap:wrap;position:relative;">
         <button class="btn bronze sm" onclick="importRoleTasksModal('section','${pathId}','${section.id}')">⤵ Import from Role</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','topic')">+ Link Training</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','policy')">+ Link Policy (sign)</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','video')">+ Link Video</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','template')">+ Link Template</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','form')">+ Link Fillable Form</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','external')">+ External Link / Course</button>
-        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','custom')">+ Custom Task</button>
+        <button class="btn secondary sm" onclick="toggleObAddMenu('${section.id}')">${menuOpen?'✕ Close':'+ Add Task ▾'}</button>
+        ${menuOpen? `<div class="card" style="position:absolute;top:36px;left:0;z-index:20;box-shadow:var(--shadow-2);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:200px;">
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','topic')">📘 Link Training</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','policy')">📝 Link Policy (sign)</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','video')">🎬 Link Video</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','template')">📄 Link Template</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','form')">🖊 Link Fillable Form</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','external')">🔗 External Link / Course</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','custom')">✅ Custom Task</span>
+        </div>`:''}
       </div>
       <div class="ob-quiz-gate">
         <label style="margin:0;">Optional test after this section</label>
@@ -6643,16 +6768,19 @@ function renderSectionEditor(pathId, section, idx, total){
   `;
 }
 function addOnboardingSection(pathId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   path.sections.push({id:'obs'+Date.now(), title:'New Section', quizId:null, tasks:[]});
   saveState(); render();
 }
 function removeSection(pathId, sectionId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   path.sections = path.sections.filter(s=>s.id!==sectionId);
   saveState(); render();
 }
 function moveSection(pathId, sectionId, dir){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   const i = path.sections.findIndex(s=>s.id===sectionId);
   const j = i+dir;
@@ -6661,22 +6789,91 @@ function moveSection(pathId, sectionId, dir){
   saveState(); render();
 }
 function updateSectionTitle(pathId, sectionId, val){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   byId(path.sections, sectionId).title = val;
   saveState();
 }
 function setSectionQuiz(pathId, sectionId, quizId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   byId(path.sections, sectionId).quizId = quizId || null;
   saveState(); toast('Saved');
 }
 function removeTaskFromSection(pathId, sectionId, taskId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   const section = byId(path.sections, sectionId);
   section.tasks = section.tasks.filter(t=>t.id!==taskId);
   saveState(); render();
 }
+function editTaskModal(pathId, sectionId, taskId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const path = byId(state.onboardingPaths, pathId);
+  const section = byId(path.sections, sectionId);
+  const t = byId(section.tasks, taskId);
+  if(!t) return;
+  let body;
+  if(t.type==='custom'){
+    body = `<label>Task title</label><input type="text" id="m-edit-task-title" value="${escAttr(t.title)}">
+      <label>Description (optional)</label><textarea id="m-edit-task-desc">${t.description||''}</textarea>`;
+  } else if(t.type==='external'){
+    body = `<label>Title</label><input type="text" id="m-edit-task-title" value="${escAttr(t.title)}">
+      <label>Link</label><input type="text" id="m-edit-task-url" value="${escAttr(t.url)}">`;
+  } else if(t.type==='topic'){
+    body = `<label>Topic</label><select id="m-edit-task-ref">${state.topics.map(x=>`<option value="${x.id}" ${x.id===t.refId?'selected':''}>${x.name}</option>`).join('')}</select>`;
+  } else if(t.type==='policy'){
+    body = `<label>Policy</label><select id="m-edit-task-ref">${state.policies.map(x=>`<option value="${x.id}" ${x.id===t.refId?'selected':''}>${x.title}</option>`).join('')}</select>`;
+  } else if(t.type==='video'){
+    body = `<label>Video</label><select id="m-edit-task-ref">${(state.videos||[]).map(x=>`<option value="${x.id}" ${x.id===t.refId?'selected':''}>${x.title}</option>`).join('')}</select>`;
+  } else if(t.type==='template'){
+    body = `<label>Template</label><select id="m-edit-task-ref">${(state.templates||[]).map(x=>`<option value="${x.id}" ${x.id===t.refId?'selected':''}>${x.title}</option>`).join('')}</select>`;
+  } else if(t.type==='form'){
+    body = `<label>Form</label><select id="m-edit-task-ref">${(state.fillableForms||[]).map(x=>`<option value="${x.id}" ${x.id===t.refId?'selected':''}>${x.name}</option>`).join('')}</select>`;
+  } else {
+    body = `<div class="small">This task type can't be edited here — remove it and add a new one instead.</div>`;
+  }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Edit Task</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">${body}</div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button>${t.type!=='bio'?`<button class="btn bronze" onclick="saveTaskEdit('${pathId}','${sectionId}','${taskId}',this)">Save</button>`:''}</div>
+      </div>
+    </div>`);
+}
+function saveTaskEdit(pathId, sectionId, taskId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const path = byId(state.onboardingPaths, pathId);
+  const section = byId(path.sections, sectionId);
+  const t = byId(section.tasks, taskId);
+  if(t.type==='custom'){
+    t.title = document.getElementById('m-edit-task-title').value.trim() || t.title;
+    t.description = document.getElementById('m-edit-task-desc').value.trim();
+  } else if(t.type==='external'){
+    t.title = document.getElementById('m-edit-task-title').value.trim() || t.title;
+    t.url = document.getElementById('m-edit-task-url').value.trim();
+  } else if(t.type==='topic'){
+    t.refId = document.getElementById('m-edit-task-ref').value;
+    t.title = 'Complete: '+byId(state.topics,t.refId).name;
+  } else if(t.type==='policy'){
+    t.refId = document.getElementById('m-edit-task-ref').value;
+    t.title = 'Read and sign: '+byId(state.policies,t.refId).title;
+  } else if(t.type==='video'){
+    t.refId = document.getElementById('m-edit-task-ref').value;
+    t.title = 'Watch: '+byId(state.videos,t.refId).title;
+  } else if(t.type==='template'){
+    t.refId = document.getElementById('m-edit-task-ref').value;
+    const tpl = byId(state.templates,t.refId);
+    t.title = (tpl.requiresSignature?'Sign: ':'Use template: ')+tpl.title;
+  } else if(t.type==='form'){
+    t.refId = document.getElementById('m-edit-task-ref').value;
+    t.title = 'Fill out: '+byId(state.fillableForms,t.refId).name;
+  }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
 function addTaskModal(pathId, sectionId, type){
+  if(!canEdit()){ toast('Admins only'); return; }
   if(type==='topic'){
     openModal(`
       <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -6759,6 +6956,7 @@ function addTaskModal(pathId, sectionId, type){
   }
 }
 function saveTaskToSection(pathId, sectionId, type, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   const section = byId(path.sections, sectionId);
   let task;
@@ -7416,6 +7614,8 @@ function openNewEmployeeWizard(){
           <input type="file" id="nw-photo" accept="image/*">
           <label>Full name</label>
           <input type="text" id="nw-name" placeholder="Full name">
+          <label>Email <span class="small" style="font-weight:400;">(required — this is what they'll use to create their login)</span></label>
+          <input type="email" id="nw-email" placeholder="name@company.com">
           <div class="field-row">
             <div><label>Employment type</label><select id="nw-empl">${['Full-time','Part-time','Contractor'].map(s=>`<option>${s}</option>`).join('')}</select></div>
             <div><label>Start date</label><input type="date" id="nw-start" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -7469,7 +7669,11 @@ function openNewEmployeeWizard(){
 async function saveNewEmployee(el){
   const name = document.getElementById('nw-name').value.trim();
   const title = document.getElementById('nw-title').value.trim();
+  const email = document.getElementById('nw-email').value.trim();
   if(!name){ toast('Name is required'); return; }
+  if(!email){ toast('Email is required — this is how they\u2019ll log in'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
+  if(state.people.some(p=>p.status!=='offboarded' && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file'); return; }
   if(!title){ toast('Seat / job title is required'); return; }
   const photo = await readPhotoFile('nw-photo');
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('nw-feat-'+f.key).checked).map(f=>f.key);
@@ -7481,7 +7685,7 @@ async function saveNewEmployee(el){
     if(val!=='') timeOffOverrides[input.dataset.type] = parseFloat(val);
   });
   state.people.push({
-    id: personId, name, email:'', photo,
+    id: personId, name, email, photo,
     employmentType: document.getElementById('nw-empl').value,
     startDate,
     location: document.getElementById('nw-location').value.trim(),
@@ -7512,8 +7716,37 @@ async function saveNewEmployee(el){
   scheduleStandardReviews(personId, startDate);
   saveState();
   closeModal(el);
-  toast('Employee created — seated on org chart' + (roleId?', training assigned':'') + (onboardingPathId?', onboarding started':'') + ', reviews scheduled');
+  toast('Employee created' + (roleId?' — training assigned':'') + (onboardingPathId?', onboarding started':'') + ', reviews scheduled');
   navigate('personDetail',{id:personId});
+  showInviteModal(personId);
+}
+function inviteMessageFor(person){
+  const url = window.location.origin + window.location.pathname;
+  return `Hi ${person.name.split(' ')[0]}! You're set up in BuildStack. Go to ${url}, click "New here? Create your login," and use this email: ${person.email}\n\nPick any password you'd like — that's what logs you in from now on.`;
+}
+function showInviteModal(personId){
+  const p = byId(state.people, personId);
+  const msg = inviteMessageFor(p);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Send ${p.name.split(' ')[0]} their login instructions</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:10px;">Their profile exists, but nobody can log in until they (or you) actually create a login. Text or email them this — copy it and send it however's easiest.</div>
+          <textarea id="invite-msg-text" style="min-height:120px;" readonly>${msg}</textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Close</button><button class="btn bronze" onclick="copyInviteMessage(this)">Copy Message</button></div>
+      </div>
+    </div>`);
+}
+function copyInviteMessage(btn){
+  const text = document.getElementById('invite-msg-text').value;
+  navigator.clipboard.writeText(text).then(()=>{
+    toast('Copied — paste it into a text or email');
+  }).catch(()=>{
+    document.getElementById('invite-msg-text').select();
+    toast('Select-all done — copy with Ctrl/Cmd+C');
+  });
 }
 
 /* ================= COMPANY SETTINGS ================= */
@@ -7716,16 +7949,91 @@ function saveCompanySettings(){
 }
 
 /* ================= COMPANY TEMPLATES LIBRARY ================= */
+function manageTemplateCategoriesModal(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Manage Categories</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body" id="tpl-cat-manage-body">
+          ${renderTemplateCategoryRows()}
+          <div class="flex gap-2 mt-2">
+            <input type="text" id="m-newcat-name" placeholder="New category name" style="margin:0;">
+            <button class="btn secondary sm" onclick="addTemplateCategory()">+ Add</button>
+          </div>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Done</button></div>
+      </div>
+    </div>`);
+}
+function renderTemplateCategoryRows(){
+  return state.templateCategories.map(c=>{
+    const count = state.templates.filter(t=>t.category===c).length;
+    return `<div class="flex gap-2 mt-1" style="align-items:center;">
+      <input type="text" value="${escAttr(c)}" onchange="renameTemplateCategory('${escAttr(c)}',this.value)" style="margin:0;flex:1;">
+      <span class="small" style="color:var(--slate-light);white-space:nowrap;">${count} template${count!==1?'s':''}</span>
+      <span class="miniBtn" onclick="deleteTemplateCategory('${escAttr(c)}')" title="Delete" style="color:var(--rust);">✕</span>
+    </div>`;
+  }).join('');
+}
+function refreshCategoryManageModal(){
+  const body = document.getElementById('tpl-cat-manage-body');
+  if(body){
+    body.innerHTML = renderTemplateCategoryRows() + `
+      <div class="flex gap-2 mt-2">
+        <input type="text" id="m-newcat-name" placeholder="New category name" style="margin:0;">
+        <button class="btn secondary sm" onclick="addTemplateCategory()">+ Add</button>
+      </div>`;
+  }
+}
+function addTemplateCategory(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const name = document.getElementById('m-newcat-name').value.trim();
+  if(!name){ toast('Name is required'); return; }
+  if(state.templateCategories.includes(name)){ toast('That category already exists'); return; }
+  state.templateCategories.push(name);
+  saveState(); toast('Added'); refreshCategoryManageModal();
+}
+function renameTemplateCategory(oldName, newName){
+  if(!canEdit()){ toast('Admins only'); return; }
+  newName = newName.trim();
+  if(!newName || newName===oldName) return;
+  if(state.templateCategories.includes(newName)){ toast('That category already exists'); refreshCategoryManageModal(); return; }
+  const idx = state.templateCategories.indexOf(oldName);
+  if(idx===-1) return;
+  state.templateCategories[idx] = newName;
+  state.templates.forEach(t=>{ if(t.category===oldName) t.category = newName; });
+  saveState(); toast('Renamed'); refreshCategoryManageModal();
+}
+function deleteTemplateCategory(name){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const count = state.templates.filter(t=>t.category===name).length;
+  if(count){ toast(`Can't delete — ${count} template${count!==1?'s':''} still use${count===1?'s':''} this category. Move or delete them first.`); return; }
+  state.templateCategories = state.templateCategories.filter(c=>c!==name);
+  saveState(); toast('Deleted'); refreshCategoryManageModal();
+}
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
-  const cats = [...new Set(state.templates.map(t=>t.category))];
+  const filterCat = currentParams.cat || 'all';
+  const cats = state.templateCategories.filter(c=>state.templates.some(t=>t.category===c));
+  const visibleCats = filterCat==='all' ? cats : cats.filter(c=>c===filterCat);
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Resources</div><div class="page-title">Company Templates</div><div class="page-desc">Standard forms and documents your team reuses on every job — contracts, checklists, kickoff forms.</div></div>
-      ${canEdit()?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
+      <div class="flex gap-2">
+        ${canEdit()?`<button class="btn secondary" onclick="manageTemplateCategoriesModal()">Manage Categories</button>`:''}
+        ${canEdit()?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
+      </div>
     </div>
+    ${state.templates.length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      <span class="btn ${filterCat==='all'?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'all'})">All (${state.templates.length})</span>
+      ${cats.map(c=>{
+        const n = state.templates.filter(t=>t.category===c).length;
+        return `<span class="btn ${filterCat===c?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'${escAttr(c)}'})">${c} (${n})</span>`;
+      }).join('')}
+    </div>`:''}
     ${!state.templates.length? `<div class="empty"><h3>No templates yet</h3><p>Add your first one — a change order form, a punch list, anything the team reaches for on every job.</p></div>` :
-      cats.map(cat=>`
+      visibleCats.map(cat=>`
         <div class="section-title">${cat}</div>
         <div class="grid cols-3">
           ${state.templates.filter(t=>t.category===cat).map(t=>{
@@ -7742,7 +8050,7 @@ function renderTemplates(){
                   ? `<button class="btn secondary sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
                   : `<button class="btn secondary sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
                 ${t.requiresSignature && !mySig? `<button class="btn bronze sm" onclick="openSignTemplateModal('${currentUser().id}','${t.id}')">Sign</button>`:''}
-                ${canEdit()?`<button class="btn secondary sm" onclick="replaceTemplateFileModal('${t.id}')">🔁 Replace File</button><button class="btn secondary sm" onclick="removeTemplate('${t.id}')">Remove</button>`:''}
+                ${canEdit()?`<button class="btn secondary sm" onclick="openTemplateModal('${t.id}')">✎ Edit</button><button class="btn secondary sm" onclick="replaceTemplateFileModal('${t.id}')">🔁 Replace File</button><button class="btn secondary sm" onclick="removeTemplate('${t.id}')">Remove</button>`:''}
               </div>
             </div>`;
           }).join('')}
@@ -7750,43 +8058,60 @@ function renderTemplates(){
       `).join('')}
   `;
 }
-function openTemplateModal(){
+function openTemplateModal(templateId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const t = templateId ? byId(state.templates, templateId) : null;
+  if(!state.templateCategories.length){ toast('Add a category first — use Manage Categories'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
-        <div class="modal-head"><strong>Add Template</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-head"><strong>${t?'Edit Template':'Add Template'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <label>Title</label><input type="text" id="m-tpl-title" placeholder="e.g. Change Order Form">
-          <label>Category</label><input type="text" id="m-tpl-cat" placeholder="e.g. Contracts &amp; Forms, Job Templates" list="tpl-cat-list">
-          <datalist id="tpl-cat-list">${[...new Set(state.templates.map(t=>t.category))].map(c=>`<option value="${c}">`).join('')}</datalist>
-          <label>Description (optional)</label><textarea id="m-tpl-desc"></textarea>
-          <label>Upload a file</label><input type="file" id="m-tpl-file">
+          <label>Title</label><input type="text" id="m-tpl-title" value="${escAttr(t?.title)}" placeholder="e.g. Change Order Form">
+          <label>Category</label>
+          <select id="m-tpl-cat">${state.templateCategories.map(c=>`<option value="${escAttr(c)}" ${t?.category===c?'selected':''}>${c}</option>`).join('')}</select>
+          <label>Description (optional)</label><textarea id="m-tpl-desc">${t?.description||''}</textarea>
+          <label>Upload a file ${t?`<span class="small" style="font-weight:400;">(leave blank to keep the current file)</span>`:''}</label><input type="file" id="m-tpl-file">
           <div class="small" style="margin:6px 0 12px;">— or —</div>
-          <label>Link to an external doc (Google Doc, Dropbox, etc.)</label><input type="text" id="m-tpl-url" placeholder="https://...">
+          <label>Link to an external doc (Google Doc, Dropbox, etc.)</label><input type="text" id="m-tpl-url" value="${escAttr(t?.url)}" placeholder="https://...">
           <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
-            <input type="checkbox" id="m-tpl-sig" style="width:auto;margin:0;">
+            <input type="checkbox" id="m-tpl-sig" style="width:auto;margin:0;" ${t?.requiresSignature?'checked':''}>
             Requires a signature (e.g. offer letter, equipment agreement)
           </label>
           <div class="small mt-1">When checked, this becomes signable — like a policy — instead of just downloadable.</div>
         </div>
-        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTemplate(this)">Save</button></div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTemplate(this,'${templateId||''}')">Save</button></div>
       </div>
     </div>`);
 }
-async function saveTemplate(el){
+async function saveTemplate(el, templateId){
   if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-tpl-title').value.trim();
-  const category = document.getElementById('m-tpl-cat').value.trim() || 'General';
+  const category = document.getElementById('m-tpl-cat').value;
   if(!title){ toast('Title is required'); return; }
-  const id = 'tpl'+Date.now();
   const fileInput = document.getElementById('m-tpl-file');
   const url = document.getElementById('m-tpl-url').value.trim();
+  const requiresSignature = document.getElementById('m-tpl-sig').checked;
+  const description = document.getElementById('m-tpl-desc').value.trim();
+  if(templateId){
+    const t = byId(state.templates, templateId);
+    t.title = title; t.category = category; t.description = description; t.requiresSignature = requiresSignature;
+    if(fileInput.files[0]){
+      const blobKey = 'tplblob_'+templateId+'_'+Date.now();
+      await idbPut(blobKey, fileInput.files[0]);
+      t.fileKey = blobKey; t.fileName = fileInput.files[0].name; t.url = '';
+    } else if(url && !t.fileKey){
+      t.url = url;
+    }
+    saveState(); closeModal(el); toast('Saved'); render();
+    return;
+  }
+  const id = 'tpl'+Date.now();
   const entry = {
-    id, title, category,
-    description: document.getElementById('m-tpl-desc').value.trim(),
+    id, title, category, description,
     url: fileInput.files[0] ? '' : url,
     fileName: fileInput.files[0] ? fileInput.files[0].name : '',
-    requiresSignature: document.getElementById('m-tpl-sig').checked,
+    requiresSignature,
     uploadedBy: currentUser().id,
     uploadedAt: new Date().toISOString().slice(0,10)
   };
