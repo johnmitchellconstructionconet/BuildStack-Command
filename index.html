@@ -559,19 +559,13 @@ function seedData(){
     ],
     roles: [],
     people: [
-      {id:'u1', name:'John Mitchell', email:'john@mitchellcd.com', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2019-01-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'owner', bio:'Outside of work you\'ll find John on Table Rock Lake most weekends, usually with a fishing rod in one hand and a phone in the other. He\'s a die-hard Cardinals fan and coaches his son\'s youth baseball team in the spring.'},
-      {id:'u2', name:'Kennedy Adamson', email:'kennedy@mitchellcd.com', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2023-03-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'admin', bio:'Kennedy is big into interior design outside of work too — she renovated her own 1920s bungalow room by room and posts the progress online. She also volunteers at the Springfield animal shelter on weekends.'},
-      {id:'u3', name:'Bre Mitchell', email:'bre@mitchellcd.com', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2024-06-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'employee', bio:'Bre spends most weekends hiking around the Ozarks with her dog, Scout. She\'s also learning to play guitar and is slowly working her way through every taco place in Springfield.'},
-      {id:'u_robbie', name:'Robbie', email:'', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2026-01-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'manager', hiddenFeatures:[]},
-      {id:'u_caleb', name:'Caleb', email:'', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2026-01-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'employee', hiddenFeatures:[]},
-      {id:'u_quinton', name:'Quinton', email:'', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2026-01-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'employee', hiddenFeatures:[]},
-      {id:'utest1', name:'Test Employee', email:'test@mitchellcd.com', title:'Unassigned', roleId:null, departmentId:null, primaryLocationId:'loc1', managerId:null, startDate:'2026-01-01', employmentType:'Full-time', location:'', accessLevel:'employee', isTestAccount:true, hiddenFeatures:[]}
+      {id:'u1', name:'John Mitchell', email:'john@mitchellconstructionco.net', title:'Unassigned', roleId:null, departmentId:null, managerId:null, startDate:'2019-01-01', employmentType:'Full-time', location:'Springfield, MO', accessLevel:'owner', bio:'Outside of work you\'ll find John on Table Rock Lake most weekends, usually with a fishing rod in one hand and a phone in the other. He\'s a die-hard Cardinals fan and coaches his son\'s youth baseball team in the spring.'}
     ],
     positions: [],
     templates: [
       {id:'tpl1', title:'Change Order Form', category:'Contracts & Forms', description:'Standard form for documenting and pricing a client-requested change.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-01-15'},
       {id:'tpl2', title:'New Job Kickoff Checklist', category:'Job Templates', description:'Everything that needs to happen before a project breaks ground.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-01-15'},
-      {id:'tpl3', title:'Punch List Template', category:'Job Templates', description:'Standard closeout punch list format used on every job.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u2', uploadedAt:'2026-02-01'},
+      {id:'tpl3', title:'Punch List Template', category:'Job Templates', description:'Standard closeout punch list format used on every job.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-02-01'},
       {id:'tpl4', title:'New Hire Acknowledgment Form', category:'HR & Onboarding', description:'Confirms a new hire has received and reviewed their offer terms and equipment agreement.', url:'', fileName:'', requiresSignature:true, uploadedBy:'u1', uploadedAt:'2026-01-15'}
     ],
     templateSignatures: [],
@@ -643,8 +637,8 @@ function seedData(){
     ],
     topics: [
       {id:'t1', subjectId:'cat2', name:'Creating a New Project Scope of Work', owner:'u1', status:'Published', version:'1.2', reviewFrequency:'Quarterly', lastReviewed:'2026-05-01', stepIds:['st1','st2','st3'], phaseIds:['ph1'], tags:['scope-of-work','pre-construction','estimating']},
-      {id:'t2', subjectId:'cat2', name:'Running a Selections Meeting', owner:'u2', status:'Published', version:'2.0', reviewFrequency:'Quarterly', lastReviewed:'2026-06-10', stepIds:['st4','st5'], phaseIds:['ph2','ph4'], tags:['selections','client-facing']},
-      {id:'t3', subjectId:'cat2', name:'Maintaining the Selections Grid', owner:'u2', status:'Published', version:'1.0', reviewFrequency:'Semiannually', lastReviewed:'2026-04-15', stepIds:['st6'], phaseIds:['ph2','ph4','ph5','ph6'], tags:['selections','tracking']},
+      {id:'t2', subjectId:'cat2', name:'Running a Selections Meeting', owner:'u1', status:'Published', version:'2.0', reviewFrequency:'Quarterly', lastReviewed:'2026-06-10', stepIds:['st4','st5'], phaseIds:['ph2','ph4'], tags:['selections','client-facing']},
+      {id:'t3', subjectId:'cat2', name:'Maintaining the Selections Grid', owner:'u1', status:'Published', version:'1.0', reviewFrequency:'Semiannually', lastReviewed:'2026-04-15', stepIds:['st6'], phaseIds:['ph2','ph4','ph5','ph6'], tags:['selections','tracking']},
       {id:'t4', subjectId:'cat10', name:'Client Change Order Process', owner:'u1', status:'Published', version:'1.1', reviewFrequency:'Quarterly', lastReviewed:'2026-05-20', stepIds:['st7','st8'], phaseIds:['ph1','ph2','ph3','ph4','ph5','ph6','ph7'], tags:['change-order','client-facing','billing']}
     ],
     steps: [
@@ -699,17 +693,7 @@ function seedData(){
       {id:'p1', title:'Employee Handbook', category:'General', version:'3.0', effectiveDate:'2026-01-01', status:'Published', body:'All employees are expected to represent Mitchell Construction & Design professionally with clients, trades, and referral partners at all times. Full handbook content maintained by ownership.'},
       {id:'p2', title:'Job Site Safety Policy', category:'Safety', version:'2.1', effectiveDate:'2026-02-01', status:'Published', body:'PPE is required on all active job sites. All incidents must be reported to the Site Superintendent within 24 hours.'}
     ],
-    assignments: [
-      {id:'a1', personId:'u3', targetType:'topic', targetId:'t1', assignedDate:'2026-06-01', dueDate:'2026-06-15', status:'completed', completedDate:'2026-06-10'},
-      {id:'a2', personId:'u3', targetType:'topic', targetId:'t2', assignedDate:'2026-06-01', dueDate:'2026-06-15', status:'in_progress'},
-      {id:'a3', personId:'u3', targetType:'topic', targetId:'t4', assignedDate:'2026-06-01', dueDate:'2026-07-01', status:'not_started'},
-      {id:'a4', personId:'u3', targetType:'quiz', targetId:'q1', assignedDate:'2026-06-01', dueDate:'2026-07-01', status:'not_started'},
-      {id:'a5', personId:'u3', targetType:'policy', targetId:'p1', assignedDate:'2026-06-01', dueDate:'2026-06-08', status:'completed', completedDate:'2026-06-05'},
-      {id:'a6', personId:'u3', targetType:'policy', targetId:'p2', assignedDate:'2026-06-01', dueDate:'2026-06-08', status:'not_started'},
-      {id:'a7', personId:'u2', targetType:'topic', targetId:'t2', assignedDate:'2026-01-01', dueDate:'2026-01-10', status:'completed', completedDate:'2026-01-08'},
-      {id:'a8', personId:'u2', targetType:'topic', targetId:'t3', assignedDate:'2026-01-01', dueDate:'2026-01-10', status:'completed', completedDate:'2026-01-09'},
-      {id:'a9', personId:'u2', targetType:'policy', targetId:'p1', assignedDate:'2026-01-01', dueDate:'2026-01-08', status:'completed', completedDate:'2026-01-05'}
-    ],
+    assignments: [],
     videos: [],
     onboardingPaths: [
       {id:'ob1', name:'New Hire Onboarding', description:'Standard ramp-up for anyone joining MC&D, from day one through the first month.', sections:[
@@ -729,18 +713,10 @@ function seedData(){
         ]}
       ]}
     ],
-    onboardingEnrollments: [
-      {id:'enr1', personId:'u3', pathId:'ob1', startDate:'2024-06-01', status:'active'}
-    ],
-    onboardingTaskCompletions: [
-      {id:'otc1', personId:'u3', taskId:'obt2', completedDate:'2024-06-01'},
-      {id:'otc2', personId:'u3', taskId:'obt3', completedDate:'2024-06-01'}
-    ],
+    onboardingEnrollments: [],
+    onboardingTaskCompletions: [],
     quizAttempts: [],
-    acknowledgments: [
-      {id:'ack1', personId:'u2', policyId:'p1', version:'3.0', date:'2026-01-05', signatureName:'Kennedy Adamson'},
-      {id:'ack2', personId:'u3', policyId:'p1', version:'3.0', date:'2026-06-05', signatureName:'Bre Mitchell'}
-    ],
+    acknowledgments: [],
     currentUserId: null
   };
 }
@@ -800,12 +776,34 @@ function migrateState(parsed){
       (parsed.positions||[]).forEach(p=>{ if(!p.locationId) p.locationId = parsed.locations[0]?.id || null; });
       (parsed.roles||[]).forEach(r=>{ if(!r.referenceTopics) r.referenceTopics = []; });
       (parsed.people||[]).forEach(p=>{ if(!p.hiddenFeatures) p.hiddenFeatures = []; if(!p.approvalPermissions) p.approvalPermissions = []; });
-      if(!parsed.people.find(p=>p.id==='utest1')){
+      if(!parsed._noPlaceholderPeopleV1 && !parsed.people.find(p=>p.id==='utest1')){
         const topSeat = (parsed.positions||[]).find(pos=>!pos.parentPositionId);
         parsed.people.push({id:'utest1', name:'Test Employee', email:'test@mitchellcd.com', title:'Test Account', roleId:null, departmentId: topSeat?topSeat.departmentId:null, primaryLocationId: topSeat?topSeat.locationId:(parsed.locations[0]?.id||null), managerId: topSeat?topSeat.personId:null, startDate:new Date().toISOString().slice(0,10), employmentType:'Full-time', location:'', accessLevel:'employee', isTestAccount:true, hiddenFeatures:[]});
         if(parsed.positions){
           parsed.positions.push({id:'postest1', title:'Test Account', departmentId: topSeat?topSeat.departmentId:null, locationId: topSeat?topSeat.locationId:(parsed.locations[0]?.id||null), parentPositionId: topSeat?topSeat.id:null, personId:'utest1', roleId:null, status:null});
         }
+      }
+      if(!parsed._noPlaceholderPeopleV1){
+        const removeIds = new Set(['u2','u3','u_robbie','u_caleb','u_quinton','utest1']);
+        const john = (parsed.people||[]).find(p=>p.id==='u1');
+        if(john) john.email = 'john@mitchellconstructionco.net';
+        parsed.people = (parsed.people||[]).filter(p=>!removeIds.has(p.id));
+        parsed.positions = (parsed.positions||[]).filter(p=>!p.personId || !removeIds.has(p.personId));
+        (parsed.templates||[]).forEach(t=>{ if(removeIds.has(t.uploadedBy)) t.uploadedBy = 'u1'; });
+        (parsed.topics||[]).forEach(t=>{ if(removeIds.has(t.owner)) t.owner = 'u1'; });
+        parsed.assignments = (parsed.assignments||[]).filter(a=>!removeIds.has(a.personId));
+        parsed.onboardingEnrollments = (parsed.onboardingEnrollments||[]).filter(e=>!removeIds.has(e.personId));
+        parsed.onboardingTaskCompletions = (parsed.onboardingTaskCompletions||[]).filter(c=>!removeIds.has(c.personId));
+        parsed.acknowledgments = (parsed.acknowledgments||[]).filter(a=>!removeIds.has(a.personId));
+        parsed.quizAttempts = (parsed.quizAttempts||[]).filter(a=>!removeIds.has(a.personId));
+        parsed.gearClaims = (parsed.gearClaims||[]).filter(c=>!removeIds.has(c.personId));
+        parsed.timeOffRequests = (parsed.timeOffRequests||[]).filter(r=>!removeIds.has(r.personId));
+        parsed.disciplinaryActions = (parsed.disciplinaryActions||[]).filter(d=>!removeIds.has(d.personId));
+        parsed.performanceReviews = (parsed.performanceReviews||[]).filter(r=>!removeIds.has(r.personId));
+        parsed.individualTasks = (parsed.individualTasks||[]).filter(t=>!removeIds.has(t.personId));
+        (parsed.notifications||[]).forEach(()=>{});
+        parsed.notifications = (parsed.notifications||[]).filter(n=>!removeIds.has(n.targetPersonId));
+        parsed._noPlaceholderPeopleV1 = true;
       }
       backfillPrimaryLocations(parsed);
       const starterTags = {t1:['scope-of-work','pre-construction','estimating'], t2:['selections','client-facing'], t3:['selections','tracking'], t4:['change-order','client-facing','billing']};
