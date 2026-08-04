@@ -3298,22 +3298,48 @@ function assetSubtitle(a){
 function renderCompanyAssets(){
   const gate = featureGate('companyAssets','Company Equipment'); if(gate) return gate;
   const cat = currentParams.cat || 'all';
+  const view = currentParams.view || 'items';
   const assets = state.companyAssets.filter(a=>a.status!=='retired' && (cat==='all' || a.category===cat));
   const overdue = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
+  const maintainableAssets = state.companyAssets.filter(a=>a.status!=='retired' && MAINTAINABLE_CATEGORIES.includes(a.category));
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Organization</div><div class="page-title">Company Equipment</div><div class="page-desc">Tools, tech, vehicles, and equipment the company owns — who has it, where it lives when no one does, and what needs upkeep.</div></div>
-      ${canEdit()?`<button class="btn bronze" onclick="openAssetModal(null,'${cat}')">+ Add Equipment</button>`:''}
+      ${canEdit() && view==='items'?`<button class="btn bronze" onclick="openAssetModal(null,'${cat}')">+ Add Equipment</button>`:''}
     </div>
     ${overdue.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
       <strong>⚠ ${overdue.length} item${overdue.length!==1?'s':''} due for maintenance:</strong>
       ${overdue.map(a=>`<span class="pill rust" style="cursor:pointer;margin-left:6px;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
     </div>`:''}
+    <div class="flex gap-2 mt-2">
+      <span class="btn ${view==='items'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'${cat}'})">Equipment List</span>
+      <span class="btn ${view==='maintenance'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'maintenance'})">Maintenance Overview</span>
+    </div>
+    ${view==='maintenance' ? `
+    <div class="tbl-card mt-2"><table>
+      <tr><th>Item</th><th>Checked out to</th><th>Schedule</th><th>Last service</th><th>Currently due</th><th>Status</th></tr>
+      ${maintainableAssets.length ? maintainableAssets.map(a=>{
+        const due = assetMaintenanceDue(a);
+        const lastService = state.maintenanceLog.filter(m=>m.assetId===a.id).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];
+        const label = a.usageLabel||defaultUsageLabel(a.category);
+        const schedule = [a.maintenanceIntervalDays!=null?`Every ${a.maintenanceIntervalDays}d`:null, a.maintenanceIntervalUsage!=null?`Every ${a.maintenanceIntervalUsage.toLocaleString()} ${label}`:null].filter(Boolean).join(' / ') || '—';
+        const dueBits = [a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):null, a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString()+' '+label:null].filter(Boolean).join(' / ') || '—';
+        return `<tr class="row-click" onclick="navigate('assetDetail',{id:'${a.id}'})">
+          <td><strong>${a.name}</strong></td>
+          <td>${a.assignedTo?byId(state.people,a.assignedTo)?.name||'—':'<span class="small" style="color:var(--slate-light);">Unassigned</span>'}</td>
+          <td>${schedule}</td>
+          <td>${lastService?fmtDate(lastService.date)+' — '+lastService.serviceType:'<span class="small" style="color:var(--slate-light);">Never logged</span>'}</td>
+          <td>${dueBits}</td>
+          <td>${due?'<span class="pill rust">Overdue</span>':'<span class="pill jade">On track</span>'}</td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="6"><div class="empty-inline">No vehicles or equipment with maintenance tracking yet — mark an item as Vehicle or Equipment category to track its schedule here.</div></td></tr>`}
+    </table></div>
+    ` : `
     <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-      <span class="btn ${cat==='all'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{cat:'all'})">All (${state.companyAssets.filter(a=>a.status!=='retired').length})</span>
+      <span class="btn ${cat==='all'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'all'})">All (${state.companyAssets.filter(a=>a.status!=='retired').length})</span>
       ${ASSET_CATEGORIES.map(c=>{
         const n = state.companyAssets.filter(a=>a.status!=='retired' && a.category===c).length;
-        return `<span class="btn ${cat===c?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{cat:'${c}'})">${c} (${n})</span>`;
+        return `<span class="btn ${cat===c?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'${c}'})">${c} (${n})</span>`;
       }).join('')}
     </div>
     ${!assets.length? `<div class="empty mt-2"><h3>No equipment here yet</h3><p>Add the first item — a phone, a truck, a compressor, anything the company owns and hands out.</p></div>` : `
@@ -3330,6 +3356,7 @@ function renderCompanyAssets(){
         </div>`;
       }).join('')}
     </div>`}
+    `}
   `;
 }
 function openAssetModal(assetId, defaultCat){
@@ -3391,14 +3418,19 @@ function openAssetModal(assetId, defaultCat){
           </div>
 
           <div id="m-asset-maint-fields" style="display:${MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:10px;">
-            <div class="block-label">Maintenance tracking</div>
+            <div class="block-label">Maintenance schedule</div>
             <div class="field-row">
               <div><label>Usage tracked in</label><input type="text" id="m-asset-usagelabel" value="${a?.usageLabel||defaultUsageLabel(cat)}" placeholder="e.g. Mileage or Engine Hours"></div>
               <div><label>Current reading</label><input type="text" id="m-asset-usage" value="${a?.currentUsage!=null?a.currentUsage:''}"></div>
             </div>
+            <div class="small mt-1" style="margin-bottom:6px;">Set a repeating rule — e.g. every 5,000 miles, or every 90 days, or both — and each time service gets logged, the next due point is calculated automatically instead of you having to re-enter it.</div>
             <div class="field-row">
-              <div><label>Next maintenance date</label><input type="date" id="m-asset-nextdate" value="${a?.nextMaintenanceDate||''}"></div>
-              <div><label>Next maintenance at reading</label><input type="text" id="m-asset-nextusage" value="${a?.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}"></div>
+              <div><label>Repeat every <span class="small" style="font-weight:400;">(days)</span></label><input type="text" id="m-asset-interval-days" value="${a?.maintenanceIntervalDays!=null?a.maintenanceIntervalDays:''}" placeholder="e.g. 90"></div>
+              <div><label>Repeat every <span class="small" style="font-weight:400;">(usage units)</span></label><input type="text" id="m-asset-interval-usage" value="${a?.maintenanceIntervalUsage!=null?a.maintenanceIntervalUsage:''}" placeholder="e.g. 5000"></div>
+            </div>
+            <div class="field-row">
+              <div><label>Currently due — date</label><input type="date" id="m-asset-nextdate" value="${a?.nextMaintenanceDate||''}"></div>
+              <div><label>Currently due — reading</label><input type="text" id="m-asset-nextusage" value="${a?.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}"></div>
             </div>
           </div>
         </div>
@@ -3441,6 +3473,8 @@ function saveAsset(assetId, el){
   if(MAINTAINABLE_CATEGORIES.includes(category)){
     data.usageLabel = document.getElementById('m-asset-usagelabel').value.trim() || defaultUsageLabel(category);
     data.currentUsage = num(document.getElementById('m-asset-usage').value);
+    data.maintenanceIntervalDays = num(document.getElementById('m-asset-interval-days').value);
+    data.maintenanceIntervalUsage = num(document.getElementById('m-asset-interval-usage').value);
     data.nextMaintenanceDate = document.getElementById('m-asset-nextdate').value || null;
     data.nextMaintenanceUsage = num(document.getElementById('m-asset-nextusage').value);
   }
@@ -3503,11 +3537,18 @@ function renderAssetDetail(){
     ${isMaintainable ? `
     <div class="section-title">Maintenance</div>
     <div class="card">
+      <div class="small" style="color:var(--slate-light);margin-bottom:6px;">Repeating schedule</div>
+      <div style="font-weight:600;margin-bottom:10px;">
+        ${a.maintenanceIntervalDays!=null || a.maintenanceIntervalUsage!=null
+          ? [a.maintenanceIntervalDays!=null?`Every ${a.maintenanceIntervalDays} days`:null, a.maintenanceIntervalUsage!=null?`Every ${a.maintenanceIntervalUsage.toLocaleString()} ${a.usageLabel||defaultUsageLabel(a.category)}`:null].filter(Boolean).join(' or ')
+          : `<span style="color:var(--slate-light);font-weight:400;">No repeating schedule set — add one from Edit.</span>`}
+      </div>
       <div class="grid cols-3">
         <div><div class="small" style="color:var(--slate-light);">${a.usageLabel||defaultUsageLabel(a.category)} (current)</div><div>${a.currentUsage!=null?a.currentUsage.toLocaleString():'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Next due (date)</div><div style="${due==='date'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Next due (${a.usageLabel||defaultUsageLabel(a.category)})</div><div style="${due==='usage'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString():'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">Currently due (date)</div><div style="${due==='date'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">Currently due (${a.usageLabel||defaultUsageLabel(a.category)})</div><div style="${due==='usage'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString():'—'}</div></div>
       </div>
+      <div class="mt-2">${due? `<span class="pill rust">Overdue</span>` : `<span class="pill jade">On track</span>`}</div>
     </div>
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
@@ -3575,22 +3616,37 @@ function deleteAsset(assetId){
 function openLogMaintenanceModal(assetId){
   const a = byId(state.companyAssets, assetId);
   const label = a.usageLabel || defaultUsageLabel(a.category);
+  const hasInterval = a.maintenanceIntervalDays!=null || a.maintenanceIntervalUsage!=null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
         <div class="modal-head"><strong>Log Service — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}">
+          <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
           <label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">
-          <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too">
+          <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
           <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" placeholder="e.g. 85">
           <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor">
-          <label>Next service due — date <span class="small" style="font-weight:400;">(optional)</span></label><input type="date" id="m-maint-nextdate">
-          <label>Next service due — ${label} <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-nextusage">
+          ${hasInterval? `<div class="small mt-1" style="margin-bottom:6px;">Next due date/reading below is calculated from this item's repeating schedule — adjust if reality's different.</div>`:`<div class="small mt-1" style="margin-bottom:6px;">No repeating schedule is set for this item yet — set one on its Edit page and this will fill in automatically next time.</div>`}
+          <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${hasInterval && a.maintenanceIntervalDays!=null ? addDays(new Date().toISOString().slice(0,10), a.maintenanceIntervalDays) : (a.nextMaintenanceDate||'')}">
+          <label>Next service due — ${label}</label><input type="text" id="m-maint-nextusage" value="${hasInterval && a.maintenanceIntervalUsage!=null && a.currentUsage!=null ? (a.currentUsage + a.maintenanceIntervalUsage) : (a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:'')}">
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="logMaintenance('${assetId}',this)">Log It</button></div>
       </div>
     </div>`);
+}
+function recalcNextMaintenance(assetId){
+  const a = byId(state.companyAssets, assetId);
+  const dateInput = document.getElementById('m-maint-date');
+  const usageInput = document.getElementById('m-maint-usage');
+  const nextDateInput = document.getElementById('m-maint-nextdate');
+  const nextUsageInput = document.getElementById('m-maint-nextusage');
+  if(a.maintenanceIntervalDays!=null && dateInput.value){
+    nextDateInput.value = addDays(dateInput.value, a.maintenanceIntervalDays);
+  }
+  if(a.maintenanceIntervalUsage!=null && usageInput.value.trim()!==''){
+    nextUsageInput.value = parseFloat(usageInput.value) + a.maintenanceIntervalUsage;
+  }
 }
 function logMaintenance(assetId, el){
   const a = byId(state.companyAssets, assetId);
