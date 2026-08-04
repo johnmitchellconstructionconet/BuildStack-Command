@@ -3325,7 +3325,7 @@ function renderCompanyAssets(){
         const schedule = [a.maintenanceIntervalDays!=null?`Every ${a.maintenanceIntervalDays}d`:null, a.maintenanceIntervalUsage!=null?`Every ${a.maintenanceIntervalUsage.toLocaleString()} ${label}`:null].filter(Boolean).join(' / ') || '—';
         const dueBits = [a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):null, a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString()+' '+label:null].filter(Boolean).join(' / ') || '—';
         return `<tr class="row-click" onclick="navigate('assetDetail',{id:'${a.id}'})">
-          <td><strong>${a.name}</strong></td>
+          <td><strong>${a.name}</strong>${a.specialRequirements?` <span title="Has special requirements — ${escAttr(a.specialRequirements)}">⚠</span>`:''}</td>
           <td>${a.assignedTo?byId(state.people,a.assignedTo)?.name||'—':'<span class="small" style="color:var(--slate-light);">Unassigned</span>'}</td>
           <td>${schedule}</td>
           <td>${lastService?fmtDate(lastService.date)+' — '+lastService.serviceType:'<span class="small" style="color:var(--slate-light);">Never logged</span>'}</td>
@@ -3432,6 +3432,8 @@ function openAssetModal(assetId, defaultCat){
               <div><label>Currently due — date</label><input type="date" id="m-asset-nextdate" value="${a?.nextMaintenanceDate||''}"></div>
               <div><label>Currently due — reading</label><input type="text" id="m-asset-nextusage" value="${a?.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}"></div>
             </div>
+            <label>Special requirements <span class="small" style="font-weight:400;">(anything out of the ordinary — specific fluids/parts, certified operator only, mandatory inspections, warranty conditions)</span></label>
+            <textarea id="m-asset-special-reqs" placeholder="e.g. Synthetic oil only. DOT inspection required annually. CDL required to operate.">${a?.specialRequirements||''}</textarea>
           </div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveAsset('${assetId||''}',this)">Save</button></div>
@@ -3477,6 +3479,7 @@ function saveAsset(assetId, el){
     data.maintenanceIntervalUsage = num(document.getElementById('m-asset-interval-usage').value);
     data.nextMaintenanceDate = document.getElementById('m-asset-nextdate').value || null;
     data.nextMaintenanceUsage = num(document.getElementById('m-asset-nextusage').value);
+    data.specialRequirements = document.getElementById('m-asset-special-reqs').value.trim();
   }
   if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
   else { data.id = 'asset'+Date.now(); data.status = 'available'; data.assignedTo = null; data.locationId = null; data.addedDate = new Date().toISOString().slice(0,10); state.companyAssets.push(data); }
@@ -3549,13 +3552,16 @@ function renderAssetDetail(){
         <div><div class="small" style="color:var(--slate-light);">Currently due (${a.usageLabel||defaultUsageLabel(a.category)})</div><div style="${due==='usage'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString():'—'}</div></div>
       </div>
       <div class="mt-2">${due? `<span class="pill rust">Overdue</span>` : `<span class="pill jade">On track</span>`}</div>
+      ${a.specialRequirements? `<div class="mt-2" style="background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;">
+        <strong>⚠ Special requirements:</strong> ${a.specialRequirements}
+      </div>`:''}
     </div>
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
     </div>
     ${maintLog.length? `<div class="tbl-card"><table>
       <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th></tr>
-      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td></tr>`).join('')}
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${m.notes}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td></tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
@@ -3622,11 +3628,14 @@ function openLogMaintenanceModal(assetId){
       <div class="modal">
         <div class="modal-head"><strong>Log Service — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
+          ${a.specialRequirements? `<div class="mt-1" style="margin-bottom:12px;background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;"><strong>⚠ Before you start:</strong> ${a.specialRequirements}</div>`:''}
           <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
           <label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">
           <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
           <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" placeholder="e.g. 85">
           <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor">
+          <label>Anything unusual about this service? <span class="small" style="font-weight:400;">(optional — found an issue, used a non-standard part, needs follow-up)</span></label>
+          <textarea id="m-maint-notes" placeholder="e.g. Noticed minor rust on the frame, worth checking again next service."></textarea>
           ${hasInterval? `<div class="small mt-1" style="margin-bottom:6px;">Next due date/reading below is calculated from this item's repeating schedule — adjust if reality's different.</div>`:`<div class="small mt-1" style="margin-bottom:6px;">No repeating schedule is set for this item yet — set one on its Edit page and this will fill in automatically next time.</div>`}
           <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${hasInterval && a.maintenanceIntervalDays!=null ? addDays(new Date().toISOString().slice(0,10), a.maintenanceIntervalDays) : (a.nextMaintenanceDate||'')}">
           <label>Next service due — ${label}</label><input type="text" id="m-maint-nextusage" value="${hasInterval && a.maintenanceIntervalUsage!=null && a.currentUsage!=null ? (a.currentUsage + a.maintenanceIntervalUsage) : (a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:'')}">
@@ -3658,7 +3667,9 @@ function logMaintenance(assetId, el){
   state.maintenanceLog.push({
     id:'vm'+Date.now(), assetId, date: document.getElementById('m-maint-date').value,
     serviceType, usage: usage?parseFloat(usage):null, cost: cost?parseFloat(cost):null,
-    vendor: document.getElementById('m-maint-vendor').value.trim(), loggedBy: currentUser().id
+    vendor: document.getElementById('m-maint-vendor').value.trim(),
+    notes: document.getElementById('m-maint-notes').value.trim(),
+    loggedBy: currentUser().id
   });
   if(usage) a.currentUsage = parseFloat(usage);
   a.nextMaintenanceDate = document.getElementById('m-maint-nextdate').value || null;
