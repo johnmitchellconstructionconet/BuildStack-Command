@@ -3359,9 +3359,18 @@ function renderCompanyAssets(){
     `}
   `;
 }
+function generateAssetTag(){
+  let max = 0;
+  state.companyAssets.forEach(a=>{
+    const m = (a.assetTag||'').match(/^MCD-(\d+)$/);
+    if(m) max = Math.max(max, parseInt(m[1]));
+  });
+  return 'MCD-' + String(max+1).padStart(4,'0');
+}
 function openAssetModal(assetId, defaultCat){
   const a = assetId ? byId(state.companyAssets, assetId) : null;
   const cat = a?.category || (ASSET_CATEGORIES.includes(defaultCat) ? defaultCat : 'Tool');
+  const autoTag = a ? a.assetTag : generateAssetTag();
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:560px;">
@@ -3378,7 +3387,7 @@ function openAssetModal(assetId, defaultCat){
           </div>
           <div class="field-row">
             <div><label>Year</label><input type="text" id="m-asset-year" value="${escAttr(a?.year)}" placeholder="e.g. 2023"></div>
-            <div><label>Company asset tag</label><input type="text" id="m-asset-tag" value="${escAttr(a?.assetTag)}" placeholder="Your internal ID, if any"></div>
+            <div><label>Company asset tag <span class="small" style="font-weight:400;">(auto-assigned — edit if you'd rather use your own)</span></label><input type="text" id="m-asset-tag" value="${escAttr(autoTag)}"></div>
           </div>
           <label>Manufacturer serial number <span class="small" style="font-weight:400;">(optional — different from your asset tag)</span></label><input type="text" id="m-asset-serial" value="${escAttr(a?.manufacturerSerial)}">
           <label>Description <span class="small" style="font-weight:400;">(what it is, specs, what it's used for)</span></label><textarea id="m-asset-desc" placeholder="e.g. 6.5' bed, 4WD, used for hauling material to job sites">${a?.description||''}</textarea>
@@ -3567,10 +3576,43 @@ function renderAssetDetail(){
 
     <div class="section-title">Checkout history<span class="count">${history.length}</span></div>
     ${history.length? `<div class="tbl-card"><table>
-      <tr><th>Person</th><th>Checked out</th><th>Checked in</th></tr>
-      ${history.map(h=>`<tr><td>${byId(state.people,h.personId)?.name||'—'}</td><td>${fmtDate(h.checkedOutDate)}</td><td>${h.checkedInDate?fmtDate(h.checkedInDate):'<span class="pill jade">Still out</span>'}</td></tr>`).join('')}
+      <tr><th>Person</th><th>Checked out</th><th>Checked in</th><th>Photos</th></tr>
+      ${history.map(h=>{
+        const outCount = (h.checkOutPhotoKeys||[]).length;
+        const inCount = (h.checkInPhotoKeys||[]).length;
+        return `<tr><td>${byId(state.people,h.personId)?.name||'—'}</td><td>${fmtDate(h.checkedOutDate)}</td><td>${h.checkedInDate?fmtDate(h.checkedInDate):'<span class="pill jade">Still out</span>'}</td>
+        <td>${outCount||inCount? `<span class="btn secondary sm" onclick="event.stopPropagation();viewCheckoutPhotos('${h.id}')">📷 ${outCount+inCount}</span>` : '—'}</td></tr>`;
+      }).join('')}
     </table></div>` : `<div class="empty-inline">Never checked out to anyone.</div>`}
   `;
+}
+async function viewCheckoutPhotos(checkoutLogId){
+  const h = byId(state.assetCheckoutLog, checkoutLogId);
+  if(!h) return;
+  const loadSection = async (keys, label)=>{
+    if(!keys || !keys.length) return '';
+    const urls = [];
+    for(const key of keys){
+      try{
+        const blob = await idbGet(key);
+        if(blob) urls.push(URL.createObjectURL(blob));
+      }catch(e){}
+    }
+    if(!urls.length) return '';
+    return `<div class="block-label">${label}</div><div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:12px;">${urls.map(u=>`<img src="${u}" style="width:140px;height:140px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${u}','_blank')">`).join('')}</div>`;
+  };
+  const outSection = await loadSection(h.checkOutPhotoKeys, 'At checkout');
+  const inSection = await loadSection(h.checkInPhotoKeys, 'At check-in');
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-head"><strong>Condition Photos</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          ${outSection || inSection ? outSection + inSection : `<div class="small">No photos found for this checkout — they may not have loaded in this browser.</div>`}
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Close</button></div>
+      </div>
+    </div>`);
 }
 function openCheckOutModal(assetId){
   openModal(`
@@ -3580,26 +3622,55 @@ function openCheckOutModal(assetId){
         <div class="modal-body">
           <label>Person</label>
           <select id="m-checkout-person">${state.people.filter(p=>p.status!=='offboarded').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
+          <label>Condition photos <span class="small" style="font-weight:400;">(optional, but worth it — this is the record if a dispute ever comes up about what shape it was in)</span></label>
+          <input type="file" id="m-checkout-photos" accept="image/*" multiple>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="checkOutAsset('${assetId}',this)">Check Out</button></div>
       </div>
     </div>`);
 }
-function checkOutAsset(assetId, el){
+async function savePhotosToLog(fileInput, prefix){
+  const keys = [];
+  if(fileInput && fileInput.files && fileInput.files.length){
+    for(let i=0;i<fileInput.files.length;i++){
+      const key = `${prefix}_${i}_${Date.now()}`;
+      await idbPut(key, fileInput.files[i]);
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+async function checkOutAsset(assetId, el){
   const personId = document.getElementById('m-checkout-person').value;
   const a = byId(state.companyAssets, assetId);
+  const logId = 'co'+Date.now();
+  const checkOutPhotoKeys = await savePhotosToLog(document.getElementById('m-checkout-photos'), 'checkout_'+logId);
   a.assignedTo = personId; a.status = 'checked_out'; a.locationId = null;
-  state.assetCheckoutLog.push({id:'co'+Date.now(), assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id});
+  state.assetCheckoutLog.push({id:logId, assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id, checkOutPhotoKeys, checkInPhotoKeys:[]});
   saveState(); closeModal(el); toast('Checked out'); render();
 }
 function checkInAsset(assetId){
   const a = byId(state.companyAssets, assetId);
-  confirmAction(`Check "${a.name}" back in from ${byId(state.people,a.assignedTo)?.name}?`, ()=>{
-    const openEntry = state.assetCheckoutLog.find(c=>c.assetId===assetId && !c.checkedInDate);
-    if(openEntry) openEntry.checkedInDate = new Date().toISOString().slice(0,10);
-    a.assignedTo = null; a.status = 'available';
-    saveState(); toast('Checked in'); render();
-  });
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Check In — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:12px;">Checking back in from ${byId(state.people,a.assignedTo)?.name||'—'}.</div>
+          <label>Condition photos <span class="small" style="font-weight:400;">(optional — document how it came back)</span></label>
+          <input type="file" id="m-checkin-photos" accept="image/*" multiple>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="confirmCheckIn('${assetId}',this)">Check In</button></div>
+      </div>
+    </div>`);
+}
+async function confirmCheckIn(assetId, el){
+  const a = byId(state.companyAssets, assetId);
+  const checkInPhotoKeys = await savePhotosToLog(document.getElementById('m-checkin-photos'), 'checkin_'+assetId+'_'+Date.now());
+  const openEntry = state.assetCheckoutLog.find(c=>c.assetId===assetId && !c.checkedInDate);
+  if(openEntry){ openEntry.checkedInDate = new Date().toISOString().slice(0,10); openEntry.checkInPhotoKeys = checkInPhotoKeys; }
+  a.assignedTo = null; a.status = 'available';
+  saveState(); closeModal(el); toast('Checked in'); render();
 }
 function retireAsset(assetId){
   const a = byId(state.companyAssets, assetId);
@@ -3988,17 +4059,21 @@ function openQuickCheckOutModal(personId){
       <div class="modal">
         <div class="modal-head"><strong>Check Out Equipment</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          ${available.length? `<label>Equipment</label><select id="m-quickcheckout-asset">${available.map(a=>`<option value="${a.id}">${a.name}${a.assetTag?' (#'+a.assetTag+')':''}</option>`).join('')}</select>` : `<div class="small">Nothing available to check out — everything is either already assigned or retired. <a onclick="closeModal(this.closest('.modal').querySelector('.miniBtn'));navigate('companyAssets')" style="text-decoration:underline;cursor:pointer;">Add equipment</a> first.</div>`}
+          ${available.length? `<label>Equipment</label><select id="m-quickcheckout-asset">${available.map(a=>`<option value="${a.id}">${a.name}${a.assetTag?' (#'+a.assetTag+')':''}</option>`).join('')}</select>
+          <label>Condition photos <span class="small" style="font-weight:400;">(optional)</span></label>
+          <input type="file" id="m-quickcheckout-photos" accept="image/*" multiple>` : `<div class="small">Nothing available to check out — everything is either already assigned or retired. <a onclick="closeModal(this.closest('.modal').querySelector('.miniBtn'));navigate('companyAssets')" style="text-decoration:underline;cursor:pointer;">Add equipment</a> first.</div>`}
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button>${available.length?`<button class="btn bronze" onclick="quickCheckOutAsset('${personId}',this)">Check Out</button>`:''}</div>
       </div>
     </div>`);
 }
-function quickCheckOutAsset(personId, el){
+async function quickCheckOutAsset(personId, el){
   const assetId = document.getElementById('m-quickcheckout-asset').value;
   const a = byId(state.companyAssets, assetId);
+  const logId = 'co'+Date.now();
+  const checkOutPhotoKeys = await savePhotosToLog(document.getElementById('m-quickcheckout-photos'), 'checkout_'+logId);
   a.assignedTo = personId; a.status = 'checked_out'; a.locationId = null;
-  state.assetCheckoutLog.push({id:'co'+Date.now(), assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id});
+  state.assetCheckoutLog.push({id:logId, assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id, checkOutPhotoKeys, checkInPhotoKeys:[]});
   saveState(); closeModal(el); toast('Checked out'); render();
 }
 function renderGearSection(personId, canManage){
