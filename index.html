@@ -437,6 +437,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
       <div class="nav-item" data-nav="roles"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6Z"/></svg>Roles<span class="dot"></span></div>
       <div class="nav-item" data-nav="departments"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M8 9V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4"/></svg>Departments<span class="dot"></span></div>
       <div class="nav-item" data-nav="locations"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.5 7-11.5a7 7 0 1 0-14 0C5 14.5 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>Locations<span class="dot"></span></div>
+      <div class="nav-item" data-nav="companyAssets"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></svg>Company Equipment<span class="dot"></span></div>
     </div>
 
     <div class="nav-section" id="studio-nav" data-section-key="create">
@@ -580,6 +581,9 @@ function seedData(){
       {id:'gc6', name:'Safety Glasses (2-pack)', description:'ANSI Z87.1 rated.', category:'Safety & Field', price:20, uploadedBy:'u1', uploadedAt:'2026-01-15'}
     ],
     gearClaims: [],
+    companyAssets: [],
+    assetCheckoutLog: [],
+    vehicleMaintenanceLog: [],
     notifications: [],
     pendingSignups: [],
     performanceReviewTemplates: [
@@ -750,6 +754,9 @@ function migrateState(parsed){
       if(!parsed.templateSignatures) parsed.templateSignatures = [];
       if(!parsed.gearCatalog) parsed.gearCatalog = [];
       if(!parsed.gearClaims) parsed.gearClaims = [];
+      if(!parsed.companyAssets) parsed.companyAssets = [];
+      if(!parsed.assetCheckoutLog) parsed.assetCheckoutLog = [];
+      if(!parsed.vehicleMaintenanceLog) parsed.vehicleMaintenanceLog = [];
       if(!parsed.notifications) parsed.notifications = [];
       if(!parsed.pendingSignups) parsed.pendingSignups = [];
       if(!parsed.performanceReviewTemplates) parsed.performanceReviewTemplates = [{id:'prt1', name:'General Performance Review', roleId:null, criteria:['Quality of work','Reliability and attendance','Communication with team and clients','Growth since last review']}];
@@ -1471,6 +1478,8 @@ function render(){
     templates: renderTemplates,
     locations: renderLocations,
     locationDetail: renderLocationDetail,
+    companyAssets: renderCompanyAssets,
+    assetDetail: renderAssetDetail,
     gearCatalog: renderGearCatalog,
     quizBuilder: renderQuizBuilder,
     reviewTemplates: renderReviewTemplates,
@@ -1610,6 +1619,7 @@ function renderAdminDashboard(){
   const noOwnerTopics = state.topics.filter(t=>!t.owner);
   const needsUpdateTopics = state.topics.filter(t=>t.needsUpdate);
   const team = state.people.filter(p=>p.status!=='offboarded');
+  const overdueVehicles = state.companyAssets.filter(a=>a.category==='Vehicle' && a.status!=='retired' && vehicleMaintenanceDue(a));
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Dashboard</div><div class="page-title">Admin overview</div><div class="page-desc">Company-wide training and content health.</div></div>
@@ -1618,6 +1628,9 @@ function renderAdminDashboard(){
         <button class="btn secondary" onclick="navigate('reports')">View full reports</button>
       </div>
     </div>
+    ${overdueVehicles.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'Vehicle'})">
+      <strong>⚠ ${overdueVehicles.length} vehicle${overdueVehicles.length!==1?'s':''} due for maintenance</strong> — ${overdueVehicles.map(a=>a.name).join(', ')}
+    </div>`:''}
     <div class="grid cols-4">
       ${statCard('Active people', team.length, '')}
       ${statCard('Completion rate', completedRate+'%', '')}
@@ -2260,6 +2273,7 @@ function renderPersonDetail(){
       ${canSeeCompletionOf(p.id)? `<div class="card"><div class="stat-label">Training completion</div><div style="font-weight:700;margin-top:4px;">${mine.length?Math.round(mine.filter(a=>a.status==='completed').length/mine.length*100):0}%</div></div>` : `<div class="card"><div class="stat-label">Training completion</div><div class="small mt-1" style="color:var(--slate-light);">Private</div></div>`}
     </div>
     ${renderGearSection(p.id, canApprove(currentUser().id,'gear'))}
+    ${renderPersonEquipmentSection(p.id)}
     ${renderTimeOffSection(p.id, canApprove(currentUser().id,'timeOff'))}
     ${canSeeReviewsOf(p.id) ? renderReviewsSection(p.id, canEdit()) : ''}
     <div class="section-title">Roles<span class="count">${seats.filter(s=>s.roleId).length}</span>
@@ -3250,6 +3264,237 @@ function renderLocationDetail(){
     </table></div>` : `<div class="empty"><h3>No seats yet</h3><p>Assign a seat to this location from the Org Chart or the new employee wizard.</p></div>`}
   `;
 }
+const ASSET_CATEGORIES = ['Tool','Tech/Device','Vehicle','Heavy Equipment','Other'];
+function assetStatusPill(asset){
+  if(asset.status==='retired') return `<span class="pill gray">Retired</span>`;
+  if(asset.status==='lost') return `<span class="pill rust">Lost/Missing</span>`;
+  if(asset.status==='in_maintenance') return `<span class="pill amber">In Maintenance</span>`;
+  if(asset.assignedTo) return `<span class="pill jade">With ${byId(state.people,asset.assignedTo)?.name||'—'}</span>`;
+  return `<span class="pill gray">Available${asset.locationId?' — '+ (byId(state.locations,asset.locationId)?.name||''):''}</span>`;
+}
+function vehicleMaintenanceDue(asset){
+  if(asset.category!=='Vehicle') return null;
+  const today = new Date().toISOString().slice(0,10);
+  if(asset.nextMaintenanceDate && asset.nextMaintenanceDate <= today) return 'date';
+  if(asset.nextMaintenanceMileage && asset.mileage && asset.mileage >= asset.nextMaintenanceMileage) return 'mileage';
+  return null;
+}
+function renderCompanyAssets(){
+  const gate = featureGate('companyAssets','Company Equipment'); if(gate) return gate;
+  const cat = currentParams.cat || 'all';
+  const assets = state.companyAssets.filter(a=>a.status!=='retired' && (cat==='all' || a.category===cat));
+  const overdueVehicles = state.companyAssets.filter(a=>a.category==='Vehicle' && a.status!=='retired' && vehicleMaintenanceDue(a));
+  return `
+    <div class="page-head">
+      <div><div class="page-eyebrow">Organization</div><div class="page-title">Company Equipment</div><div class="page-desc">Tools, tech, vehicles, and other equipment the company owns — who has it, where it lives when no one does, and what needs upkeep.</div></div>
+      ${canEdit()?`<button class="btn bronze" onclick="openAssetModal()">+ Add Equipment</button>`:''}
+    </div>
+    ${overdueVehicles.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
+      <strong>⚠ ${overdueVehicles.length} vehicle${overdueVehicles.length!==1?'s':''} due for maintenance:</strong>
+      ${overdueVehicles.map(a=>`<span class="pill rust" style="cursor:pointer;margin-left:6px;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
+    </div>`:''}
+    <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      <span class="btn ${cat==='all'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{cat:'all'})">All (${state.companyAssets.filter(a=>a.status!=='retired').length})</span>
+      ${ASSET_CATEGORIES.map(c=>{
+        const n = state.companyAssets.filter(a=>a.status!=='retired' && a.category===c).length;
+        return `<span class="btn ${cat===c?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{cat:'${c}'})">${c} (${n})</span>`;
+      }).join('')}
+    </div>
+    ${!assets.length? `<div class="empty mt-2"><h3>No equipment here yet</h3><p>Add the first item — a phone, a truck, a compressor, anything the company owns and hands out.</p></div>` : `
+    <div class="grid cols-3 mt-2">
+      ${assets.map(a=>{
+        const due = vehicleMaintenanceDue(a);
+        return `<div class="card hover" onclick="navigate('assetDetail',{id:'${a.id}'})">
+          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+            <strong>${a.name}</strong>
+            ${due?`<span class="pill rust">Service due</span>`:''}
+          </div>
+          <div class="small mt-1">${a.category}${a.assetTag?' · Tag #'+a.assetTag:''}</div>
+          <div class="mt-2">${assetStatusPill(a)}</div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
+}
+function openAssetModal(assetId){
+  const a = assetId ? byId(state.companyAssets, assetId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${a?'Edit Equipment':'Add Equipment'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Name</label><input type="text" id="m-asset-name" value="${escAttr(a?.name)}" placeholder="e.g. iPhone 15 — Field Phone #3, F-150 Work Truck #2">
+          <label>Category</label>
+          <select id="m-asset-cat" onchange="document.getElementById('m-asset-vehicle-fields').style.display=this.value==='Vehicle'?'block':'none';">
+            ${ASSET_CATEGORIES.map(c=>`<option value="${c}" ${a?.category===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <label>Asset tag / serial number <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-asset-tag" value="${escAttr(a?.assetTag)}">
+          <label>Notes</label><textarea id="m-asset-notes">${a?.notes||''}</textarea>
+          <div id="m-asset-vehicle-fields" style="display:${a?.category==='Vehicle'?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:6px;">
+            <div class="field-row">
+              <div><label>VIN</label><input type="text" id="m-asset-vin" value="${escAttr(a?.vin)}"></div>
+              <div><label>License plate</label><input type="text" id="m-asset-plate" value="${escAttr(a?.licensePlate)}"></div>
+            </div>
+            <label>Current mileage</label><input type="text" id="m-asset-mileage" value="${a?.mileage!=null?a.mileage:''}">
+            <div class="field-row">
+              <div><label>Next maintenance date</label><input type="date" id="m-asset-nextdate" value="${a?.nextMaintenanceDate||''}"></div>
+              <div><label>Next maintenance mileage</label><input type="text" id="m-asset-nextmileage" value="${a?.nextMaintenanceMileage!=null?a.nextMaintenanceMileage:''}"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveAsset('${assetId||''}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+function saveAsset(assetId, el){
+  const name = document.getElementById('m-asset-name').value.trim();
+  if(!name){ toast('Name is required'); return; }
+  const category = document.getElementById('m-asset-cat').value;
+  const data = {
+    name, category,
+    assetTag: document.getElementById('m-asset-tag').value.trim(),
+    notes: document.getElementById('m-asset-notes').value.trim()
+  };
+  if(category==='Vehicle'){
+    data.vin = document.getElementById('m-asset-vin').value.trim();
+    data.licensePlate = document.getElementById('m-asset-plate').value.trim();
+    const mileage = document.getElementById('m-asset-mileage').value.trim();
+    data.mileage = mileage ? parseInt(mileage) : null;
+    data.nextMaintenanceDate = document.getElementById('m-asset-nextdate').value || null;
+    const nextMiles = document.getElementById('m-asset-nextmileage').value.trim();
+    data.nextMaintenanceMileage = nextMiles ? parseInt(nextMiles) : null;
+  }
+  if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
+  else { data.id = 'asset'+Date.now(); data.status = 'available'; data.assignedTo = null; data.locationId = null; data.addedDate = new Date().toISOString().slice(0,10); state.companyAssets.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function renderAssetDetail(){
+  const a = byId(state.companyAssets, currentParams.id);
+  if(!a) return `<div class="empty"><h3>Not found</h3></div>`;
+  const history = state.assetCheckoutLog.filter(c=>c.assetId===a.id).sort((x,y)=>new Date(y.checkedOutDate)-new Date(x.checkedOutDate));
+  const maintLog = state.vehicleMaintenanceLog.filter(m=>m.assetId===a.id).sort((x,y)=>new Date(y.date)-new Date(x.date));
+  const due = vehicleMaintenanceDue(a);
+  return `
+    <div class="crumbs"><a onclick="navigate('companyAssets')">Company Equipment</a><span class="sep">/</span>${a.name}</div>
+    <div class="page-head">
+      <div><div class="page-title">${a.name}</div><div class="page-desc">${a.category}${a.assetTag?' · Tag #'+a.assetTag:''}</div></div>
+      ${canEdit()?`<div class="flex gap-2">
+        <button class="btn secondary" onclick="openAssetModal('${a.id}')">Edit</button>
+        ${a.status!=='retired'?`<button class="btn secondary" onclick="retireAsset('${a.id}')">Retire</button>`:''}
+      </div>`:''}
+    </div>
+    <div class="card">
+      <div class="flex" style="justify-content:space-between;align-items:center;">
+        <div>${assetStatusPill(a)}</div>
+        ${canEdit() && a.status!=='retired' ? (
+          a.assignedTo
+            ? `<button class="btn secondary sm" onclick="checkInAsset('${a.id}')">Check In</button>`
+            : `<button class="btn bronze sm" onclick="openCheckOutModal('${a.id}')">Check Out to Someone</button>`
+        ) : ''}
+      </div>
+      ${a.notes? `<div class="small mt-2">${a.notes}</div>`:''}
+    </div>
+
+    ${a.category==='Vehicle' ? `
+    <div class="section-title">Vehicle details</div>
+    <div class="card">
+      <div class="grid cols-3">
+        <div><div class="small" style="color:var(--slate-light);">VIN</div><div>${a.vin||'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">License plate</div><div>${a.licensePlate||'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">Current mileage</div><div>${a.mileage!=null?a.mileage.toLocaleString():'—'}</div></div>
+      </div>
+      <div class="grid cols-2 mt-2">
+        <div><div class="small" style="color:var(--slate-light);">Next maintenance due (date)</div><div class="${due==='date'?'':''}" style="${due==='date'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):'—'}</div></div>
+        <div><div class="small" style="color:var(--slate-light);">Next maintenance due (mileage)</div><div style="${due==='mileage'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceMileage!=null?a.nextMaintenanceMileage.toLocaleString():'—'}</div></div>
+      </div>
+    </div>
+    <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
+      ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
+    </div>
+    ${maintLog.length? `<div class="tbl-card"><table>
+      <tr><th>Date</th><th>Service</th><th>Mileage</th><th>Cost</th><th>Vendor</th></tr>
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}</td><td>${m.mileage!=null?m.mileage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td></tr>`).join('')}
+    </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
+    ` : ''}
+
+    <div class="section-title">Checkout history<span class="count">${history.length}</span></div>
+    ${history.length? `<div class="tbl-card"><table>
+      <tr><th>Person</th><th>Checked out</th><th>Checked in</th></tr>
+      ${history.map(h=>`<tr><td>${byId(state.people,h.personId)?.name||'—'}</td><td>${fmtDate(h.checkedOutDate)}</td><td>${h.checkedInDate?fmtDate(h.checkedInDate):'<span class="pill jade">Still out</span>'}</td></tr>`).join('')}
+    </table></div>` : `<div class="empty-inline">Never checked out to anyone.</div>`}
+  `;
+}
+function openCheckOutModal(assetId){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Check Out Equipment</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Person</label>
+          <select id="m-checkout-person">${state.people.filter(p=>p.status!=='offboarded').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="checkOutAsset('${assetId}',this)">Check Out</button></div>
+      </div>
+    </div>`);
+}
+function checkOutAsset(assetId, el){
+  const personId = document.getElementById('m-checkout-person').value;
+  const a = byId(state.companyAssets, assetId);
+  a.assignedTo = personId; a.status = 'checked_out'; a.locationId = null;
+  state.assetCheckoutLog.push({id:'co'+Date.now(), assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id});
+  saveState(); closeModal(el); toast('Checked out'); render();
+}
+function checkInAsset(assetId){
+  const a = byId(state.companyAssets, assetId);
+  confirmAction(`Check "${a.name}" back in from ${byId(state.people,a.assignedTo)?.name}?`, ()=>{
+    const openEntry = state.assetCheckoutLog.find(c=>c.assetId===assetId && !c.checkedInDate);
+    if(openEntry) openEntry.checkedInDate = new Date().toISOString().slice(0,10);
+    a.assignedTo = null; a.status = 'available';
+    saveState(); toast('Checked in'); render();
+  });
+}
+function retireAsset(assetId){
+  const a = byId(state.companyAssets, assetId);
+  confirmAction(`Retire "${a.name}"? It'll be hidden from the active list but its history is kept.`, ()=>{
+    a.status = 'retired'; a.assignedTo = null;
+    saveState(); toast('Retired'); navigate('companyAssets');
+  });
+}
+function openLogMaintenanceModal(assetId){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Log Service</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}">
+          <label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection">
+          <label>Mileage at service</label><input type="text" id="m-maint-mileage" placeholder="Updates the vehicle's current mileage too">
+          <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" placeholder="e.g. 85">
+          <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor">
+          <label>Next service due — date <span class="small" style="font-weight:400;">(optional)</span></label><input type="date" id="m-maint-nextdate">
+          <label>Next service due — mileage <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-nextmileage">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="logMaintenance('${assetId}',this)">Log It</button></div>
+      </div>
+    </div>`);
+}
+function logMaintenance(assetId, el){
+  const serviceType = document.getElementById('m-maint-type').value.trim();
+  if(!serviceType){ toast('Service type is required'); return; }
+  const a = byId(state.companyAssets, assetId);
+  const mileage = document.getElementById('m-maint-mileage').value.trim();
+  const cost = document.getElementById('m-maint-cost').value.trim();
+  state.vehicleMaintenanceLog.push({
+    id:'vm'+Date.now(), assetId, date: document.getElementById('m-maint-date').value,
+    serviceType, mileage: mileage?parseInt(mileage):null, cost: cost?parseFloat(cost):null,
+    vendor: document.getElementById('m-maint-vendor').value.trim(), loggedBy: currentUser().id
+  });
+  if(mileage) a.mileage = parseInt(mileage);
+  a.nextMaintenanceDate = document.getElementById('m-maint-nextdate').value || null;
+  const nextMiles = document.getElementById('m-maint-nextmileage').value.trim();
+  a.nextMaintenanceMileage = nextMiles ? parseInt(nextMiles) : null;
+  saveState(); closeModal(el); toast('Logged'); render();
+}
 function openLocationModal(locationId){
   const loc = locationId ? byId(state.locations, locationId) : null;
   openModal(`
@@ -3379,12 +3624,14 @@ function fmtMoney(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumF
 function isOffboarded(personId){ return byId(state.people, personId)?.status === 'offboarded'; }
 function offboardEmployeeModal(personId){
   const p = byId(state.people, personId);
+  const checkedOutEquipment = state.companyAssets.filter(a=>a.assignedTo===personId && a.status!=='retired');
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
         <div class="modal-head"><strong>Offboard ${p.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
           <div class="small" style="margin-bottom:14px;padding:10px 12px;background:var(--paper);border-radius:8px;">Nothing gets deleted. Their seat(s) will be vacated and their login revoked, but every bit of history — training, gear requests, reviews, disciplinary record — stays fully intact and viewable here permanently.</div>
+          ${checkedOutEquipment.length? `<div class="small mt-1" style="margin-bottom:14px;padding:10px 12px;background:var(--rust-tint);border-radius:8px;"><strong>⚠ Still checked out to them:</strong> ${checkedOutEquipment.map(a=>a.name).join(', ')}. Offboarding won't check these back in automatically — do that from the equipment's page once it's physically returned.</div>`:''}
           <label>Last day</label><input type="date" id="m-off-date" value="${new Date().toISOString().slice(0,10)}">
           <label>Reason</label>
           <select id="m-off-reason">
@@ -3523,6 +3770,42 @@ function deleteDisciplinaryAction(id){
   });
 }
 
+function renderPersonEquipmentSection(personId){
+  const assigned = state.companyAssets.filter(a=>a.assignedTo===personId && a.status!=='retired');
+  return `
+    <div class="section-title">Company Equipment<span class="count">${assigned.length}</span>
+      ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openQuickCheckOutModal('${personId}')">+ Check Out Equipment</span>`:''}
+    </div>
+    ${assigned.length? `<div class="tbl-card"><table>
+      <tr><th>Item</th><th>Category</th><th></th></tr>
+      ${assigned.map(a=>`<tr class="row-click" onclick="navigate('assetDetail',{id:'${a.id}'})">
+        <td><strong>${a.name}</strong>${a.assetTag?` <span class="small" style="color:var(--slate-light);">#${a.assetTag}</span>`:''}</td>
+        <td>${a.category}</td>
+        <td>${canEdit()?`<span class="btn secondary sm" onclick="event.stopPropagation();checkInAsset('${a.id}')">Check In</span>`:''}</td>
+      </tr>`).join('')}
+    </table></div>` : `<div class="empty-inline">Nothing currently checked out.</div>`}
+  `;
+}
+function openQuickCheckOutModal(personId){
+  const available = state.companyAssets.filter(a=>a.status!=='checked_out' && a.status!=='retired' && a.status!=='lost');
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Check Out Equipment</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          ${available.length? `<label>Equipment</label><select id="m-quickcheckout-asset">${available.map(a=>`<option value="${a.id}">${a.name}${a.assetTag?' (#'+a.assetTag+')':''}</option>`).join('')}</select>` : `<div class="small">Nothing available to check out — everything is either already assigned or retired. <a onclick="closeModal(this.closest('.modal').querySelector('.miniBtn'));navigate('companyAssets')" style="text-decoration:underline;cursor:pointer;">Add equipment</a> first.</div>`}
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button>${available.length?`<button class="btn bronze" onclick="quickCheckOutAsset('${personId}',this)">Check Out</button>`:''}</div>
+      </div>
+    </div>`);
+}
+function quickCheckOutAsset(personId, el){
+  const assetId = document.getElementById('m-quickcheckout-asset').value;
+  const a = byId(state.companyAssets, assetId);
+  a.assignedTo = personId; a.status = 'checked_out'; a.locationId = null;
+  state.assetCheckoutLog.push({id:'co'+Date.now(), assetId, personId, checkedOutDate:new Date().toISOString().slice(0,10), checkedInDate:null, checkedOutBy:currentUser().id});
+  saveState(); closeModal(el); toast('Checked out'); render();
+}
 function renderGearSection(personId, canManage){
   if(!canSeeGearOf(personId)) return '';
   const year = currentGearYear();
