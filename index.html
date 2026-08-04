@@ -1489,6 +1489,17 @@ function render(){
   };
   c.innerHTML = (renderers[currentView]||renderDashboard)();
   if(currentView==='orgchart'){ requestAnimationFrame(drawOrgConnectors); }
+  if(currentView==='personDetail'){ hydrateBioPhotos(); }
+}
+async function hydrateBioPhotos(){
+  const imgs = document.querySelectorAll('img[data-bio-photo-key]');
+  for(const img of imgs){
+    const key = img.dataset.bioPhotoKey;
+    try{
+      const blob = await idbGet(key);
+      if(blob) img.src = URL.createObjectURL(blob);
+    }catch(e){}
+  }
 }
 window.addEventListener('resize', ()=>{ if(currentView==='orgchart') drawOrgConnectors(); });
 
@@ -2188,7 +2199,7 @@ function renderPeople(){
         <div class="card people-card ${!p.isPlaceholder?'hover':''}" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
           <div style="text-align:center;">
-            ${avatarHtml(p, 64, 22)}
+            ${avatarHtml(p, 80, 26)}
             <div style="font-weight:700;font-size:15px;margin-top:12px;">${p.name}${p.isPlaceholder?`<div class="mt-1"><span class="pill amber">${p.positionStatus}</span></div>`:''}${p.isTestAccount?`<div class="mt-1"><span class="pill gray">🧪 Test Account</span></div>`:''}</div>
             <div class="small mt-1">${p.title}</div>
             ${byId(state.departments,p.departmentId)? `<div class="mt-2"><span class="pill gray">${byId(state.departments,p.departmentId).name}</span>${byId(state.locations,p.primaryLocationId)?` <span class="pill gray">${byId(state.locations,p.primaryLocationId).name}</span>`:''}</div>`:''}
@@ -2239,6 +2250,9 @@ function renderPersonDetail(){
         ${isOwnProfile?`<span class="btn secondary sm" onclick="openMyBioModal('${p.id}')">Edit</span>`:''}
       </div>
       <div style="font-size:13.5px;line-height:1.6;">${p.bio}</div>
+      ${(p.bioPhotoKeys||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+        ${p.bioPhotoKeys.map(k=>`<img data-bio-photo-key="${k}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+      </div>`:''}
     </div>` : isOwnProfile? `<div class="empty-inline mt-2">Haven't added anything about yourself yet. <span class="btn bronze sm" style="margin-left:8px;" onclick="openMyBioModal('${p.id}')">Write One</span></div>` : ''}
     ${isOwnProfile && canEdit() ? `
     <div class="admin-tools-card mt-2">
@@ -2877,6 +2891,7 @@ function openPersonModal(personId){
 /* ---- Self-service bio editing (also used as an onboarding task) ---- */
 function openMyBioModal(personId){
   const p = byId(state.people, personId);
+  const photoKeys = p.bioPhotoKeys||[];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -2886,10 +2901,19 @@ function openMyBioModal(personId){
           <textarea id="m-bio-text" style="min-height:120px;">${p.bio||''}</textarea>
           <button class="btn secondary sm" onclick="aiImproveBio(this)">✨ Improve with AI</button>
           <div id="bio-ai-status" class="small mt-1"></div>
+          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(optional — a couple pics of hobbies, family, whatever you're comfortable sharing)</span></label>
+          ${photoKeys.length? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;" id="m-bio-existing-photos">
+            ${photoKeys.map(k=>`<div style="position:relative;">
+              <img data-bio-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <span onclick="removeBioPhoto('${personId}','${k}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
+            </div>`).join('')}
+          </div>` : ''}
+          <input type="file" id="m-bio-photos-new" accept="image/*" multiple>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveMyBio('${personId}',this)">Save</button></div>
       </div>
     </div>`);
+  hydrateBioPhotos();
 }
 async function aiImproveBio(btn){
   const provider = state.companySettings.aiProvider || 'claude';
@@ -2914,11 +2938,21 @@ async function aiImproveBio(btn){
     btn.disabled = false; btn.textContent = '✨ Improve with AI';
   }
 }
-function saveMyBio(personId, el){
+async function saveMyBio(personId, el){
   const bio = document.getElementById('m-bio-text').value.trim();
   const p = byId(state.people, personId);
   p.bio = bio;
+  const newKeys = await savePhotosToLog(document.getElementById('m-bio-photos-new'), 'bio_'+personId);
+  if(newKeys.length) p.bioPhotoKeys = [...(p.bioPhotoKeys||[]), ...newKeys];
   saveState(); closeModal(el); toast('Saved'); render();
+}
+async function removeBioPhoto(personId, key, el){
+  const p = byId(state.people, personId);
+  p.bioPhotoKeys = (p.bioPhotoKeys||[]).filter(k=>k!==key);
+  saveState();
+  try{ await idbDelete(key); }catch(e){}
+  el.closest('div').remove();
+  toast('Photo removed');
 }
 function readPhotoFile(inputId){
   return new Promise(resolve=>{
