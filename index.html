@@ -806,6 +806,20 @@ function migrateState(parsed){
         parsed.notifications = (parsed.notifications||[]).filter(n=>!removeIds.has(n.targetPersonId));
         parsed._noPlaceholderPeopleV1 = true;
       }
+      if(!parsed._policyAssignmentsBackfilledV1){
+        parsed.assignments = parsed.assignments || [];
+        (parsed.policies||[]).forEach(policy=>{
+          (parsed.people||[]).filter(p=>p.status!=='offboarded').forEach(p=>{
+            const alreadySigned = (parsed.acknowledgments||[]).find(a=>a.personId===p.id && a.policyId===policy.id && a.version===policy.version);
+            if(alreadySigned) return;
+            const hasOpenAssignment = parsed.assignments.find(a=>a.personId===p.id && a.targetType==='policy' && a.targetId===policy.id && a.status!=='completed');
+            if(hasOpenAssignment) return;
+            const due = new Date(); due.setDate(due.getDate()+7);
+            parsed.assignments.push({id:'a'+Date.now()+Math.random().toString(36).slice(2), personId:p.id, targetType:'policy', targetId:policy.id, assignedDate:new Date().toISOString().slice(0,10), dueDate:due.toISOString().slice(0,10), status:'not_started'});
+          });
+        });
+        parsed._policyAssignmentsBackfilledV1 = true;
+      }
       backfillPrimaryLocations(parsed);
       const starterTags = {t1:['scope-of-work','pre-construction','estimating'], t2:['selections','client-facing'], t3:['selections','tracking'], t4:['change-order','client-facing','billing']};
       const NEW_CATEGORIES = [
@@ -2077,6 +2091,7 @@ function openPolicyModal(policyId){
 function savePolicyForm(policyId, el){
   const title = document.getElementById('m-pol-title').value.trim();
   if(!title){ toast('Title is required'); return; }
+  const oldVersion = policyId ? byId(state.policies, policyId).version : null;
   const data = {
     title,
     category: document.getElementById('m-pol-cat').value.trim() || 'General',
@@ -2085,8 +2100,10 @@ function savePolicyForm(policyId, el){
     status: document.getElementById('m-pol-status').value,
     body: document.getElementById('m-pol-body').value.trim()
   };
-  if(policyId){ Object.assign(byId(state.policies, policyId), data); }
-  else { data.id='p'+Date.now(); state.policies.push(data); }
+  let policy;
+  if(policyId){ policy = byId(state.policies, policyId); Object.assign(policy, data); }
+  else { data.id='p'+Date.now(); state.policies.push(data); policy = data; }
+  if(!oldVersion || oldVersion !== policy.version) ensurePolicyAssignedToEveryone(policy.id);
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deletePolicy(policyId){
@@ -2100,6 +2117,18 @@ function deletePolicy(policyId){
     state.assignments = state.assignments.filter(a=>!(a.targetType==='policy' && a.targetId===policyId));
     state.policies = state.policies.filter(x=>x.id!==policyId);
     saveState(); toast('Deleted'); navigate('policies');
+  });
+}
+function ensurePolicyAssignedToEveryone(policyId){
+  const policy = byId(state.policies, policyId);
+  if(!policy) return;
+  state.people.filter(p=>p.status!=='offboarded').forEach(p=>{
+    const alreadySigned = state.acknowledgments.find(a=>a.personId===p.id && a.policyId===policyId && a.version===policy.version);
+    if(alreadySigned) return;
+    const hasOpenAssignment = state.assignments.find(a=>a.personId===p.id && a.targetType==='policy' && a.targetId===policyId && a.status!=='completed');
+    if(hasOpenAssignment) return;
+    const due = new Date(); due.setDate(due.getDate()+7);
+    state.assignments.push({id:'a'+Date.now()+Math.random().toString(36).slice(2), personId:p.id, targetType:'policy', targetId:policyId, assignedDate:new Date().toISOString().slice(0,10), dueDate:due.toISOString().slice(0,10), status:'not_started'});
   });
 }
 function signPolicy(policyId){
@@ -5944,6 +5973,7 @@ function renderSectionEditor(pathId, section, idx, total){
         <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','policy')">+ Link Policy (sign)</button>
         <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','video')">+ Link Video</button>
         <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','template')">+ Link Template</button>
+        <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','form')">+ Link Fillable Form</button>
         <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','external')">+ External Link / Course</button>
         <button class="btn secondary sm" onclick="addTaskModal('${pathId}','${section.id}','custom')">+ Custom Task</button>
       </div>
@@ -6047,6 +6077,18 @@ function addTaskModal(pathId, sectionId, type){
           <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTaskToSection('${pathId}','${sectionId}','external',this)">Add</button></div>
         </div>
       </div>`);
+  } else if(type==='form'){
+    const forms = state.fillableForms||[];
+    openModal(`
+      <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+        <div class="modal">
+          <div class="modal-head"><strong>Link Fillable Form</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+          <div class="modal-body">
+            ${forms.length? `<label>Form</label><select id="m-task-ref">${forms.map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}</select>` : `<div class="small">No fillable forms yet — create one from the <a onclick="closeModal(this.closest('.modal').querySelector('.miniBtn'));navigate('fillableForms')" style="text-decoration:underline;cursor:pointer;">Fillable Forms</a> page first, then come back and link it here.</div>`}
+          </div>
+          <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button>${forms.length?`<button class="btn bronze" onclick="saveTaskToSection('${pathId}','${sectionId}','form',this)">Add</button>`:''}</div>
+        </div>
+      </div>`);
   } else {
     openModal(`
       <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -6077,6 +6119,9 @@ function saveTaskToSection(pathId, sectionId, type, el){
   } else if(type==='template'){
     const refId = document.getElementById('m-task-ref').value;
     task = {id:'obt'+Date.now(), type, refId, title:'Use template: '+byId(state.templates,refId).title};
+  } else if(type==='form'){
+    const refId = document.getElementById('m-task-ref').value;
+    task = {id:'obt'+Date.now(), type, refId, title:'Fill out: '+byId(state.fillableForms,refId).name};
   } else if(type==='external'){
     const title = document.getElementById('m-task-title').value.trim();
     const url = document.getElementById('m-task-url').value.trim();
@@ -6791,6 +6836,7 @@ async function saveNewEmployee(el){
   });
   syncPersonPrimaryFields(personId);
   if(roleId) syncRoleAssignments(personId);
+  state.policies.forEach(p=>ensurePolicyAssignedToEveryone(p.id));
   if(!state.people.find(p=>p.id===personId).bio){
     state.individualTasks = state.individualTasks || [];
     state.individualTasks.push({id:'it'+Date.now()+Math.random().toString(36).slice(2), personId, type:'bio', title:'Write a short bio about yourself', description:"Tell your teammates something about yourself outside of work — hobbies, family, whatever you're comfortable sharing. You can use the AI button to help polish it.", addedDate:startDate});
