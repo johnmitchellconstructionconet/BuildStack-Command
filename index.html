@@ -3303,7 +3303,7 @@ function renderCompanyAssets(){
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Organization</div><div class="page-title">Company Equipment</div><div class="page-desc">Tools, tech, vehicles, and equipment the company owns — who has it, where it lives when no one does, and what needs upkeep.</div></div>
-      ${canEdit()?`<button class="btn bronze" onclick="openAssetModal()">+ Add Equipment</button>`:''}
+      ${canEdit()?`<button class="btn bronze" onclick="openAssetModal(null,'${cat}')">+ Add Equipment</button>`:''}
     </div>
     ${overdue.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
       <strong>⚠ ${overdue.length} item${overdue.length!==1?'s':''} due for maintenance:</strong>
@@ -3332,9 +3332,9 @@ function renderCompanyAssets(){
     </div>`}
   `;
 }
-function openAssetModal(assetId){
+function openAssetModal(assetId, defaultCat){
   const a = assetId ? byId(state.companyAssets, assetId) : null;
-  const cat = a?.category || 'Tool';
+  const cat = a?.category || (ASSET_CATEGORIES.includes(defaultCat) ? defaultCat : 'Tool');
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:560px;">
