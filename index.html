@@ -419,6 +419,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
       </div>
     </div>
 
+    <div class="hidden" id="workmode-toggle" style="margin:0 16px 16px;background:var(--line-soft);border-radius:10px;padding:3px;display:flex;gap:2px;">
+      <div id="workmode-mine-btn" onclick="setWorkMode('mine')" style="flex:1;text-align:center;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s;">My Work</div>
+      <div id="workmode-admin-btn" onclick="setWorkMode('admin')" style="flex:1;text-align:center;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s;">Admin</div>
+    </div>
     <div class="nav-section" data-section-key="workspace">
       <div class="nav-label" onclick="toggleNavSection('workspace')">Workspace<span class="chev">▾</span></div>
       <div class="nav-item" data-nav="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard<span class="dot"></span></div>
@@ -458,6 +462,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
     </div>
 
     <div class="sidebar-foot">
+      <div id="sync-indicator" class="small" style="color:var(--nav-text-dim);margin-bottom:8px;padding-left:2px;font-size:10.5px;"></div>
       <div class="flex gap-2" style="align-items:center;">
         <div class="userchip" id="userchip-btn" style="flex:1;">
           <div class="avatar" id="side-avatar"></div>
@@ -1283,13 +1288,20 @@ function refreshSidebarChrome(){
   document.getElementById('side-name').textContent = u.name;
   document.getElementById('side-role').textContent = u.title;
   const isAdmin = (u.accessLevel==='owner'||u.accessLevel==='admin');
-  document.getElementById('admin-nav').style.display = isAdmin ? 'block':'none';
+  document.getElementById('workmode-toggle').classList.toggle('hidden', !isAdmin);
+  document.getElementById('workmode-mine-btn').style.background = workMode==='mine' ? 'var(--panel)' : 'transparent';
+  document.getElementById('workmode-mine-btn').style.color = workMode==='mine' ? 'var(--ink)' : 'var(--slate)';
+  document.getElementById('workmode-mine-btn').style.boxShadow = workMode==='mine' ? 'var(--shadow-soft)' : 'none';
+  document.getElementById('workmode-admin-btn').style.background = workMode==='admin' ? 'var(--panel)' : 'transparent';
+  document.getElementById('workmode-admin-btn').style.color = workMode==='admin' ? 'var(--ink)' : 'var(--slate)';
+  document.getElementById('workmode-admin-btn').style.boxShadow = workMode==='admin' ? 'var(--shadow-soft)' : 'none';
+  document.getElementById('admin-nav').style.display = (isAdmin && workMode==='admin') ? 'block':'none';
   const delegatedApprovals = !isAdmin && anyApprovalPermission(u.id);
   const delegatedReports = !isAdmin && u.accessLevel==='manager' && state.companySettings.managersSeeTeamCompletion;
   document.getElementById('delegated-approvals-item').classList.toggle('hidden', !delegatedApprovals);
   document.getElementById('delegated-reports-item').classList.toggle('hidden', !delegatedReports);
   document.getElementById('delegated-nav').classList.toggle('hidden', !(delegatedApprovals || delegatedReports));
-  document.getElementById('studio-nav').style.display = canEdit() ? 'block':'none';
+  document.getElementById('studio-nav').style.display = (canEdit() && workMode==='admin') ? 'block':'none';
   applyFeatureNavVisibility();
   refreshNotifBadge();
   const banner = document.getElementById('viewas-banner');
@@ -1365,6 +1377,46 @@ async function supabaseSignUp(){
 async function supabaseSignOut(){
   if(supabaseClient) await supabaseClient.auth.signOut();
 }
+let lastSyncedAt = null;
+let backgroundSyncInterval = null;
+function isSafeToBackgroundSync(){
+  if(document.querySelector('.modal-backdrop')) return false;
+  const active = document.activeElement;
+  if(active){
+    const tag = active.tagName;
+    if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return false;
+    if(active.isContentEditable) return false;
+  }
+  return true;
+}
+async function backgroundSync(){
+  if(!supabaseClient || !state.currentUserId) return;
+  if(!isSafeToBackgroundSync()) return;
+  try{
+    const { data, error } = await supabaseClient.from('app_state').select('data,updated_at').eq('id','main').maybeSingle();
+    if(error || !data || !data.data) return;
+    const remoteJson = JSON.stringify(data.data);
+    if(remoteJson === JSON.stringify(state)) { lastSyncedAt = new Date(); updateSyncIndicator(); return; }
+    const myId = state.currentUserId;
+    const myViewAs = viewAsPersonId;
+    state = migrateState(data.data);
+    state.currentUserId = myId;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    lastSyncedAt = new Date();
+    viewAsPersonId = myViewAs;
+    render();
+    updateSyncIndicator();
+  }catch(e){ /* silent — background sync failing shouldn't interrupt anyone's work */ }
+}
+function updateSyncIndicator(){
+  const el = document.getElementById('sync-indicator');
+  if(el && lastSyncedAt) el.textContent = 'Synced ' + lastSyncedAt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+function startBackgroundSync(){
+  if(backgroundSyncInterval) clearInterval(backgroundSyncInterval);
+  if(!supabaseClient) return;
+  backgroundSyncInterval = setInterval(backgroundSync, 20000);
+}
 function login(personId){
   const p = byId(state.people, personId);
   if(p) p.lastLoginAt = new Date().toISOString();
@@ -1377,6 +1429,8 @@ function login(personId){
   restoreNavCollapseState();
   navigate('dashboard');
   showLoginNotificationPopup();
+  lastSyncedAt = new Date();
+  startBackgroundSync();
 }
 function startViewAs(personId){
   if(!canEdit()) return;
@@ -1420,6 +1474,7 @@ document.getElementById('userchip-btn').onclick = ()=>{
   navigate('personDetail',{id:currentUser().id});
 };
 document.getElementById('logout-btn').onclick = async ()=>{
+  if(backgroundSyncInterval){ clearInterval(backgroundSyncInterval); backgroundSyncInterval = null; }
   viewAsPersonId = null; realUserId = null; orgEditMode = false;
   state.currentUserId = null; saveState();
   navHistory = []; currentView = null;
@@ -1513,11 +1568,18 @@ window.addEventListener('resize', ()=>{ if(currentView==='orgchart') drawOrgConn
 /* ================= DASHBOARD ================= */
 function renderDashboard(){
   const u = currentUser();
-  let html = renderEmployeeDashboard();
-  if(u.accessLevel==='owner' || u.accessLevel==='admin'){
-    html += `<div class="mt-4" style="border-top:1px solid var(--line);padding-top:6px;">${u.accessLevel==='owner'?renderOwnerDashboard():renderAdminDashboard()}</div>`;
-  }
-  return html;
+  const isAdmin = (u.accessLevel==='owner' || u.accessLevel==='admin');
+  if(!isAdmin) return renderEmployeeDashboard();
+  if(workMode==='admin') return u.accessLevel==='owner' ? renderOwnerDashboard() : renderAdminDashboard();
+  return renderEmployeeDashboard();
+}
+let workMode = localStorage.getItem('buildstack_workmode') || 'mine';
+function setWorkMode(mode){
+  workMode = mode;
+  localStorage.setItem('buildstack_workmode', mode);
+  navHistory = []; currentView = null;
+  refreshSidebarChrome();
+  navigate('dashboard');
 }
 let dashboardFilter = 'all';
 function setDashboardFilter(f){ dashboardFilter=f; render(); }
@@ -3151,12 +3213,12 @@ function renderRoleDetail(directRoleId){
   r.referenceTopics = r.referenceTopics || [];
   return `
     <div class="crumbs"><a onclick="navigate('roles')">Roles</a><span class="sep">/</span>${r.title}</div>
-    <div class="page-head"><div><div class="page-title">${r.title}</div><div class="small mt-1">${byId(state.departments,r.departmentId)?.name} · ${roleReportsToLabel(r.id)}</div></div>
+    <div class="page-head"><div><div class="page-title">${r.title}</div><div class="small mt-1">${byId(state.departments,r.departmentId)?.name||'No department set'} · ${roleReportsToLabel(r.id)}</div></div>
       ${canEdit()?`<div class="flex gap-2"><button class="btn secondary" onclick="openRoleModal('${r.id}')">Edit</button><button class="btn secondary" onclick="deleteRole('${r.id}')">Delete</button></div>`:''}
     </div>
-    <div class="card">${r.purpose}</div>
+    ${r.purpose? `<div class="card">${r.purpose}</div>` : `<div class="empty-inline">No purpose written yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Add one from Edit.</span>`:''}</div>`}
     <div class="section-title">Key responsibilities</div>
-    <div class="card"><ul style="margin:0;padding-left:18px;">${r.responsibilities.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    ${r.responsibilities && r.responsibilities.length? `<div class="card"><ul style="margin:0;padding-left:18px;">${r.responsibilities.map(x=>`<li>${x}</li>`).join('')}</ul></div>` : `<div class="empty-inline">No responsibilities listed yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Add some from Edit.</span>`:''}</div>`}
     ${r.kpis && r.kpis.length? `<div class="section-title">KPIs</div><div class="card"><ul style="margin:0;padding-left:18px;">${r.kpis.map(k=>`<li style="margin-bottom:6px;">${k}</li>`).join('')}</ul></div>`:''}
 
     <div class="section-title">Onboarding path for this role</div>
@@ -3204,7 +3266,7 @@ function renderRoleDetail(directRoleId){
     </div>
 
     <div class="section-title">Required policies</div>
-    <div class="tbl-card"><table><tr><th>Policy</th></tr>${r.requiredPolicies.map(pid=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${pid}'})"><td>${byId(state.policies,pid)?.title}</td></tr>`).join('')}</table></div>
+    ${r.requiredPolicies.length? `<div class="tbl-card"><table><tr><th>Policy</th></tr>${r.requiredPolicies.map(pid=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${pid}'})"><td>${byId(state.policies,pid)?.title}</td></tr>`).join('')}</table></div>` : `<div class="empty-inline">No policies required for this role yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Set some from Edit.</span>`:''}</div>`}
     <div class="section-title">Seats on the org chart<span class="count">${seats.length}</span></div>
     ${seats.length? `<div class="tbl-card"><table>
       <tr><th>Seat</th><th>Department</th><th>Occupant</th></tr>
@@ -4036,15 +4098,17 @@ function roleReportsToLabel(roleId){
   const seats = state.positions.filter(p=>p.roleId===roleId);
   if(!seats.length) return 'No seats yet';
   const parents = new Set();
+  let anyTopLevel = false;
   seats.forEach(s=>{
     const parentId = getEffectiveParentPositionId(s);
     const parentPos = parentId ? byId(state.positions, parentId) : null;
-    if(!parentPos) parents.add('—');
+    if(!parentPos) anyTopLevel = true;
     else parents.add(parentPos.roleId ? byId(state.roles,parentPos.roleId)?.title : parentPos.title);
   });
   const list = [...parents].filter(Boolean);
+  if(anyTopLevel) list.push('Top of chart');
   if(!list.length) return 'Top of chart';
-  if(list.length===1) return 'Reports to '+list[0];
+  if(list.length===1) return list[0]==='Top of chart' ? 'Top of chart' : 'Reports to '+list[0];
   return 'Reports to '+list.join(' / ')+' (varies by seat)';
 }
 
