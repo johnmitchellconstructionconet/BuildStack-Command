@@ -1789,6 +1789,7 @@ function openPhaseModal(phaseId){
     </div>`);
 }
 function savePhase(phaseId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-phase-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   if(phaseId){ byId(state.projectPhases, phaseId).name = name; }
@@ -1808,6 +1809,7 @@ function movePhase(phaseId, dir){
   saveState(); render();
 }
 function deletePhase(phaseId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const ph = byId(state.projectPhases, phaseId);
   const taggedCount = state.topics.filter(t=>(t.phaseIds||[]).includes(phaseId)).length;
   confirmAction(`Delete "${ph.name}"?${taggedCount?` ${taggedCount} SOP${taggedCount!==1?'s':''} tagged to it will just show as untagged for this phase — nothing else is affected.`:''}`, ()=>{
@@ -2120,6 +2122,7 @@ function openPolicyModal(policyId){
     </div>`);
 }
 function savePolicyForm(policyId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-pol-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const oldVersion = policyId ? byId(state.policies, policyId).version : null;
@@ -2138,6 +2141,7 @@ function savePolicyForm(policyId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deletePolicy(policyId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.policies, policyId);
   const ackCount = state.acknowledgments.filter(a=>a.policyId===policyId).length;
   confirmAction(`Delete "${p.title}"?${ackCount?` ${ackCount} signature${ackCount!==1?'s':''} on file for it will be removed too.`:''}`, ()=>{
@@ -2198,9 +2202,11 @@ function renderPeople(){
         return `
         <div class="card people-card ${!p.isPlaceholder?'hover':''}" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
-          <div style="text-align:center;">
-            ${avatarHtml(p, 80, 26)}
-            <div style="font-weight:700;font-size:15px;margin-top:12px;">${p.name}${p.isPlaceholder?`<div class="mt-1"><span class="pill amber">${p.positionStatus}</span></div>`:''}${p.isTestAccount?`<div class="mt-1"><span class="pill gray">🧪 Test Account</span></div>`:''}</div>
+          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+            <div style="border-radius:50%;padding:3px;background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));margin-bottom:14px;">
+              ${avatarHtml(p, 96, 30)}
+            </div>
+            <div style="font-weight:700;font-size:16px;">${p.name}${p.isPlaceholder?`<div class="mt-1"><span class="pill amber">${p.positionStatus}</span></div>`:''}${p.isTestAccount?`<div class="mt-1"><span class="pill gray">🧪 Test Account</span></div>`:''}</div>
             <div class="small mt-1">${p.title}</div>
             ${byId(state.departments,p.departmentId)? `<div class="mt-2"><span class="pill gray">${byId(state.departments,p.departmentId).name}</span>${byId(state.locations,p.primaryLocationId)?` <span class="pill gray">${byId(state.locations,p.primaryLocationId).name}</span>`:''}</div>`:''}
           </div>
@@ -2834,6 +2840,7 @@ function isDescendantOf(candidateId, ofId){
   return false;
 }
 function openPersonModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = personId ? byId(state.people, personId) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -2890,6 +2897,7 @@ function openPersonModal(personId){
 }
 /* ---- Self-service bio editing (also used as an onboarding task) ---- */
 function openMyBioModal(personId){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only edit your own bio'); return; }
   const p = byId(state.people, personId);
   const photoKeys = p.bioPhotoKeys||[];
   openModal(`
@@ -2939,6 +2947,7 @@ async function aiImproveBio(btn){
   }
 }
 async function saveMyBio(personId, el){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only edit your own bio'); return; }
   const bio = document.getElementById('m-bio-text').value.trim();
   const p = byId(state.people, personId);
   p.bio = bio;
@@ -2947,6 +2956,7 @@ async function saveMyBio(personId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 async function removeBioPhoto(personId, key, el){
+  if(!canEdit() && personId!==currentUser().id){ toast('You can only edit your own bio'); return; }
   const p = byId(state.people, personId);
   p.bioPhotoKeys = (p.bioPhotoKeys||[]).filter(k=>k!==key);
   saveState();
@@ -2964,6 +2974,7 @@ function readPhotoFile(inputId){
   });
 }
 async function savePersonModal(existingId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-p-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const photo = await readPhotoFile('m-p-photo');
@@ -2990,6 +3001,7 @@ async function savePersonModal(existingId){
   toast('Saved — now give them a seat on the Org Chart'); render();
 }
 function deletePersonNode(id){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, id);
   if(!p) return;
   confirmAction(`Remove ${p.name} entirely? This clears their seats, assignments, and signed policies.`, ()=>{
@@ -3150,6 +3162,7 @@ function getChipValues(listId){
   return [...document.querySelectorAll('#'+listId+' .chip-item')].map(el=>el.dataset.value);
 }
 function saveRole(roleId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-role-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const data = {
@@ -3166,6 +3179,7 @@ function saveRole(roleId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteRole(roleId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.roles, roleId);
   const seatCount = state.positions.filter(p=>p.roleId===roleId).length;
   confirmAction(`Delete "${r.title}"?${seatCount?` ${seatCount} seat${seatCount!==1?'s':''} currently ${seatCount===1?'links':'link'} to it and will become unlinked — training already assigned stays assigned, but new people won't auto-get it.`:''}`, ()=>{
@@ -3191,6 +3205,7 @@ function addReferenceTopicModal(roleId){
     </div>`);
 }
 function saveReferenceTopic(roleId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.roles, roleId);
   const topicId = document.getElementById('m-reftopic-select').value;
   r.referenceTopics = r.referenceTopics || [];
@@ -3198,6 +3213,7 @@ function saveReferenceTopic(roleId, el){
   saveState(); closeModal(el); toast('Added'); render();
 }
 function removeReferenceTopic(roleId, topicId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.roles, roleId);
   r.referenceTopics = (r.referenceTopics||[]).filter(id=>id!==topicId);
   saveState(); toast('Removed'); render();
@@ -3252,6 +3268,7 @@ function openDepartmentModal(deptId){
     </div>`);
 }
 function saveDepartment(deptId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-dept-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const data = { name, description: document.getElementById('m-dept-desc').value.trim() };
@@ -3260,6 +3277,7 @@ function saveDepartment(deptId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteDepartment(deptId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const d = byId(state.departments, deptId);
   const seatCount = state.positions.filter(p=>p.departmentId===deptId).length;
   confirmAction(`Delete "${d.name}"?${seatCount?` ${seatCount} seat${seatCount!==1?'s':''} currently ${seatCount===1?'uses':'use'} this department and will show as unassigned.`:''}`, ()=>{
@@ -3402,6 +3420,7 @@ function generateAssetTag(){
   return 'MCD-' + String(max+1).padStart(4,'0');
 }
 function openAssetModal(assetId, defaultCat){
+  if(!canEdit()){ toast('Admins only'); return; }
   const a = assetId ? byId(state.companyAssets, assetId) : null;
   const cat = a?.category || (ASSET_CATEGORIES.includes(defaultCat) ? defaultCat : 'Tool');
   const autoTag = a ? a.assetTag : generateAssetTag();
@@ -3491,6 +3510,7 @@ function onAssetCategoryChange(cat){
   if(labelInput && !labelInput.dataset.touched) labelInput.value = defaultUsageLabel(cat);
 }
 function saveAsset(assetId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-asset-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const category = document.getElementById('m-asset-cat').value;
@@ -3649,6 +3669,7 @@ async function viewCheckoutPhotos(checkoutLogId){
     </div>`);
 }
 function openCheckOutModal(assetId){
+  if(!canEdit()){ toast('Admins only'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -3675,6 +3696,7 @@ async function savePhotosToLog(fileInput, prefix){
   return keys;
 }
 async function checkOutAsset(assetId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const personId = document.getElementById('m-checkout-person').value;
   const a = byId(state.companyAssets, assetId);
   const logId = 'co'+Date.now();
@@ -3685,6 +3707,7 @@ async function checkOutAsset(assetId, el){
 }
 function checkInAsset(assetId){
   const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can check it in'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -3700,6 +3723,7 @@ function checkInAsset(assetId){
 }
 async function confirmCheckIn(assetId, el){
   const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can check it in'); return; }
   const checkInPhotoKeys = await savePhotosToLog(document.getElementById('m-checkin-photos'), 'checkin_'+assetId+'_'+Date.now());
   const openEntry = state.assetCheckoutLog.find(c=>c.assetId===assetId && !c.checkedInDate);
   if(openEntry){ openEntry.checkedInDate = new Date().toISOString().slice(0,10); openEntry.checkInPhotoKeys = checkInPhotoKeys; }
@@ -3707,6 +3731,7 @@ async function confirmCheckIn(assetId, el){
   saveState(); closeModal(el); toast('Checked in'); render();
 }
 function retireAsset(assetId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const a = byId(state.companyAssets, assetId);
   confirmAction(`Retire "${a.name}"? It'll be hidden from the active list but its history is kept.`, ()=>{
     a.status = 'retired'; a.assignedTo = null;
@@ -3726,6 +3751,7 @@ function deleteAsset(assetId){
 }
 function openLogMaintenanceModal(assetId){
   const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log service on it'); return; }
   const label = a.usageLabel || defaultUsageLabel(a.category);
   const hasInterval = a.maintenanceIntervalDays!=null || a.maintenanceIntervalUsage!=null;
   openModal(`
@@ -3801,6 +3827,7 @@ function openLocationModal(locationId){
     </div>`);
 }
 function saveLocation(existingId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-loc-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const data = { name, address: document.getElementById('m-loc-address').value.trim() };
@@ -3809,6 +3836,7 @@ function saveLocation(existingId){
   saveState(); document.querySelector('.modal-backdrop')?.remove(); toast('Saved'); render();
 }
 function removeLocation(id){
+  if(!canEdit()){ toast('Admins only'); return; }
   if(state.locations.length<=1){ toast('You need at least one location'); return; }
   state.positions.filter(p=>p.locationId===id).forEach(p=> p.locationId = state.locations.find(l=>l.id!==id)?.id||null);
   state.locations = state.locations.filter(l=>l.id!==id);
@@ -3861,6 +3889,7 @@ function roleReportsToLabel(roleId){
 /* Assigning a role is the primary action; a seat gets created/updated behind the scenes so the
    org chart stays the single source of truth without making the admin think about seats. */
 function assignRoleModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const held = new Set(personPositions(personId).map(s=>s.roleId).filter(Boolean));
   const available = state.roles.filter(r=>!held.has(r.id));
   openModal(`
@@ -3879,6 +3908,7 @@ function assignRoleModal(personId){
     </div>`);
 }
 function quickAssignRole(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const roleId = document.getElementById('m-assign-role').value;
   const role = byId(state.roles, roleId);
   const existingSeats = personPositions(personId);
@@ -3895,6 +3925,7 @@ function quickAssignRole(personId, el){
   saveState(); closeModal(el); toast(`Assigned ${role.title} — training auto-assigned`); render();
 }
 function unassignRole(positionId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const pos = byId(state.positions, positionId);
   confirmAction(`Remove this role from them? The "${pos.title}" seat stays on the org chart, just without a role linked.`, ()=>{
     pos.roleId = null;
@@ -3910,6 +3941,7 @@ function fmtMoney(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumF
    signature, and disciplinary record stays exactly as it was, permanently queryable. */
 function isOffboarded(personId){ return byId(state.people, personId)?.status === 'offboarded'; }
 function offboardEmployeeModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   const checkedOutEquipment = state.companyAssets.filter(a=>a.assignedTo===personId && a.status!=='retired');
   openModal(`
@@ -3937,6 +3969,7 @@ function offboardEmployeeModal(personId){
     </div>`);
 }
 function confirmOffboard(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const details = document.getElementById('m-off-details').value.trim();
   if(!details){ toast('A brief reason is required — this becomes the permanent record'); return; }
   const p = byId(state.people, personId);
@@ -3961,6 +3994,7 @@ function confirmOffboard(personId, el){
   saveState(); closeModal(el); toast(`${p.name} offboarded — history preserved`); navigate('people');
 }
 function reactivateEmployeeModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   confirmAction(`Reactivate ${p.name}? They'll show up in People and the login list again. You'll need to give them a fresh seat on the Org Chart — their old one stays retired as part of the record.`, ()=>{
     p.status = 'active';
@@ -4023,6 +4057,7 @@ function renderDisciplinarySection(personId){
   `;
 }
 function addDisciplinaryModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -4039,6 +4074,7 @@ function addDisciplinaryModal(personId){
     </div>`);
 }
 function saveDisciplinaryAction(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-disc-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   state.disciplinaryActions.push({
@@ -4051,6 +4087,7 @@ function saveDisciplinaryAction(personId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteDisciplinaryAction(id){
+  if(!canEdit()){ toast('Admins only'); return; }
   confirmAction('Delete this record? This should only be used to correct a mistake — not to clean up someone\u2019s file.', ()=>{
     state.disciplinaryActions = state.disciplinaryActions.filter(d=>d.id!==id);
     saveState(); toast('Deleted'); render();
@@ -4087,6 +4124,7 @@ function renderPersonEquipmentSection(personId){
   `;
 }
 function openQuickCheckOutModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const available = state.companyAssets.filter(a=>a.status!=='checked_out' && a.status!=='retired' && a.status!=='lost');
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -4102,6 +4140,7 @@ function openQuickCheckOutModal(personId){
     </div>`);
 }
 async function quickCheckOutAsset(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const assetId = document.getElementById('m-quickcheckout-asset').value;
   const a = byId(state.companyAssets, assetId);
   const logId = 'co'+Date.now();
@@ -4218,6 +4257,7 @@ function renderTimeOffSection(personId, canManage){
   `;
 }
 function requestTimeOffModal(personId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only request time off for yourself'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -4236,6 +4276,7 @@ function requestTimeOffModal(personId){
     </div>`);
 }
 function submitTimeOffRequest(personId, el){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only request time off for yourself'); return; }
   const typeId = document.getElementById('m-pto-type').value;
   const startDate = document.getElementById('m-pto-start').value;
   const endDate = document.getElementById('m-pto-end').value;
@@ -4253,6 +4294,7 @@ function submitTimeOffRequest(personId, el){
   saveState(); closeModal(el); toast('Submitted for approval'); refreshNotifBadge(); render();
 }
 function approveTimeOffRequest(requestId){
+  if(!canApprove(currentUser().id,'timeOff')){ toast('You don\u2019t have permission to approve time off'); return; }
   const r = byId(state.timeOffRequests, requestId);
   r.status = 'approved'; r.decidedDate = new Date().toISOString().slice(0,10); r.decidedBy = currentUser().id;
   state.notifications.forEach(n=>{ if(n.relatedType==='timeOff' && n.relatedId===requestId) n.readBy=[currentUser().id]; });
@@ -4261,6 +4303,7 @@ function approveTimeOffRequest(requestId){
   saveState(); toast('Approved'); render(); refreshNotifBadge();
 }
 function denyTimeOffRequestModal(requestId){
+  if(!canApprove(currentUser().id,'timeOff')){ toast('You don\u2019t have permission to deny time off'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:400px;">
@@ -4271,6 +4314,7 @@ function denyTimeOffRequestModal(requestId){
     </div>`);
 }
 function denyTimeOffRequest(requestId, el){
+  if(!canApprove(currentUser().id,'timeOff')){ toast('You don\u2019t have permission to deny time off'); return; }
   const r = byId(state.timeOffRequests, requestId);
   r.status = 'denied'; r.decidedDate = new Date().toISOString().slice(0,10); r.decidedBy = currentUser().id;
   r.denyReason = document.getElementById('m-pto-deny-reason').value.trim();
@@ -4280,6 +4324,7 @@ function denyTimeOffRequest(requestId, el){
   saveState(); closeModal(el); toast('Denied'); render(); refreshNotifBadge();
 }
 function editTimeOffAllowanceModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -4297,6 +4342,7 @@ function editTimeOffAllowanceModal(personId){
     </div>`);
 }
 function saveTimeOffOverrides(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   p.timeOffOverrides = p.timeOffOverrides || {};
   document.querySelectorAll('.m-pto-override').forEach(input=>{
@@ -4309,6 +4355,7 @@ function saveTimeOffOverrides(personId, el){
 }
 
 function requestReimbursementModal(personId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only submit reimbursements for yourself'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -4323,6 +4370,7 @@ function requestReimbursementModal(personId){
     </div>`);
 }
 async function submitReimbursement(personId, el){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only submit reimbursements for yourself'); return; }
   const title = document.getElementById('m-gear-title').value.trim();
   const amount = parseFloat(document.getElementById('m-gear-amount').value);
   const fileInput = document.getElementById('m-gear-receipt');
@@ -4347,6 +4395,7 @@ async function downloadGearReceipt(claimId){
   const link = document.createElement('a'); link.href = url; link.download = c.title; link.click();
 }
 function editAllowanceModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -4362,12 +4411,14 @@ function editAllowanceModal(personId){
     </div>`);
 }
 function saveAllowanceOverride(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const val = document.getElementById('m-allow-amount').value.trim();
   const p = byId(state.people, personId);
   p.gearAllowanceOverride = val==='' ? null : parseFloat(val);
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function approveGearClaim(claimId){
+  if(!canApprove(currentUser().id,'gear')){ toast('You don\u2019t have permission to approve gear requests'); return; }
   const c = byId(state.gearClaims, claimId);
   c.status = 'approved'; c.decidedDate = new Date().toISOString().slice(0,10); c.decidedBy = currentUser().id;
   state.notifications.forEach(n=>{ if(n.relatedType==='gearClaim' && n.relatedId===claimId) n.readBy=[currentUser().id]; });
@@ -4375,6 +4426,7 @@ function approveGearClaim(claimId){
   saveState(); toast('Approved'); render(); refreshNotifBadge();
 }
 function denyGearClaimModal(claimId){
+  if(!canApprove(currentUser().id,'gear')){ toast('You don\u2019t have permission to deny gear requests'); return; }
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:400px;">
@@ -4385,6 +4437,7 @@ function denyGearClaimModal(claimId){
     </div>`);
 }
 function denyGearClaim(claimId, el){
+  if(!canApprove(currentUser().id,'gear')){ toast('You don\u2019t have permission to deny gear requests'); return; }
   const c = byId(state.gearClaims, claimId);
   c.status = 'denied'; c.decidedDate = new Date().toISOString().slice(0,10); c.decidedBy = currentUser().id;
   c.denyReason = document.getElementById('m-deny-reason').value.trim();
@@ -4393,6 +4446,7 @@ function denyGearClaim(claimId, el){
   saveState(); closeModal(el); toast('Denied'); render(); refreshNotifBadge();
 }
 function markGearClaimPaidModal(claimId){
+  if(!canApprove(currentUser().id,'gear')){ toast('You don\u2019t have permission to log gear payments'); return; }
   const c = byId(state.gearClaims, claimId);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -4408,6 +4462,7 @@ function markGearClaimPaidModal(claimId){
     </div>`);
 }
 function markGearClaimPaid(claimId, el){
+  if(!canApprove(currentUser().id,'gear')){ toast('You don\u2019t have permission to log gear payments'); return; }
   const c = byId(state.gearClaims, claimId);
   c.paidDate = document.getElementById('m-paid-date').value || new Date().toISOString().slice(0,10);
   c.paymentMethod = document.getElementById('m-paid-method').value.trim();
@@ -4504,6 +4559,7 @@ function removeGearItem(id){
   });
 }
 function requestCatalogItem(itemId, personId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only request items for yourself'); return; }
   const item = byId(state.gearCatalog, itemId);
   const stats = gearYearStats(personId, currentGearYear());
   if(item.price > stats.available){ toast('This exceeds your available balance for the year'); return; }
@@ -5352,6 +5408,7 @@ function printTopic(topicId){
   setTimeout(()=>container.remove(), 500);
 }
 function addStep(topicId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const t = byId(state.topics, topicId);
   const id='st'+Date.now();
   state.steps.push({id, topicId, title:'New step', blocks:[]});
@@ -5359,6 +5416,7 @@ function addStep(topicId){
   saveState(); render();
 }
 function removeStep(topicId, stepId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const t = byId(state.topics, topicId);
   t.stepIds = t.stepIds.filter(x=>x!==stepId);
   state.steps = state.steps.filter(s=>s.id!==stepId);
@@ -5881,6 +5939,7 @@ function openAssignRolesModal(topicId){
     </div>`);
 }
 function saveAssignRoles(topicId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   document.querySelectorAll('.m-assignrole-select').forEach(sel=>{
     const role = byId(state.roles, sel.dataset.role);
     role.requiredTopics = (role.requiredTopics||[]).filter(id=>id!==topicId);
@@ -5940,6 +5999,7 @@ function doAddTag(topicId, modalEl){
   render();
 }
 function removeTag(topicId, tag){
+  if(!canEdit()){ toast('Admins only'); return; }
   const t = byId(state.topics, topicId);
   t.tags = (t.tags||[]).filter(x=>x!==tag);
   saveState(); render();
@@ -6059,6 +6119,7 @@ function togglePhaseTag(topicId, phaseId, checked){
   saveState();
 }
 function saveTopicEditor(topicId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const t = byId(state.topics, topicId);
   const title = document.getElementById('editor-title').value.trim();
   if(!title){ toast('Title required'); return; }
@@ -6071,6 +6132,7 @@ function saveTopicEditor(topicId){
 }
 function cancelTopicEdit(topicId){ navigate('topicDetail',{id:topicId}); }
 function deleteTopic(topicId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const t = byId(state.topics, topicId);
   const linkedRoles = state.roles.filter(r=> (r.requiredTopics||[]).includes(topicId) || (r.referenceTopics||[]).includes(topicId));
   confirmAction(`Delete "${t.name}"? This removes it everywhere — role requirements, onboarding tasks, assignments, and quizzes tied to it.${linkedRoles.length?` It's currently linked to ${linkedRoles.length} role${linkedRoles.length!==1?'s':''}.`:''}`, ()=>{
@@ -6119,6 +6181,7 @@ function sectionIsDone(personId, section){
   return section.tasks.every(t=>taskIsDone(personId,t)) && sectionQuizPassed(personId, section.quizId);
 }
 function toggleCustomTask(personId, taskId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only update your own tasks'); return; }
   const existing = state.onboardingTaskCompletions.find(c=>c.personId===personId && c.taskId===taskId);
   if(existing){ state.onboardingTaskCompletions = state.onboardingTaskCompletions.filter(c=>c!==existing); }
   else { state.onboardingTaskCompletions.push({id:'otc'+Date.now(), personId, taskId, completedDate:new Date().toISOString().slice(0,10)}); }
@@ -6149,6 +6212,7 @@ function renderIndividualTasksSection(personId, canManage){
   `;
 }
 function addIndividualTaskModal(personId, type){
+  if(!canEdit()){ toast('Admins only'); return; }
   if(!type){
     openModal(`
       <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -6224,6 +6288,7 @@ function addIndividualTaskModal(personId, type){
   }
 }
 function saveIndividualTask(personId, type, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   let task = {id:'it'+Date.now(), personId, type, addedDate:new Date().toISOString().slice(0,10)};
   if(type==='topic'){
     const refId = document.getElementById('m-ind-ref').value;
@@ -6329,6 +6394,7 @@ function runRoleImport(mode, a, b, el){
 
 /* ---- Signing a template (parallel to policy signatures) ---- */
 function openSignTemplateModal(personId, templateId){
+  if(personId!==currentUser().id){ toast('You can only sign for yourself'); return; }
   const tpl = byId(state.templates, templateId);
   const existing = state.templateSignatures.find(s=>s.personId===personId && s.templateId===templateId);
   if(existing){ toast(`Already signed by ${existing.signatureName} on ${fmtDate(existing.date)}`); return; }
@@ -6347,6 +6413,7 @@ function openSignTemplateModal(personId, templateId){
     </div>`);
 }
 function submitTemplateSignature(personId, templateId, el){
+  if(personId!==currentUser().id){ toast('You can only sign for yourself'); return; }
   const name = document.getElementById('m-sign-name').value.trim();
   if(!name){ toast('Type your full name to sign'); return; }
   state.templateSignatures.push({id:'ts'+Date.now(), personId, templateId, date:new Date().toISOString().slice(0,10), signatureName:name});
@@ -6488,6 +6555,7 @@ function createOnboardingPath(el){
   saveState(); closeModal(el); toast('Path created'); navigate('onboardingPathEditor',{id});
 }
 function deleteOnboardingPath(pathId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const path = byId(state.onboardingPaths, pathId);
   const enrolledCount = state.onboardingEnrollments.filter(e=>e.pathId===pathId && e.status==='active').length;
   confirmAction(`Delete "${path.name}"?${enrolledCount?` ${enrolledCount} ${enrolledCount===1?'person is':'people are'} currently enrolled — their progress on this path will be removed, but any training/policies already assigned to them stay assigned.`:''}`, ()=>{
@@ -6825,6 +6893,7 @@ function viewCompletedReview(reviewId){
 }
 function isOverdueDate(dateStr){ return new Date(dateStr+'T00:00:00') < new Date(new Date().toDateString()); }
 function addReviewModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, personId);
   const suggestedTemplate = templateForRole(p.roleId||null);
   openModal(`
@@ -6846,6 +6915,7 @@ function addReviewModal(personId){
     </div>`);
 }
 function saveReviewModal(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   state.performanceReviews.push({
     id:'prev'+Date.now(), personId,
     type: document.getElementById('m-rev-type').value,
@@ -6857,6 +6927,7 @@ function saveReviewModal(personId, el){
   saveState(); closeModal(el); toast('Scheduled'); render();
 }
 function completeReviewModal(reviewId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.performanceReviews, reviewId);
   const template = r.templateId ? byId(state.performanceReviewTemplates, r.templateId) : null;
   const existingResponses = {};
@@ -6889,6 +6960,7 @@ function completeReviewModal(reviewId){
     </div>`);
 }
 function completeReview(reviewId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.performanceReviews, reviewId);
   const template = r.templateId ? byId(state.performanceReviewTemplates, r.templateId) : null;
   r.status = 'completed';
@@ -7145,6 +7217,7 @@ function confirmAddField(xPct, yPct, el){
 }
 function removeBuilderField(index){ formBuilderState.fields.splice(index,1); render(); }
 function saveFillableForm(){
+  if(!canEdit()){ toast('Admins only'); return; }
   if(!formBuilderState.name.trim()){ toast('Name the form first'); return; }
   if(!formBuilderState.backgroundImage){ toast('Upload a document first'); return; }
   if(formBuilderState.id){
@@ -7170,6 +7243,7 @@ function fieldOverlayHtml(form, mode, submissionValues){
   }).join('');
 }
 function openFillFormModal(personId, formId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only fill out forms for yourself'); return; }
   const form = byId(state.fillableForms, formId);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -7187,6 +7261,7 @@ function openFillFormModal(personId, formId){
     </div>`);
 }
 function submitFilledForm(formId, personId, el){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only submit forms for yourself'); return; }
   const values = {};
   let allFilled = true;
   document.querySelectorAll('.fb-fill-input').forEach(input=>{
@@ -7253,6 +7328,7 @@ function openReviewTemplateModal(templateId, prefillRoleId){
     </div>`);
 }
 function saveReviewTemplate(templateId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-rt-name').value.trim();
   if(!name){ toast('Name is required'); return; }
   const data = { name, roleId: document.getElementById('m-rt-role').value || null, criteria: getChipValues('m-rt-criteria-list') };
@@ -7261,6 +7337,7 @@ function saveReviewTemplate(templateId, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteReviewTemplate(templateId){
+  if(!canEdit()){ toast('Admins only'); return; }
   state.performanceReviews.forEach(r=>{ if(r.templateId===templateId) r.templateId=null; });
   state.performanceReviewTemplates = state.performanceReviewTemplates.filter(t=>t.id!==templateId);
   saveState(); toast('Deleted'); render();
@@ -7292,11 +7369,13 @@ function enrollPersonInPath(personId, pathId, startDate){
   saveState();
 }
 function quickEnroll(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const pathId = document.getElementById('quick-enroll-path').value;
   enrollPersonInPath(personId, pathId, new Date().toISOString().slice(0,10));
   toast('Enrolled — training and policies auto-assigned'); render();
 }
 function saveEnrollment(pathId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const personId = document.getElementById('m-enr-person').value;
   const startDate = document.getElementById('m-enr-start').value || new Date().toISOString().slice(0,10);
   enrollPersonInPath(personId, pathId, startDate);
@@ -7626,6 +7705,7 @@ async function saveBranding(){
   toast('Branding saved'); render();
 }
 function saveCompanySettings(){
+  if(!canEdit()){ toast('Admins only'); return; }
   state.companySettings = {
     companyName: document.getElementById('cs-name').value.trim(),
     address: document.getElementById('cs-address').value.trim(),
@@ -7694,6 +7774,7 @@ function openTemplateModal(){
     </div>`);
 }
 async function saveTemplate(el){
+  if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-tpl-title').value.trim();
   const category = document.getElementById('m-tpl-cat').value.trim() || 'General';
   if(!title){ toast('Title is required'); return; }
@@ -7855,6 +7936,7 @@ function downloadTemplateAsPng(id){
   toast('Downloaded as PNG');
 }
 function removeTemplate(id){
+  if(!canEdit()){ toast('Admins only'); return; }
   confirmAction('Remove this template?', ()=>{
     state.templates = state.templates.filter(t=>t.id!==id);
     saveState(); toast('Removed'); render();
@@ -7950,6 +8032,7 @@ function cancelQuizBuilder(topicId){
   navigate('topicDetail',{id:topicId});
 }
 function saveQuizBuilder(){
+  if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('qb-title').value.trim();
   if(!title){ toast('Quiz title required'); return; }
   if(!quizBuilderState.questions.length){ toast('Add at least one question'); return; }
@@ -7965,6 +8048,7 @@ function saveQuizBuilder(){
   saveState(); quizBuilderState=null; toast('Quiz saved'); navigate('topicDetail',{id:topicId});
 }
 function deleteQuiz(quizId){
+  if(!canEdit()){ toast('Admins only'); return; }
   confirmAction('Delete this quiz? Any onboarding section gated by it will stop requiring a passed test, and past attempts on it are removed.', ()=>{
     state.quizAttempts = state.quizAttempts.filter(a=>a.quizId!==quizId);
     state.onboardingPaths.forEach(p=> p.sections.forEach(s=>{ if(s.quizId===quizId) s.quizId=null; }));
