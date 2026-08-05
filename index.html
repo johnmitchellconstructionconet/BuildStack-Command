@@ -3288,6 +3288,7 @@ function renderPersonDetail(){
         ${canEdit()?`<button class="btn secondary" onclick="openMyPhotoModal('${p.id}')">${p.photo?'Change Photo':'Add Photo'}</button>`:''}
         ${canEdit()?`<button class="btn secondary" onclick="openPersonModal('${p.id}')">Edit</button>`:''}
         ${canEdit() && !isOwnProfile && p.status!=='offboarded'? `<button class="btn danger" onclick="offboardEmployeeModal('${p.id}')">Offboard</button>`:''}
+        ${canEdit() && !isOwnProfile? `<button class="btn danger" onclick="deletePersonNode('${p.id}')">Delete</button>`:''}
       </div>
     </div>
     ${renderOffboardingBanner(p.id)}
@@ -4108,7 +4109,7 @@ async function savePersonModal(existingId){
   const email = document.getElementById('m-p-email').value.trim();
   if(email){
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
-    if(state.people.some(p=>p.id!==existingId && p.status!=='offboarded' && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file'); return; }
+    if(state.people.some(p=>p.id!==existingId && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file — including offboarded people. Emails must be unique so logins never get confused between two profiles.'); return; }
   }
   const photo = await readPhotoFile('m-p-photo');
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('m-p-feat-'+f.key).checked).map(f=>f.key);
@@ -4138,14 +4139,26 @@ function deletePersonNode(id){
   if(!canEdit()){ toast('Admins only'); return; }
   const p = byId(state.people, id);
   if(!p) return;
-  confirmAction(`Remove ${p.name} entirely? This clears their seats, assignments, and signed policies.`, ()=>{
+  confirmAction(`Permanently delete ${p.name}? This removes their profile and everything that belongs to them — assignments, signed policies, time off history, gear requests, reviews, disciplinary records, onboarding progress. This cannot be undone. If you just need to mark someone as no longer employed while keeping their history, use Offboard instead.`, ()=>{
     state.positions.filter(pos=>pos.personId===id).forEach(pos=>{ pos.personId=null; pos.status='Open'; });
+    state.companyAssets.filter(a=>a.assignedTo===id).forEach(a=>{ a.assignedTo=null; if(a.status==='checked_out') a.status='available'; });
     state.assignments = state.assignments.filter(a=>a.personId!==id);
     state.acknowledgments = state.acknowledgments.filter(a=>a.personId!==id);
     state.quizAttempts = state.quizAttempts.filter(a=>a.personId!==id);
+    state.disciplinaryActions = state.disciplinaryActions.filter(a=>a.personId!==id);
+    state.performanceReviews = state.performanceReviews.filter(r=>r.personId!==id);
+    state.timeOffRequests = state.timeOffRequests.filter(r=>r.personId!==id);
+    state.gearClaims = state.gearClaims.filter(c=>c.personId!==id);
+    state.offboardingRecords = state.offboardingRecords.filter(r=>r.personId!==id);
+    state.onboardingEnrollments = state.onboardingEnrollments.filter(e=>e.personId!==id);
+    state.onboardingTaskCompletions = state.onboardingTaskCompletions.filter(c=>c.personId!==id);
+    state.individualTasks = (state.individualTasks||[]).filter(t=>t.personId!==id);
+    state.templateSignatures = state.templateSignatures.filter(s=>s.personId!==id);
+    state.formSubmissions = (state.formSubmissions||[]).filter(s=>s.personId!==id);
+    state.notifications = state.notifications.filter(n=>n.targetPersonId!==id);
     state.people = state.people.filter(x=>x.id!==id);
     if(state.currentUserId===id) state.currentUserId=null;
-    saveState(); toast('Removed'); render();
+    saveState(); toast('Deleted'); navigate('people');
   });
 }
 
@@ -9032,7 +9045,7 @@ async function saveNewEmployee(el){
   if(!name){ toast('Name is required'); return; }
   if(!email){ toast('Email is required — this is how they\u2019ll log in'); return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
-  if(state.people.some(p=>p.status!=='offboarded' && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file'); return; }
+  if(state.people.some(p=>p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file — including offboarded people. Emails must be unique so logins never get confused between two profiles.'); return; }
   if(!title){ toast('Seat / job title is required'); return; }
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('nw-feat-'+f.key).checked).map(f=>f.key);
   const personId = 'u'+Date.now();
