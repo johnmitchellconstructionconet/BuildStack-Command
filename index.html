@@ -8037,7 +8037,7 @@ function renderOnboarding(){
 function renderTaskRow(personId, t, locked){
   const done = taskIsDone(personId,t);
   const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form';
-  const checkClick = (!isAuto && !locked) ? `toggleCustomTask('${personId}','${t.id}')` : '';
+  const checkClick = !isAuto ? `toggleCustomTask('${personId}','${t.id}')` : '';
   let titleClick = '';
   if(t.type==='topic') titleClick = `navigate('topicDetail',{id:'${t.refId}'})`;
   else if(t.type==='policy') titleClick = `navigate('policyDetail',{id:'${t.refId}'})`;
@@ -8049,7 +8049,7 @@ function renderTaskRow(personId, t, locked){
     const submission = state.formSubmissions.find(s=>s.personId===personId && s.formId===t.refId);
     titleClick = submission ? `viewFormSubmission('${submission.id}')` : `openFillFormModal('${personId}','${t.refId}')`;
   }
-  else if(t.type!=='external' && !locked) titleClick = checkClick;
+  else if(t.type!=='external') titleClick = checkClick;
   const typeTag = {video:'📹 Video', template: '📄 Template', external:'🔗 External', bio:'✍️ Bio', form:'📝 Form', topic:'', policy:'', custom:''}[t.type] || '';
   const titleContent = `${typeTag?`<span class="small" style="font-weight:600;">${typeTag}</span> `:''}${t.title}`;
   const titleHtml = t.type==='external'
@@ -8090,15 +8090,15 @@ function renderMyOnboarding(personId){
         const quiz = section.quizId ? byId(state.quizzes, section.quizId) : null;
         const tasksDone = section.tasks.every(t=>taskIsDone(personId,t));
         const html = `
-        <div class="ob-section ${locked?'locked':''}">
+        <div class="ob-section">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
             <strong>${section.title}</strong>${section.internal?` <span class="pill amber">Internal</span>`:''}
-            ${isDone? `<span class="pill jade">Complete</span>` : locked? `<span class="pill gray">Locked</span>` : `<span class="pill amber">In progress</span>`}
+            ${isDone? `<span class="pill jade">Complete</span>` : `<span class="pill amber">In progress</span>`}
           </div>
           ${section.tasks.filter(t=>!t.internal || canEdit()).map(t=>renderTaskRow(personId,t,locked)).join('')}
           ${quiz? `<div class="ob-quiz-gate">
             <div class="small">Optional test: <strong>${quiz.title}</strong> (passing score ${quiz.passingScore}%)</div>
-            ${sectionQuizPassed(personId, quiz.id)? `<span class="pill jade">Passed</span>` : `<button class="btn ${tasksDone && !locked?'bronze':'secondary'} sm" ${(!tasksDone||locked)?'disabled style="opacity:.5;"':''} onclick="navigate('quizTake',{id:'${quiz.id}'})">Take Test</button>`}
+            ${sectionQuizPassed(personId, quiz.id)? `<span class="pill jade">Passed</span>` : `<button class="btn ${tasksDone?'bronze':'secondary'} sm" ${!tasksDone?'disabled style="opacity:.5;"':''} onclick="navigate('quizTake',{id:'${quiz.id}'})">Take Test</button>`}
           </div>`:''}
         </div>`;
         priorDone = isDone;
