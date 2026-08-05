@@ -562,7 +562,7 @@ async function uploadPhotosToStorage(fileInput, pathPrefix){
   if(fileInput && fileInput.files && fileInput.files.length){
     for(let i=0;i<fileInput.files.length;i++){
       try{ urls.push(await uploadPhotoToStorage(fileInput.files[i], pathPrefix)); }
-      catch(e){ toast('One photo failed to upload — is the "company-photos" bucket set up in Supabase yet?'); }
+      catch(e){ toast('Upload failed: ' + (e.message||e.error||'unknown error')); console.error('Storage upload error:', e); }
     }
   }
   return urls;
@@ -575,7 +575,7 @@ async function uploadAttachmentsToStorage(fileInput, pathPrefix){
       try{
         const url = await uploadPhotoToStorage(file, pathPrefix);
         attachments.push({ url, name: file.name, type: file.type||'' });
-      }catch(e){ toast('One attachment failed to upload — is the "company-photos" bucket set up in Supabase yet?'); }
+      }catch(e){ toast('Upload failed: ' + (e.message||e.error||'unknown error')); console.error('Storage upload error:', e); }
     }
   }
   return attachments;
@@ -4337,7 +4337,7 @@ async function saveMyPhoto(personId, el){
     try{
       p.photo = await uploadPhotoToStorage(fileInput.files[0], 'profile-photos');
     }catch(e){
-      toast('Photo upload failed — is the "company-photos" bucket set up in Supabase yet?');
+      toast('Upload failed: ' + (e.message||e.error||'unknown error')); console.error('Storage upload error:', e);
       btn.disabled = false; btn.textContent = origText;
       return;
     }
@@ -4424,7 +4424,7 @@ async function savePersonModal(existingId){
   };
   if(photoInput.files[0]){
     try{ data.photo = await uploadPhotoToStorage(photoInput.files[0], 'profile-photos'); }
-    catch(e){ toast('Photo upload failed — is the "company-photos" bucket set up in Supabase yet? Saving the rest of the changes anyway.'); }
+    catch(e){ toast('Upload failed (' + (e.message||e.error||'unknown error') + ') — saving the rest of the changes anyway.'); console.error('Storage upload error:', e); }
   }
   let id = existingId;
   if(id){ Object.assign(byId(state.people, id), data); }
