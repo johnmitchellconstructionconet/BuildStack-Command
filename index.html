@@ -547,6 +547,39 @@ const supabaseClient = (typeof window.supabase !== 'undefined')
   : null;
 
 let supabaseSaveTimeout = null;
+async function uploadPhotoToStorage(file, pathPrefix){
+  if(!supabaseClient) throw new Error('Not connected to Supabase');
+  let ext = (file.name.includes('.') ? file.name.split('.').pop() : 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!ext || ext.length>5) ext = 'jpg';
+  const path = `${pathPrefix}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabaseClient.storage.from('company-photos').upload(path, file, { contentType: file.type || 'image/jpeg' });
+  if(error) throw error;
+  const { data } = supabaseClient.storage.from('company-photos').getPublicUrl(path);
+  return data.publicUrl;
+}
+async function uploadPhotosToStorage(fileInput, pathPrefix){
+  const urls = [];
+  if(fileInput && fileInput.files && fileInput.files.length){
+    for(let i=0;i<fileInput.files.length;i++){
+      try{ urls.push(await uploadPhotoToStorage(fileInput.files[i], pathPrefix)); }
+      catch(e){ toast('One photo failed to upload — is the "company-photos" bucket set up in Supabase yet?'); }
+    }
+  }
+  return urls;
+}
+async function uploadAttachmentsToStorage(fileInput, pathPrefix){
+  const attachments = [];
+  if(fileInput && fileInput.files && fileInput.files.length){
+    for(let i=0;i<fileInput.files.length;i++){
+      const file = fileInput.files[i];
+      try{
+        const url = await uploadPhotoToStorage(file, pathPrefix);
+        attachments.push({ url, name: file.name, type: file.type||'' });
+      }catch(e){ toast('One attachment failed to upload — is the "company-photos" bucket set up in Supabase yet?'); }
+    }
+  }
+  return attachments;
+}
 function scheduleSupabaseSave(){
   if(!supabaseClient) return;
   clearTimeout(supabaseSaveTimeout);
@@ -638,6 +671,7 @@ function seedData(){
       ]
     },
     companyBoardPosts: [],
+    processSuggestions: [],
     _companyStorySamplesAddedV1: true,
     templateSignatures: [],
     individualTasks: [],
@@ -673,6 +707,7 @@ function seedData(){
       phone: '',
       email: 'info@mitchellcd.com',
       managersSeeTeamCompletion: false,
+      equipmentManagerId: null,
       aiProvider: 'claude',
       annualGearAllowance: 500,
       cultureStory: 'Mitchell Construction & Design builds custom homes and luxury renovations across Springfield, Branson, and Table Rock Lake. We\u2019re still small enough that everyone knows every job by name — we\u2019d like to keep it that way even as we grow. We care more about doing a job right than doing it fast, and we\u2019d rather have a hard conversation early than a surprise later.',
@@ -827,6 +862,7 @@ function migrateState(parsed){
       if(!parsed.companyStory.projects) parsed.companyStory.projects = [];
       if(!parsed.companyStory.events) parsed.companyStory.events = [];
       if(!parsed.companyBoardPosts) parsed.companyBoardPosts = [];
+      if(!parsed.processSuggestions) parsed.processSuggestions = [];
       if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
       if(!parsed.companyStory.charitableDonations) parsed.companyStory.charitableDonations = [];
       if(parsed.companyStory.charitiesSupportedCount!=null) delete parsed.companyStory.charitiesSupportedCount;
@@ -898,6 +934,7 @@ function migrateState(parsed){
       if(!parsed.individualTasks) parsed.individualTasks = [];
       if(!parsed.locations) parsed.locations = [{id:'loc1', name:'Main Location', address: (parsed.companySettings&&parsed.companySettings.address)||''}];
       if(!parsed.companySettings) parsed.companySettings = { companyName:'Mitchell Construction & Design', address:'4200 S Quail Creek Ave STE B, Springfield, MO', phone:'', email:'info@mitchellcd.com', managersSeeTeamCompletion:false, aiProvider:'claude', restrictByLocation:false };
+      if(parsed.companySettings.equipmentManagerId===undefined) parsed.companySettings.equipmentManagerId = null;
       if(parsed.companySettings.managersSeeTeamCompletion===undefined) parsed.companySettings.managersSeeTeamCompletion = false;
       if(parsed.companySettings.restrictByLocation===undefined) parsed.companySettings.restrictByLocation = false;
       if(!parsed.companySettings.aiProvider) parsed.companySettings.aiProvider = 'claude';
@@ -1454,6 +1491,7 @@ function login(personId){
   showLoginNotificationPopup();
   lastSyncedAt = new Date();
   startBackgroundSync();
+  checkAndNotifyComplianceIssues();
 }
 function startViewAs(personId){
   if(!canEdit()) return;
@@ -1721,8 +1759,9 @@ function renderCompanyHistoryTab(){
               </div>`:''}
             </div>
             ${m.description?`<div class="small mt-1">${m.description}</div>`:''}
-            ${(m.photoKeys||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-              ${m.photoKeys.map(k=>`<img data-milestone-photo-key="${k}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+            ${((m.photoUrls||[]).length || (m.photoKeys||[]).length)? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+              ${(m.photoUrls||[]).map(url=>`<img src="${escAttr(url)}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(url)}','_blank')">`).join('')}
+              ${(m.photoKeys||[]).map(k=>`<img data-milestone-photo-key="${k}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
             </div>`:''}
           </div>
         </div>
@@ -1740,6 +1779,7 @@ async function hydrateMilestonePhotos(){
 function openTimelineMilestoneModal(id){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const m = id ? byId(state.companyStory.timeline, id) : null;
+  const photoUrls = m?.photoUrls || [];
   const photoKeys = m?.photoKeys || [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -1754,9 +1794,13 @@ function openTimelineMilestoneModal(id){
           <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
           <textarea id="m-ms-desc">${m?.description||''}</textarea>
           <label class="mt-2">Photos <span class="small" style="font-weight:400;">(optional — company outings, job site shots, whatever fits)</span></label>
-          ${photoKeys.length? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+          ${(photoUrls.length||photoKeys.length)? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+            ${photoUrls.map(url=>`<div style="position:relative;">
+              <img src="${escAttr(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <span onclick="removeMilestonePhotoUrl('${id}','${escAttr(url)}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
+            </div>`).join('')}
             ${photoKeys.map(k=>`<div style="position:relative;">
-              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);" title="Only visible on the device this was uploaded from">
               <span onclick="removeMilestonePhoto('${id}','${k}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
             </div>`).join('')}
           </div>` : ''}
@@ -1770,6 +1814,14 @@ function openTimelineMilestoneModal(id){
       </div>
     </div>`);
   hydrateMilestonePhotos();
+}
+function removeMilestonePhotoUrl(id, url, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const m = byId(state.companyStory.timeline, id);
+  if(m) m.photoUrls = (m.photoUrls||[]).filter(u=>u!==url);
+  saveState();
+  el.closest('div').remove();
+  toast('Photo removed');
 }
 async function removeMilestonePhoto(id, key, el){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
@@ -1786,14 +1838,15 @@ async function saveTimelineMilestone(id, el){
   const title = document.getElementById('m-ms-title').value.trim();
   if(!date || !title){ toast('Date and title are required'); return; }
   const data = { date, title, icon: document.getElementById('m-ms-icon').value.trim(), description: document.getElementById('m-ms-desc').value.trim() };
-  const newKeys = await savePhotosToLog(document.getElementById('m-ms-photos-new'), 'milestone_'+(id||'new'+Date.now()));
+  const newUrls = await uploadPhotosToStorage(document.getElementById('m-ms-photos-new'), 'milestones');
   if(id){
     const existing = byId(state.companyStory.timeline, id);
-    data.photoKeys = [...(existing.photoKeys||[]), ...newKeys];
+    data.photoUrls = [...(existing.photoUrls||[]), ...newUrls];
     Object.assign(existing, data);
   } else {
     data.id = 'cms'+Date.now();
-    data.photoKeys = newKeys;
+    data.photoUrls = newUrls;
+    data.photoKeys = [];
     state.companyStory.timeline.push(data);
   }
   saveState(); closeModal(el); toast('Saved'); render();
@@ -1814,9 +1867,14 @@ function renderCompanyProjectsTab(){
     </div>
     ${!projects.length? `<div class="empty mt-2"><h3>No completed projects yet</h3><p>Add the first one — this is the closest thing this page has to a portfolio.</p></div>` : `
     <div class="grid cols-2 mt-3">
-      ${projects.map(p=>`
+      ${projects.map(p=>{
+        const coverUrl = (p.photoUrls||[])[0];
+        const coverKey = !coverUrl ? (p.photoKeys||[])[0] : null;
+        const restUrls = (p.photoUrls||[]).slice(coverUrl?1:0);
+        const restKeys = (p.photoKeys||[]).slice(coverKey?1:0);
+        return `
         <div class="cs-project-card">
-          ${(p.photoKeys||[]).length? `<img data-milestone-photo-key="${p.photoKeys[0]}" class="cs-project-photo" style="object-fit:cover;">` : `<div class="cs-project-photo" style="display:flex;align-items:center;justify-content:center;font-size:32px;">🏗️</div>`}
+          ${coverUrl? `<img src="${escAttr(coverUrl)}" class="cs-project-photo" style="object-fit:cover;">` : coverKey? `<img data-milestone-photo-key="${coverKey}" class="cs-project-photo" style="object-fit:cover;">` : `<div class="cs-project-photo" style="display:flex;align-items:center;justify-content:center;font-size:32px;">🏗️</div>`}
           <div style="padding:16px 18px;">
             <div class="flex" style="justify-content:space-between;align-items:flex-start;">
               <strong>${p.name}</strong>
@@ -1827,18 +1885,20 @@ function renderCompanyProjectsTab(){
             </div>
             <div class="small mt-1" style="color:var(--bronze-dark);font-weight:600;">${fmtDate(p.completedDate)}</div>
             ${p.description?`<div class="small mt-2">${p.description}</div>`:''}
-            ${(p.photoKeys||[]).length>1? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-              ${p.photoKeys.slice(1).map(k=>`<img data-milestone-photo-key="${k}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+            ${(restUrls.length||restKeys.length)? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+              ${restUrls.map(url=>`<img src="${escAttr(url)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(url)}','_blank')">`).join('')}
+              ${restKeys.map(k=>`<img data-milestone-photo-key="${k}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
             </div>`:''}
           </div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>`}
   `;
 }
 function openProjectModal(id){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const p = id ? byId(state.companyStory.projects, id) : null;
+  const photoUrls = p?.photoUrls || [];
   const photoKeys = p?.photoKeys || [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -1850,9 +1910,13 @@ function openProjectModal(id){
           <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
           <textarea id="m-proj-desc">${p?.description||''}</textarea>
           <label class="mt-2">Photos <span class="small" style="font-weight:400;">(the first one becomes the cover photo)</span></label>
-          ${photoKeys.length? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+          ${(photoUrls.length||photoKeys.length)? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+            ${photoUrls.map(url=>`<div style="position:relative;">
+              <img src="${escAttr(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <span onclick="removeProjectPhotoUrl('${id}','${escAttr(url)}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
+            </div>`).join('')}
             ${photoKeys.map(k=>`<div style="position:relative;">
-              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);" title="Only visible on the device this was uploaded from">
               <span onclick="removeProjectPhoto('${id}','${k}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
             </div>`).join('')}
           </div>` : ''}
@@ -1866,6 +1930,14 @@ function openProjectModal(id){
       </div>
     </div>`);
   hydrateMilestonePhotos();
+}
+function removeProjectPhotoUrl(id, url, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const p = byId(state.companyStory.projects, id);
+  if(p) p.photoUrls = (p.photoUrls||[]).filter(u=>u!==url);
+  saveState();
+  el.closest('div').remove();
+  toast('Photo removed');
 }
 async function removeProjectPhoto(id, key, el){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
@@ -1882,14 +1954,15 @@ async function saveProject(id, el){
   const completedDate = document.getElementById('m-proj-date').value;
   if(!name || !completedDate){ toast('Name and completion date are required'); return; }
   const data = { name, completedDate, description: document.getElementById('m-proj-desc').value.trim() };
-  const newKeys = await savePhotosToLog(document.getElementById('m-proj-photos-new'), 'project_'+(id||'new'+Date.now()));
+  const newUrls = await uploadPhotosToStorage(document.getElementById('m-proj-photos-new'), 'projects');
   if(id){
     const existing = byId(state.companyStory.projects, id);
-    data.photoKeys = [...(existing.photoKeys||[]), ...newKeys];
+    data.photoUrls = [...(existing.photoUrls||[]), ...newUrls];
     Object.assign(existing, data);
   } else {
     data.id = 'proj'+Date.now();
-    data.photoKeys = newKeys;
+    data.photoUrls = newUrls;
+    data.photoKeys = [];
     state.companyStory.projects.push(data);
   }
   saveState(); closeModal(el); toast('Saved'); render();
@@ -2205,6 +2278,12 @@ function renderBoardPostCard(p){
       ${canRemovePost?`<span class="miniBtn" onclick="deleteBoardPost('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
     </div>
     <div class="mt-2" style="font-size:14.5px;line-height:1.6;">${escHtml(p.text)}</div>
+    ${(p.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      ${p.attachments.map(a=>a.type.startsWith('image/')
+        ? `<img src="${escAttr(a.url)}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(a.url)}','_blank')">`
+        : `<a href="${escAttr(a.url)}" target="_blank" class="btn secondary sm" style="text-decoration:none;">📎 ${escHtml(a.name)}</a>`
+      ).join('')}
+    </div>`:''}
     <div class="flex gap-2 mt-2">
       <span class="btn secondary sm" onclick="boardReplyOpenFor=${replyOpen?'null':`'${p.id}'`};render();">${(p.replies||[]).length? `💬 ${p.replies.length} repl${p.replies.length===1?'y':'ies'}` : '💬 Reply'}</span>
     </div>
@@ -2238,17 +2317,20 @@ function openBoardPostModal(){
           <select id="m-board-category">${Object.keys(BOARD_CATEGORIES).map(k=>`<option value="${k}">${BOARD_CATEGORIES[k].icon} ${BOARD_CATEGORIES[k].label}</option>`).join('')}</select>
           <label>What's on your mind?</label>
           <textarea id="m-board-text" style="min-height:100px;" placeholder="Share an idea, ask a question, celebrate a win, flag something you need help with..."></textarea>
+          <label class="mt-2">Photo or file <span class="small" style="font-weight:400;">(optional)</span></label>
+          <input type="file" id="m-board-attachments" multiple>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitBoardPost(this)">Post</button></div>
       </div>
     </div>`);
 }
-function submitBoardPost(el){
+async function submitBoardPost(el){
   const text = document.getElementById('m-board-text').value.trim();
   if(!text){ toast('Write something first'); return; }
+  const attachments = await uploadAttachmentsToStorage(document.getElementById('m-board-attachments'), 'board');
   state.companyBoardPosts.push({
     id: 'bp'+Date.now(), authorId: currentUser().id, category: document.getElementById('m-board-category').value,
-    text, createdAt: new Date().toISOString(), replies: []
+    text, attachments, createdAt: new Date().toISOString(), replies: []
   });
   saveState(); closeModal(el); toast('Posted'); render();
 }
@@ -2535,8 +2617,9 @@ function renderLibrary(){
       <div class="tab ${libraryTab==='category'?'active':''}" onclick="libraryTab='category';render();">By Category</div>
       <div class="tab ${libraryTab==='timeline'?'active':''}" onclick="libraryTab='timeline';render();">By Project Phase</div>
       <div class="tab ${libraryTab==='role'?'active':''}" onclick="libraryTab='role';render();">By Role</div>
+      <div class="tab ${libraryTab==='suggestions'?'active':''}" onclick="libraryTab='suggestions';render();">Suggestions</div>
     </div>
-    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : `
+    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : libraryTab==='suggestions'? renderProcessSuggestionsTab() : `
     <div class="grid cols-3">
       ${subs.map(s=>{
         const topicCount = state.topics.filter(t=>t.subjectId===s.id).length;
@@ -2547,6 +2630,84 @@ function renderLibrary(){
       }).join('')}
     </div>`}
   `;
+}
+function renderProcessSuggestionsTab(){
+  const suggestions = [...state.processSuggestions].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const statusMeta = {open:{label:'Open',pill:'amber'}, planned:{label:'Planned',pill:'bronze'}, done:{label:'Done',pill:'jade'}, dismissed:{label:'Dismissed',pill:'gray'}};
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+      <div class="small" style="flex:1;">See a process that's missing, or one that needs updating? Flag it here — anyone can suggest, admins can turn a good one straight into a company goal.</div>
+      <button class="btn bronze sm" onclick="openProcessSuggestionModal()">+ Suggest a Process</button>
+    </div>
+    ${!suggestions.length? `<div class="empty mt-2"><h3>Nothing suggested yet</h3><p>If a process is missing or out of date, this is the spot to flag it.</p></div>` :
+    suggestions.map(s=>{
+      const author = byId(state.people, s.authorId);
+      const meta = statusMeta[s.status] || statusMeta.open;
+      return `<div class="cs-goal-card">
+        <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+          <strong>${escHtml(s.title)}</strong>
+          <span class="pill ${meta.pill}">${meta.label}</span>
+        </div>
+        <div class="small mt-1">${escHtml(s.description)}</div>
+        <div class="small mt-2" style="color:var(--slate-light);">Suggested by ${author?author.name:'someone'} · ${fmtDate(s.createdAt.slice(0,10))}</div>
+        ${canEdit()? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+          ${s.status!=='planned'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','planned')">Mark Planned</span>`:''}
+          ${s.status!=='done'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','done')">Mark Done</span>`:''}
+          ${s.status!=='dismissed'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','dismissed')">Dismiss</span>`:''}
+          <span class="btn bronze sm" onclick="turnSuggestionIntoGoal('${s.id}')">→ Turn into Goal</span>
+          <span class="miniBtn" onclick="deleteProcessSuggestion('${s.id}')" title="Delete" style="color:var(--rust);margin-left:auto;">✕</span>
+        </div>` : (s.authorId===currentUser().id?`<span class="miniBtn mt-2" onclick="deleteProcessSuggestion('${s.id}')" title="Delete" style="color:var(--rust);">✕</span>`:'')}
+      </div>`;
+    }).join('')}
+  `;
+}
+function openProcessSuggestionModal(){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Suggest a Process</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>What process needs to be created or updated?</label><input type="text" id="m-psug-title" placeholder="e.g. Change order approval for lake properties">
+          <label>Details</label><textarea id="m-psug-desc" placeholder="What's missing, or what's out of date about the current process?"></textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitProcessSuggestion(this)">Submit</button></div>
+      </div>
+    </div>`);
+}
+function submitProcessSuggestion(el){
+  const title = document.getElementById('m-psug-title').value.trim();
+  if(!title){ toast('Give it a title'); return; }
+  state.processSuggestions.push({
+    id: 'psug'+Date.now(), authorId: currentUser().id, title,
+    description: document.getElementById('m-psug-desc').value.trim(),
+    status: 'open', createdAt: new Date().toISOString()
+  });
+  createNotification('process_suggestion', `${currentUser().name} suggested a process: "${title}"`, {targetAudience:'admins', relatedType:'processSuggestion'});
+  saveState(); closeModal(el); toast('Submitted'); render();
+}
+function setProcessSuggestionStatus(id, status){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const s = byId(state.processSuggestions, id);
+  s.status = status;
+  saveState(); toast('Updated'); render();
+}
+function deleteProcessSuggestion(id){
+  const s = byId(state.processSuggestions, id);
+  if(!canEdit() && s.authorId!==currentUser().id){ toast('You can only delete your own suggestion'); return; }
+  confirmAction('Delete this suggestion?', ()=>{
+    state.processSuggestions = state.processSuggestions.filter(x=>x.id!==id);
+    saveState(); toast('Deleted'); render();
+  });
+}
+function turnSuggestionIntoGoal(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const s = byId(state.processSuggestions, id);
+  state.companyStory.goals.push({
+    id: 'goal'+Date.now(), title: s.title, description: s.description,
+    timeframe: 'short', status: 'not_started', trackProgress: false, progress: 0, targetDate: null
+  });
+  s.status = 'planned';
+  saveState(); toast('Added to Company Goals — find it under the Company page'); render();
 }
 function renderPhaseTimeline(){
   const phases = [...state.projectPhases].sort((a,b)=>a.order-b.order);
@@ -4253,6 +4414,35 @@ function assetComplianceIssues(asset){
     issues.push({type:'registration', label: asset.registrationExpiry<=today ? 'Registration/plate expired' : 'Registration/plate expiring soon', date: asset.registrationExpiry});
   }
   return issues;
+}
+function saveEquipmentManager(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  state.companySettings.equipmentManagerId = personId || null;
+  saveState(); toast('Saved');
+}
+function checkAndNotifyComplianceIssues(){
+  if(!canEdit()) return;
+  let anyNew = false;
+  state.companyAssets.forEach(a=>{
+    if(a.status==='retired') return;
+    const issues = assetComplianceIssues(a);
+    if(!issues.length) return;
+    a._notifiedComplianceKeys = a._notifiedComplianceKeys || [];
+    issues.forEach(issue=>{
+      const key = issue.type+':'+issue.date;
+      if(a._notifiedComplianceKeys.includes(key)) return;
+      a._notifiedComplianceKeys.push(key);
+      anyNew = true;
+      const message = `${issue.label} on ${a.name} — ${fmtDate(issue.date)}`;
+      const managerId = state.companySettings.equipmentManagerId;
+      if(managerId && byId(state.people, managerId)){
+        createNotification('equipment_compliance', message, {targetPersonId: managerId, relatedType:'asset', relatedId:a.id});
+      } else {
+        createNotification('equipment_compliance', message, {targetAudience:'admins', relatedType:'asset', relatedId:a.id});
+      }
+    });
+  });
+  if(anyNew){ saveState(); refreshNotifBadge(); }
 }
 function assetSubtitle(a){
   const bits = [a.category];
@@ -8898,6 +9088,16 @@ function renderCompanySettings(){
       <textarea id="cs-culture-story" placeholder="Whatever you'd want a new hire reading on day one.">${state.companySettings.cultureStory||''}</textarea>
       <button class="btn secondary sm mt-2" onclick="saveCompanyStorySettings()">Save</button>
       <div class="small mt-2">Milestones, completed projects, goals, and the roadmap are managed from the <a onclick="navigate('companyStory')" style="text-decoration:underline;cursor:pointer;">Company page</a> itself.</div>
+    </div>
+
+    <div class="section-title">Equipment &amp; Compliance</div>
+    <div class="card">
+      <label>Equipment manager <span class="small" style="font-weight:400;">(who gets notified when a vehicle's registration or insurance is expiring)</span></label>
+      <select id="cs-equipment-manager" onchange="saveEquipmentManager(this.value)">
+        <option value="">— No one designated yet —</option>
+        ${state.people.filter(p=>p.status!=='offboarded').map(p=>`<option value="${p.id}" ${state.companySettings.equipmentManagerId===p.id?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+      <div class="small mt-1">If no one's set, these reminders go to every admin instead.</div>
     </div>
 
     <div class="section-title">Gear &amp; Allowance</div>
