@@ -1165,7 +1165,7 @@ function toggleNotificationPanel(){
     <div class="notif-panel-head">Notifications</div>
     ${notifs.length? notifs.map(n=>`
       <div class="notif-item ${(n.readBy||[]).includes(uid)?'':'unread'}" onclick="openNotification('${n.id}')">
-        <div>${n.message}</div>
+        <div>${escHtml(n.message)}</div>
         <div class="small" style="color:var(--slate-light);margin-top:3px;">${new Date(n.createdAt).toLocaleString()}</div>
       </div>
     `).join('') : `<div class="notif-empty">Nothing yet.</div>`}
@@ -1203,7 +1203,7 @@ function showLoginNotificationPopup(){
       <div class="modal" style="max-width:420px;">
         <div class="modal-head"><strong>🔔 ${unread.length} thing${unread.length!==1?'s':''} waiting on you</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          ${unread.slice(0,5).map(n=>`<div class="small mt-1">• ${n.message}</div>`).join('')}
+          ${unread.slice(0,5).map(n=>`<div class="small mt-1">• ${escHtml(n.message)}</div>`).join('')}
           ${unread.length>5?`<div class="small mt-2" style="color:var(--slate-light);">…and ${unread.length-5} more.</div>`:''}
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Later</button><button class="btn bronze" onclick="closeModal(this);navigate('approvals')">Review Now</button></div>
@@ -2204,7 +2204,7 @@ function renderBoardPostCard(p){
       </div>
       ${canRemovePost?`<span class="miniBtn" onclick="deleteBoardPost('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
     </div>
-    <div class="mt-2" style="font-size:14.5px;line-height:1.6;">${p.text}</div>
+    <div class="mt-2" style="font-size:14.5px;line-height:1.6;">${escHtml(p.text)}</div>
     <div class="flex gap-2 mt-2">
       <span class="btn secondary sm" onclick="boardReplyOpenFor=${replyOpen?'null':`'${p.id}'`};render();">${(p.replies||[]).length? `💬 ${p.replies.length} repl${p.replies.length===1?'y':'ies'}` : '💬 Reply'}</span>
     </div>
@@ -2216,7 +2216,7 @@ function renderBoardPostCard(p){
           ${avatarHtml(rAuthor, 24, 9)}
           <div style="flex:1;">
             <div class="small" style="font-weight:600;">${rAuthor?rAuthor.name:'Someone'} <span style="font-weight:400;color:var(--slate-light);">· ${fmtDate(r.createdAt.slice(0,10))}</span></div>
-            <div class="small mt-1">${r.text}</div>
+            <div class="small mt-1">${escHtml(r.text)}</div>
           </div>
           ${canRemoveReply?`<span class="miniBtn" onclick="deleteBoardReply('${p.id}','${r.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
         </div>`;
@@ -2327,6 +2327,23 @@ function renderTeamAtAGlance(u){
     </table></div>` : `<div class="empty-inline">No quiz activity from your team yet.</div>`}
   `;
 }
+function pendingOnboardingTasksFor(personId){
+  const pending = [];
+  (state.individualTasks||[]).filter(t=>t.personId===personId && !taskIsDone(personId,t)).forEach(t=>pending.push(t));
+  enrollmentFor(personId).forEach(enr=>{
+    const path = byId(state.onboardingPaths, enr.pathId);
+    if(!path) return;
+    let priorDone = true;
+    path.sections.forEach(section=>{
+      if(!priorDone) return;
+      if(!sectionIsDone(personId, section)){
+        section.tasks.filter(t=>!taskIsDone(personId,t)).forEach(t=>pending.push(t));
+        priorDone = false;
+      }
+    });
+  });
+  return pending;
+}
 function renderEmployeeDashboard(){
   const u = currentUser();
   const mine = myAssignments(u.id);
@@ -2342,10 +2359,15 @@ function renderEmployeeDashboard(){
   const nextReview = reviewsFor(u.id).find(r=>r.status==='scheduled');
   const gearStats = gearYearStats(u.id, currentGearYear());
   const myEquipmentDue = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && assetMaintenanceDue(a));
+  const pendingOnboarding = pendingOnboardingTasksFor(u.id);
+  const pendingForms = pendingOnboarding.filter(t=>t.type==='form');
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Dashboard</div><div class="page-title">Welcome back, ${u.name.split(' ')[0]}</div><div class="page-desc">Here's what's assigned to you right now.</div></div>
     </div>
+    ${pendingOnboarding.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('onboarding')">
+      <strong>📋 ${pendingOnboarding.length} onboarding task${pendingOnboarding.length!==1?'s':''} waiting on you</strong>${pendingForms.length?` — including ${pendingForms.length===1?'a form':pendingForms.length+' forms'} to fill out (${pendingForms.map(t=>t.title).join(', ')})`:''}
+    </div>`:''}
     ${myEquipmentDue.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
       <strong>⚠ Maintenance due on equipment checked out to you:</strong>
       <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
@@ -3072,7 +3094,7 @@ function renderPersonDetail(){
         <div class="small" style="font-weight:600;color:var(--slate);margin-bottom:6px;">🌤 Outside of work</div>
         ${(isOwnProfile || canEdit())?`<span class="btn secondary sm" onclick="openMyBioModal('${p.id}')">Edit</span>`:''}
       </div>
-      <div style="font-size:13.5px;line-height:1.6;">${p.bio}</div>
+      <div style="font-size:13.5px;line-height:1.6;">${escHtml(p.bio)}</div>
       ${(p.bioPhotoKeys||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
         ${p.bioPhotoKeys.map(k=>`<img data-bio-photo-key="${k}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
       </div>`:''}
@@ -4500,7 +4522,7 @@ function renderAssetDetail(){
         ) : ''}
       </div>
       ${a.description? `<div class="mt-2">${a.description}</div>`:''}
-      ${a.notes? `<div class="small mt-2" style="color:var(--slate-light);">${a.notes}</div>`:''}
+      ${a.notes? `<div class="small mt-2" style="color:var(--slate-light);">${escHtml(a.notes)}</div>`:''}
     </div>
 
     <div class="section-title">Details</div>
@@ -4552,7 +4574,7 @@ function renderAssetDetail(){
       </div>
       <div class="mt-2">${due? `<span class="pill rust">Overdue</span>` : `<span class="pill jade">On track</span>`}</div>
       ${a.specialRequirements? `<div class="mt-2" style="background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;">
-        <strong>⚠ Special requirements:</strong> ${a.specialRequirements}
+        <strong>⚠ Special requirements:</strong> ${escHtml(a.specialRequirements)}
       </div>`:''}
     </div>
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
@@ -4560,7 +4582,7 @@ function renderAssetDetail(){
     </div>
     ${maintLog.length? `<div class="tbl-card"><table>
       <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th><th></th></tr>
-      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${m.serviceType}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${m.notes}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${m.vendor||'—'}</td><td>${canLogMaintenance?`<span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${escHtml(m.serviceType)}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${escHtml(m.notes)}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${escHtml(m.vendor)||'—'}</td><td>${canLogMaintenance?`<span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
@@ -4695,7 +4717,7 @@ function openLogMaintenanceModal(assetId){
       <div class="modal">
         <div class="modal-head"><strong>Log Service — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          ${a.specialRequirements? `<div class="mt-1" style="margin-bottom:12px;background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;"><strong>⚠ Before you start:</strong> ${a.specialRequirements}</div>`:''}
+          ${a.specialRequirements? `<div class="mt-1" style="margin-bottom:12px;background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;"><strong>⚠ Before you start:</strong> ${escHtml(a.specialRequirements)}</div>`:''}
           <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
           <label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">
           <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
@@ -5126,7 +5148,7 @@ function renderGearSection(personId, canManage){
     ${allClaims.length? `<div class="tbl-card"><table>
       <tr><th>Item</th><th>Year</th><th>Amount</th><th>Requested</th><th>Status</th><th>Payment</th><th></th></tr>
       ${allClaims.map(c=>`<tr>
-        <td>${c.title}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
+        <td>${escHtml(c.title)}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
         <td>${c.year}</td>
         <td>${fmtMoney(c.amount)}</td>
         <td>${fmtDate(c.requestedDate)}</td>
@@ -5626,7 +5648,7 @@ function renderApprovals(){
         const p = byId(state.people, c.personId);
         return `<tr>
           <td><strong>${p?.name||'—'}</strong></td>
-          <td>${c.title}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
+          <td>${escHtml(c.title)}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
           <td>${fmtMoney(c.amount)}</td>
           <td>${fmtDate(c.requestedDate)}</td>
           <td class="flex gap-2">
@@ -6530,6 +6552,15 @@ function renderEditableBlock(step, block, idx){
   `;
 }
 function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+function escHtml(s){
+  return (s==null?'':String(s))
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;')
+    .replace(/\n/g,'<br>');
+}
 function renderStepEditor(topicId, step, idx, total){
   return `
     <div class="step-edit-card">
@@ -8282,6 +8313,7 @@ function renderFormBuilder(){
     ${!formBuilderState.backgroundImage? `
       <div class="card mt-2">
         <label>Upload the document <span class="small" style="font-weight:400;">(image, or PDF — first page only for now)</span></label>
+        <div class="small" style="margin-bottom:10px;">This is the required first step — once you upload it, the document shows up below and you can click anywhere on it to drop in text fields, dates, and signature boxes, DocuSign-style.</div>
         <input type="file" id="fb-bg-file" accept="image/*,application/pdf" onchange="handleFormBackgroundUpload(this)">
         <div id="fb-bg-status" class="small mt-1"></div>
       </div>
