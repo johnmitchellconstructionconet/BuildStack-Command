@@ -8732,6 +8732,8 @@ function renderCompanySettings(){
       <textarea id="cs-mission" placeholder="Why we exist.">${state.companyStory.mission||''}</textarea>
       <label>Vision</label>
       <textarea id="cs-vision" placeholder="Where we're headed.">${state.companyStory.vision||''}</textarea>
+      <label>Who We Are <span class="small" style="font-weight:400;">(company story, values, what it's like to work here)</span></label>
+      <textarea id="cs-culture-story" placeholder="Whatever you'd want a new hire reading on day one.">${state.companySettings.cultureStory||''}</textarea>
       <button class="btn secondary sm mt-2" onclick="saveCompanyStorySettings()">Save</button>
       <div class="small mt-2">Milestones, completed projects, goals, and the roadmap are managed from the <a onclick="navigate('companyStory')" style="text-decoration:underline;cursor:pointer;">Company page</a> itself.</div>
     </div>
@@ -8820,6 +8822,7 @@ function saveCompanyStorySettings(){
   state.companyStory.jobsCompletedCount = Math.max(0, parseInt(document.getElementById('cs-jobs-count').value)||0);
   state.companyStory.mission = document.getElementById('cs-mission').value.trim();
   state.companyStory.vision = document.getElementById('cs-vision').value.trim();
+  state.companySettings.cultureStory = document.getElementById('cs-culture-story').value.trim();
   saveState(); toast('Saved'); render();
 }
 function adjustJobsCompleted(delta){
