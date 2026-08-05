@@ -459,7 +459,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
       <div class="nav-label" onclick="toggleNavSection('workspace')">Workspace<span class="chev">▾</span></div>
       <div class="nav-item" data-nav="dashboard"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard<span class="dot"></span></div>
       <div class="nav-item" data-nav="companyStory"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>Company<span class="dot"></span></div>
-      <div class="nav-item" data-nav="mytraining"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>My Training<span class="dot"></span></div>
+      <div class="nav-item" data-nav="mytraining"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>Training<span class="dot"></span></div>
       <div class="nav-item" data-nav="library"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H9v18H5.5A1.5 1.5 0 0 1 4 19.5Z"/><path d="M20 4.5A1.5 1.5 0 0 0 18.5 3H15v18h3.5a1.5 1.5 0 0 0 1.5-1.5Z"/></svg>Knowledge Library<span class="dot"></span></div>
       <div class="nav-item" data-nav="policies"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg>Policies<span class="dot"></span></div>
       <div class="nav-item" data-nav="onboarding"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Onboarding<span class="dot"></span></div>
@@ -636,10 +636,10 @@ function seedData(){
     ],
     positions: [],
     templates: [
-      {id:'tpl1', title:'Change Order Form', category:'Contracts & Forms', description:'Standard form for documenting and pricing a client-requested change.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-01-15'},
-      {id:'tpl2', title:'New Job Kickoff Checklist', category:'Job Templates', description:'Everything that needs to happen before a project breaks ground.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-01-15'},
-      {id:'tpl3', title:'Punch List Template', category:'Job Templates', description:'Standard closeout punch list format used on every job.', url:'', fileName:'', requiresSignature:false, uploadedBy:'u1', uploadedAt:'2026-02-01'},
-      {id:'tpl4', title:'New Hire Acknowledgment Form', category:'HR & Onboarding', description:'Confirms a new hire has received and reviewed their offer terms and equipment agreement.', url:'', fileName:'', requiresSignature:true, uploadedBy:'u1', uploadedAt:'2026-01-15'}
+      {id:'tpl1', title:'Change Order Form', category:'Contracts & Forms', description:'Standard form for documenting and pricing a client-requested change.', url:'', fileName:'', uploadedBy:'u1', uploadedAt:'2026-01-15'},
+      {id:'tpl2', title:'New Job Kickoff Checklist', category:'Job Templates', description:'Everything that needs to happen before a project breaks ground.', url:'', fileName:'', uploadedBy:'u1', uploadedAt:'2026-01-15'},
+      {id:'tpl3', title:'Punch List Template', category:'Job Templates', description:'Standard closeout punch list format used on every job.', url:'', fileName:'', uploadedBy:'u1', uploadedAt:'2026-02-01'},
+      {id:'tpl4', title:'New Hire Acknowledgment Form', category:'HR & Onboarding', description:'Confirms a new hire has received and reviewed their offer terms and equipment agreement.', url:'', fileName:'', uploadedBy:'u1', uploadedAt:'2026-01-15'}
     ],
     templateCategories: ['Contracts & Forms','Job Templates','HR & Onboarding'],
     templateReplacementRequests: [],
@@ -672,6 +672,9 @@ function seedData(){
     },
     companyBoardPosts: [],
     processSuggestions: [],
+    trainings: [],
+    trainingAssignments: [],
+    trainingCompletions: [],
     _companyStorySamplesAddedV1: true,
     templateSignatures: [],
     individualTasks: [],
@@ -863,6 +866,9 @@ function migrateState(parsed){
       if(!parsed.companyStory.events) parsed.companyStory.events = [];
       if(!parsed.companyBoardPosts) parsed.companyBoardPosts = [];
       if(!parsed.processSuggestions) parsed.processSuggestions = [];
+      if(!parsed.trainings) parsed.trainings = [];
+      if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
+      if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
       if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
       if(!parsed.companyStory.charitableDonations) parsed.companyStory.charitableDonations = [];
       if(parsed.companyStory.charitiesSupportedCount!=null) delete parsed.companyStory.charitiesSupportedCount;
@@ -907,7 +913,7 @@ function migrateState(parsed){
         }
         parsed._companyStorySamplesAddedV1 = true;
       }
-      (parsed.templates||[]).forEach(t=>{ if(t.requiresSignature===undefined) t.requiresSignature = false; });
+      (parsed.templates||[]).forEach(t=>{ if(t.requiresSignature!==undefined) delete t.requiresSignature; });
       if(!parsed.templateSignatures) parsed.templateSignatures = [];
       if(!parsed.gearCatalog) parsed.gearCatalog = [];
       if(!parsed.gearClaims) parsed.gearClaims = [];
@@ -1076,7 +1082,12 @@ function migrateState(parsed){
       return parsed;
 }
 function saveState(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){
+    console.error('Local save failed:', e);
+    toast('Couldn\u2019t save locally (storage is full) — trying to sync to the server anyway. Tell an admin if this keeps happening.');
+  }
   scheduleSupabaseSave();
 }
 
@@ -2476,15 +2487,16 @@ function renderTeamAtAGlance(u){
 }
 function pendingOnboardingTasksFor(personId){
   const pending = [];
-  (state.individualTasks||[]).filter(t=>t.personId===personId && !taskIsDone(personId,t)).forEach(t=>pending.push(t));
+  (state.individualTasks||[]).filter(t=>t.personId===personId && !t.internal && !taskIsDone(personId,t)).forEach(t=>pending.push(t));
   enrollmentFor(personId).forEach(enr=>{
     const path = byId(state.onboardingPaths, enr.pathId);
     if(!path) return;
+    const visibleSections = path.sections.filter(s=>!s.internal);
     let priorDone = true;
-    path.sections.forEach(section=>{
+    visibleSections.forEach(section=>{
       if(!priorDone) return;
       if(!sectionIsDone(personId, section)){
-        section.tasks.filter(t=>!taskIsDone(personId,t)).forEach(t=>pending.push(t));
+        section.tasks.filter(t=>!t.internal && !taskIsDone(personId,t)).forEach(t=>pending.push(t));
         priorDone = false;
       }
     });
@@ -2642,23 +2654,243 @@ function renderOwnerDashboard(){
 }
 
 /* ================= MY TRAINING ================= */
+function trainingsAssignedTo(personId){
+  const p = byId(state.people, personId);
+  if(!p) return [];
+  const results = [];
+  state.trainingAssignments.forEach(a=>{
+    const applies = a.scope==='company' || (a.scope==='department' && p.departmentId===a.targetId) || (a.scope==='person' && a.targetId===personId);
+    if(!applies) return;
+    const training = byId(state.trainings, a.trainingId);
+    if(training) results.push({training, assignment:a});
+  });
+  return results;
+}
+function trainingIsDone(personId, trainingId){
+  return !!state.trainingCompletions.find(c=>c.personId===personId && c.trainingId===trainingId);
+}
+let trainingTab = 'mine';
+let trainingTabTouched = false;
+const TRAINING_CONTENT_TYPES = {
+  video: {label:'Video', icon:'📹'},
+  topic: {label:'SOP / Process', icon:'📘'},
+  policy: {label:'Policy', icon:'📋'},
+  freeform: {label:'Written content', icon:'📝'}
+};
+function renderTrainingCard(t, personId){
+  const meta = TRAINING_CONTENT_TYPES[t.contentType] || {label:t.contentType, icon:'📄'};
+  const done = trainingIsDone(personId, t.id);
+  let openAction = '';
+  if(t.contentType==='video') openAction = `previewVideo('${t.refId}')`;
+  else if(t.contentType==='topic') openAction = `navigate('topicDetail',{id:'${t.refId}'})`;
+  else if(t.contentType==='policy') openAction = `navigate('policyDetail',{id:'${t.refId}'})`;
+  return `<div class="card">
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+      <div><span class="pill gray">${meta.icon} ${meta.label}</span><div style="font-weight:700;margin-top:6px;">${t.title}</div></div>
+      ${done?`<span class="pill jade">Complete</span>`:''}
+    </div>
+    ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
+    ${t.contentType==='freeform'?`<div class="small mt-2" style="white-space:pre-wrap;">${escHtml(t.freeformContent)}</div>`:''}
+    <div class="flex gap-2 mt-2">
+      ${openAction?`<span class="btn secondary sm" onclick="${openAction}">Open</span>`:''}
+      ${!done?`<span class="btn bronze sm" onclick="completeTraining('${t.id}','${personId}')">Mark Complete</span>`:''}
+    </div>
+  </div>`;
+}
+function completeTraining(trainingId, personId){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only complete your own training'); return; }
+  const t = byId(state.trainings, trainingId);
+  if(t.requiresSignoff){
+    openModal(`
+      <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+        <div class="modal" style="max-width:380px;">
+          <div class="modal-head"><strong>Confirm Completion</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+          <div class="modal-body">
+            <div class="small" style="margin-bottom:10px;">Type your full name to confirm you completed "${t.title}".</div>
+            <input type="text" id="m-training-signoff" placeholder="Full name">
+          </div>
+          <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitTrainingSignoff('${trainingId}','${personId}',this)">Confirm</button></div>
+        </div>
+      </div>`);
+    return;
+  }
+  state.trainingCompletions.push({id:'tc'+Date.now(), trainingId, personId, completedDate:new Date().toISOString().slice(0,10)});
+  saveState(); toast('Marked complete'); render();
+}
+function submitTrainingSignoff(trainingId, personId, el){
+  const name = document.getElementById('m-training-signoff').value.trim();
+  if(!name){ toast('Type your full name'); return; }
+  state.trainingCompletions.push({id:'tc'+Date.now(), trainingId, personId, completedDate:new Date().toISOString().slice(0,10), signoffName:name});
+  saveState(); closeModal(el); toast('Marked complete'); render();
+}
+function renderManageTrainings(){
+  return `
+    <div class="flex" style="justify-content:flex-end;margin:14px 0;">
+      <button class="btn bronze" onclick="openCreateTrainingModal()">+ New Training</button>
+    </div>
+    ${!state.trainings.length? `<div class="empty"><h3>No trainings yet</h3><p>Videos, SOPs, policies, or anything you write yourself — assign any of it to a person, a department, or the whole company.</p></div>` : `
+    <div class="grid cols-2">
+      ${state.trainings.map(t=>{
+        const meta = TRAINING_CONTENT_TYPES[t.contentType] || {label:t.contentType, icon:'📄'};
+        const assignments = state.trainingAssignments.filter(a=>a.trainingId===t.id);
+        const completions = state.trainingCompletions.filter(c=>c.trainingId===t.id).length;
+        return `<div class="card">
+          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+            <div><span class="pill gray">${meta.icon} ${meta.label}</span><div style="font-weight:700;margin-top:6px;">${t.title}</div></div>
+            <div class="flex gap-1">
+              <span class="miniBtn" onclick="openCreateTrainingModal('${t.id}')" title="Edit">✎</span>
+              <span class="miniBtn" onclick="deleteTraining('${t.id}')" title="Delete" style="color:var(--rust);">✕</span>
+            </div>
+          </div>
+          ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
+          <div class="small mt-2" style="color:var(--slate-light);">${completions} completion${completions!==1?'s':''}${t.requiresSignoff?' · Requires sign-off':''}</div>
+          <div class="flex gap-1 mt-2" style="flex-wrap:wrap;">
+            ${assignments.length? assignments.map(a=>`<span class="pill bronze">${trainingScopeLabel(a)} <span onclick="removeTrainingAssignment('${a.id}')" style="cursor:pointer;margin-left:4px;">✕</span></span>`).join('') : `<span class="small" style="color:var(--slate-light);">Not assigned to anyone yet</span>`}
+          </div>
+          <button class="btn secondary sm mt-2" onclick="openAssignTrainingModal('${t.id}')">+ Assign</button>
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
+}
+function trainingScopeLabel(a){
+  if(a.scope==='company') return 'Company-wide';
+  if(a.scope==='department') return byId(state.departments,a.targetId)?.name || 'Department';
+  return byId(state.people,a.targetId)?.name || 'Person';
+}
+function openCreateTrainingModal(trainingId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const t = trainingId ? byId(state.trainings, trainingId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${t?'Edit Training':'New Training'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Title</label><input type="text" id="m-training-title" value="${escAttr(t?.title)}" placeholder="e.g. Ladder Safety">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label><textarea id="m-training-desc">${t?.description||''}</textarea>
+          <label>Content type</label>
+          <select id="m-training-type" onchange="refreshTrainingContentField(this.value)">
+            ${Object.keys(TRAINING_CONTENT_TYPES).map(k=>`<option value="${k}" ${t?.contentType===k?'selected':''}>${TRAINING_CONTENT_TYPES[k].icon} ${TRAINING_CONTENT_TYPES[k].label}</option>`).join('')}
+          </select>
+          <div id="m-training-content-field" class="mt-2">${renderTrainingContentField(t?.contentType||'video', t)}</div>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-training-signoff" style="width:auto;margin:0;" ${t?.requiresSignoff?'checked':''}>
+            Requires typing their name to confirm completion
+          </label>
+        </div>
+        <div class="modal-foot">
+          ${t?`<button class="btn danger" style="margin-right:auto;" onclick="deleteTraining('${t.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveTraining('${trainingId||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function renderTrainingContentField(type, t){
+  if(type==='video'){
+    const vids = state.videos||[];
+    return vids.length? `<label>Video</label><select id="m-training-ref">${vids.map(v=>`<option value="${v.id}" ${t?.refId===v.id?'selected':''}>${v.title}</option>`).join('')}</select>` : `<div class="small">No videos yet — record or upload one in Studio first.</div>`;
+  }
+  if(type==='topic'){
+    return `<label>SOP / Process</label><select id="m-training-ref">${state.topics.map(x=>`<option value="${x.id}" ${t?.refId===x.id?'selected':''}>${x.name}</option>`).join('')}</select>`;
+  }
+  if(type==='policy'){
+    return `<label>Policy</label><select id="m-training-ref">${state.policies.map(x=>`<option value="${x.id}" ${t?.refId===x.id?'selected':''}>${x.title}</option>`).join('')}</select>`;
+  }
+  return `<label>Written content</label><textarea id="m-training-freeform" style="min-height:120px;">${t?.freeformContent||''}</textarea>`;
+}
+function refreshTrainingContentField(type){
+  document.getElementById('m-training-content-field').innerHTML = renderTrainingContentField(type, null);
+}
+function saveTraining(trainingId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const title = document.getElementById('m-training-title').value.trim();
+  if(!title){ toast('Title is required'); return; }
+  const contentType = document.getElementById('m-training-type').value;
+  const data = { title, description: document.getElementById('m-training-desc').value.trim(), contentType, requiresSignoff: document.getElementById('m-training-signoff').checked };
+  if(contentType==='freeform') data.freeformContent = document.getElementById('m-training-freeform').value.trim();
+  else { const refEl = document.getElementById('m-training-ref'); if(refEl) data.refId = refEl.value; }
+  if(trainingId){ Object.assign(byId(state.trainings, trainingId), data); }
+  else { data.id = 'tr'+Date.now(); data.createdBy = currentUser().id; data.createdAt = new Date().toISOString().slice(0,10); state.trainings.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteTraining(trainingId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Delete this training? Assignments and completion history go with it.', ()=>{
+    state.trainings = state.trainings.filter(t=>t.id!==trainingId);
+    state.trainingAssignments = state.trainingAssignments.filter(a=>a.trainingId!==trainingId);
+    state.trainingCompletions = state.trainingCompletions.filter(c=>c.trainingId!==trainingId);
+    saveState(); toast('Deleted'); render();
+  });
+}
+function openAssignTrainingModal(trainingId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-head"><strong>Assign Training</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Assign to</label>
+          <select id="m-assign-scope" onchange="document.getElementById('m-assign-target-wrap').style.display=this.value==='company'?'none':'block';document.getElementById('m-assign-target-label').textContent=this.value==='department'?'Department':'Person';document.getElementById('m-assign-target').innerHTML=this.value==='department'?renderDeptOptions():renderPersonOptions();">
+            <option value="company">Company-wide — everyone</option>
+            <option value="department">A department / team</option>
+            <option value="person">A specific person</option>
+          </select>
+          <div id="m-assign-target-wrap" class="mt-2">
+            <label id="m-assign-target-label">Person</label>
+            <select id="m-assign-target">${renderPersonOptions()}</select>
+          </div>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTrainingAssignment('${trainingId}',this)">Assign</button></div>
+      </div>
+    </div>`);
+}
+function renderPersonOptions(){ return state.people.filter(p=>p.status!=='offboarded').map(p=>`<option value="${p.id}">${p.name}</option>`).join(''); }
+function renderDeptOptions(){ return state.departments.map(d=>`<option value="${d.id}">${d.name}</option>`).join(''); }
+function saveTrainingAssignment(trainingId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const scope = document.getElementById('m-assign-scope').value;
+  const targetId = scope==='company' ? null : document.getElementById('m-assign-target').value;
+  state.trainingAssignments.push({id:'ta'+Date.now(), trainingId, scope, targetId, assignedDate:new Date().toISOString().slice(0,10)});
+  saveState(); closeModal(el); toast('Assigned'); render();
+}
+function removeTrainingAssignment(assignmentId){
+  confirmAction('Remove this assignment?', ()=>{
+    state.trainingAssignments = state.trainingAssignments.filter(a=>a.id!==assignmentId);
+    saveState(); toast('Removed'); render();
+  });
+}
 function renderMyTraining(){
   const u = currentUser();
+  if(!trainingTabTouched && isAdminWorkMode()) trainingTab = 'manage';
   const mine = myAssignments(u.id);
+  const myTrainings = trainingsAssignedTo(u.id);
   return `
-    <div class="page-head"><div><div class="page-eyebrow">My Training</div><div class="page-title">Assigned to you</div></div></div>
-    <div class="tbl-card"><table>
-      <tr><th>Item</th><th>Type</th><th>Assigned</th><th>Due</th><th>Status</th><th></th></tr>
-      ${mine.map(a=>`
-        <tr class="row-click" onclick="openAssignment('${a.id}')">
-          <td><strong>${targetName(a)}</strong></td>
-          <td>${targetTypeLabel(a.targetType)}</td>
-          <td>${fmtDate(a.assignedDate)}</td>
-          <td>${fmtDate(a.dueDate)}</td>
-          <td>${statusPill(a)}</td>
-          <td><span class="btn secondary sm">Open →</span></td>
-        </tr>`).join('')}
-    </table></div>
+    <div class="page-head"><div><div class="page-eyebrow">Growth</div><div class="page-title">Training</div><div class="page-desc">${isAdminWorkMode()?'Build and assign trainings, or check your own.':'Everything assigned to you.'}</div></div></div>
+    ${isAdminWorkMode()? `<div class="tabs">
+      <div class="tab ${trainingTab==='manage'?'active':''}" onclick="trainingTabTouched=true;trainingTab='manage';render();">Manage Trainings</div>
+      <div class="tab ${trainingTab==='mine'?'active':''}" onclick="trainingTabTouched=true;trainingTab='mine';render();">My Training</div>
+    </div>`:''}
+    ${trainingTab==='manage' && isAdminWorkMode() ? renderManageTrainings() : `
+      ${myTrainings.length? `<div class="section-title" style="margin-top:0;">Assigned Trainings</div>
+      <div class="grid cols-2 mb-3">
+        ${myTrainings.map(({training:t})=>renderTrainingCard(t, u.id)).join('')}
+      </div>` : ''}
+      ${mine.length? `<div class="section-title">From Your Role</div>
+      <div class="tbl-card"><table>
+        <tr><th>Item</th><th>Type</th><th>Assigned</th><th>Due</th><th>Status</th><th></th></tr>
+        ${mine.map(a=>`
+          <tr class="row-click" onclick="openAssignment('${a.id}')">
+            <td><strong>${targetName(a)}</strong></td>
+            <td>${targetTypeLabel(a.targetType)}</td>
+            <td>${fmtDate(a.assignedDate)}</td>
+            <td>${fmtDate(a.dueDate)}</td>
+            <td>${statusPill(a)}</td>
+            <td><span class="btn secondary sm">Open →</span></td>
+          </tr>`).join('')}
+      </table></div>` : ''}
+      ${!myTrainings.length && !mine.length? `<div class="empty"><h3>Nothing assigned yet</h3><p>Check back once something's been assigned to you or your role.</p></div>`:''}
+    `}
   `;
 }
 function openAssignment(id){
@@ -4094,11 +4326,23 @@ function removeMyPhoto(personId, el){
 }
 async function saveMyPhoto(personId, el){
   if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
-  const photo = await readPhotoFile('m-my-photo');
+  const fileInput = document.getElementById('m-my-photo');
   const p = byId(state.people, personId);
   const posInput = document.getElementById('m-my-photo-pos');
-  if(!photo && !p.photo){ toast('Choose a photo first'); return; }
-  if(photo) p.photo = photo;
+  if(!fileInput.files[0] && !p.photo){ toast('Choose a photo first'); return; }
+  if(fileInput.files[0]){
+    const btn = el;
+    const origText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try{
+      p.photo = await uploadPhotoToStorage(fileInput.files[0], 'profile-photos');
+    }catch(e){
+      toast('Photo upload failed — is the "company-photos" bucket set up in Supabase yet?');
+      btn.disabled = false; btn.textContent = origText;
+      return;
+    }
+    btn.disabled = false; btn.textContent = origText;
+  }
   p.photoPositionY = posInput ? parseInt(posInput.value) : 25;
   saveState();
   if(personId===currentUser().id) refreshSidebarChrome();
@@ -4163,7 +4407,7 @@ async function savePersonModal(existingId){
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
     if(state.people.some(p=>p.id!==existingId && p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file — including offboarded people. Emails must be unique so logins never get confused between two profiles.'); return; }
   }
-  const photo = await readPhotoFile('m-p-photo');
+  const photoInput = document.getElementById('m-p-photo');
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('m-p-feat-'+f.key).checked).map(f=>f.key);
   const approvalPermissions = APPROVAL_PERMISSIONS.filter(perm=>document.getElementById('m-p-approve-'+perm.key).checked).map(perm=>perm.key);
   const allowanceVal = document.getElementById('m-p-allowance').value.trim();
@@ -4178,7 +4422,10 @@ async function savePersonModal(existingId){
     accessLevel: document.getElementById('m-p-access').value,
     hiddenFeatures, approvalPermissions
   };
-  if(photo) data.photo = photo;
+  if(photoInput.files[0]){
+    try{ data.photo = await uploadPhotoToStorage(photoInput.files[0], 'profile-photos'); }
+    catch(e){ toast('Photo upload failed — is the "company-photos" bucket set up in Supabase yet? Saving the rest of the changes anyway.'); }
+  }
   let id = existingId;
   if(id){ Object.assign(byId(state.people, id), data); }
   else { id='u'+Date.now(); data.id=id; data.title='Unassigned'; data.departmentId=null; data.roleId=null; data.managerId=null; state.people.push(data); }
@@ -7531,12 +7778,6 @@ function taskIsDone(personId, task){
   if(task.type==='policy'){
     return !!state.acknowledgments.find(a=>a.personId===personId && a.policyId===task.refId);
   }
-  if(task.type==='template'){
-    const tpl = byId(state.templates, task.refId);
-    if(tpl && tpl.requiresSignature){
-      return !!state.templateSignatures.find(s=>s.personId===personId && s.templateId===task.refId);
-    }
-  }
   if(task.type==='bio'){
     return !!byId(state.people, personId)?.bio;
   }
@@ -7628,7 +7869,7 @@ function addIndividualTaskModal(personId, type){
     const tpls = state.templates||[];
     openModal(`<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal">
       <div class="modal-head"><strong>Add Template</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
-      <div class="modal-body">${tpls.length? `<label>Template</label><select id="m-ind-ref">${tpls.map(t=>`<option value="${t.id}">${t.title}${t.requiresSignature?' (requires signature)':''}</option>`).join('')}</select>` : `<div class="small">No templates yet — add one under Templates first.</div>`}</div>
+      <div class="modal-body">${tpls.length? `<label>Template</label><select id="m-ind-ref">${tpls.map(t=>`<option value="${t.id}">${t.title}</option>`).join('')}</select>` : `<div class="small">No templates yet — add one under Templates first.</div>`}</div>
       <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button>${tpls.length?`<button class="btn bronze" onclick="saveIndividualTask('${personId}','template',this)">Add</button>`:''}</div>
     </div></div>`);
   } else if(type==='video'){
@@ -7684,7 +7925,7 @@ function saveIndividualTask(personId, type, el){
   } else if(type==='template'){
     const refId = document.getElementById('m-ind-ref').value;
     const tpl = byId(state.templates,refId);
-    task.refId = refId; task.title = (tpl.requiresSignature?'Sign: ':'Use template: ')+tpl.title;
+    task.refId = refId; task.title = 'Use template: '+tpl.title;
   } else if(type==='video'){
     const refId = document.getElementById('m-ind-ref').value;
     task.refId = refId; task.title = 'Watch: '+byId(state.videos,refId).title;
@@ -7779,33 +8020,6 @@ function runRoleImport(mode, a, b, el){
 }
 
 /* ---- Signing a template (parallel to policy signatures) ---- */
-function openSignTemplateModal(personId, templateId){
-  if(personId!==currentUser().id){ toast('You can only sign for yourself'); return; }
-  const tpl = byId(state.templates, templateId);
-  const existing = state.templateSignatures.find(s=>s.personId===personId && s.templateId===templateId);
-  if(existing){ toast(`Already signed by ${existing.signatureName} on ${fmtDate(existing.date)}`); return; }
-  openModal(`
-    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
-      <div class="modal">
-        <div class="modal-head"><strong>Sign: ${tpl.title}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
-        <div class="modal-body">
-          ${tpl.description? `<p class="small" style="margin-bottom:12px;">${tpl.description}</p>`:''}
-          ${tpl.fileKey||tpl.url? `<button class="btn secondary sm" style="margin-bottom:14px;" onclick="downloadTemplate('${templateId}')">${tpl.url?'Open document ↗':'Download to review first'}</button>`:''}
-          <label>Type your full name to sign</label>
-          <input type="text" id="m-sign-name" placeholder="Full name">
-        </div>
-        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitTemplateSignature('${personId}','${templateId}',this)">Sign</button></div>
-      </div>
-    </div>`);
-}
-function submitTemplateSignature(personId, templateId, el){
-  if(personId!==currentUser().id){ toast('You can only sign for yourself'); return; }
-  const name = document.getElementById('m-sign-name').value.trim();
-  if(!name){ toast('Type your full name to sign'); return; }
-  state.templateSignatures.push({id:'ts'+Date.now(), personId, templateId, date:new Date().toISOString().slice(0,10), signatureName:name});
-  saveState(); closeModal(el); toast('Signed'); render();
-}
-
 let onboardingTab = 'mine';
 let onboardingTabTouched = false;
 function renderOnboarding(){
@@ -7822,27 +8036,29 @@ function renderOnboarding(){
 }
 function renderTaskRow(personId, t, locked){
   const done = taskIsDone(personId,t);
-  const tpl = t.type==='template' ? byId(state.templates, t.refId) : null;
-  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form' || (tpl && tpl.requiresSignature);
+  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form';
   const checkClick = (!isAuto && !locked) ? `toggleCustomTask('${personId}','${t.id}')` : '';
   let titleClick = '';
   if(t.type==='topic') titleClick = `navigate('topicDetail',{id:'${t.refId}'})`;
   else if(t.type==='policy') titleClick = `navigate('policyDetail',{id:'${t.refId}'})`;
   else if(t.type==='video') titleClick = `previewVideo('${t.refId}')`;
-  else if(t.type==='template') titleClick = tpl && tpl.requiresSignature ? `openSignTemplateModal('${personId}','${t.refId}')` : `downloadTemplate('${t.refId}')`;
-  else if(t.type==='external') titleClick = `window.open('${escJs(t.url)}','_blank')`;
+  else if(t.type==='template') titleClick = `downloadTemplate('${t.refId}')`;
   else if(t.type==='bio') titleClick = `openMyBioModal('${personId}')`;
   else if(t.type==='photo') titleClick = `openMyPhotoModal('${personId}')`;
   else if(t.type==='form'){
     const submission = state.formSubmissions.find(s=>s.personId===personId && s.formId===t.refId);
     titleClick = submission ? `viewFormSubmission('${submission.id}')` : `openFillFormModal('${personId}','${t.refId}')`;
   }
-  else if(!locked) titleClick = checkClick;
-  const typeTag = {video:'📹 Video', template: tpl&&tpl.requiresSignature?'✍️ Sign':'📄 Template', external:'🔗 External', bio:'✍️ Bio', form:'📝 Form', topic:'', policy:'', custom:''}[t.type] || '';
+  else if(t.type!=='external' && !locked) titleClick = checkClick;
+  const typeTag = {video:'📹 Video', template: '📄 Template', external:'🔗 External', bio:'✍️ Bio', form:'📝 Form', topic:'', policy:'', custom:''}[t.type] || '';
+  const titleContent = `${typeTag?`<span class="small" style="font-weight:600;">${typeTag}</span> `:''}${t.title}`;
+  const titleHtml = t.type==='external'
+    ? `<a href="${escAttr(t.url)}" target="_blank" rel="noopener" style="${done?'color:var(--slate-light);text-decoration:line-through;':'text-decoration:underline;'}display:block;">${titleContent}</a>`
+    : `<div style="${done?'color:var(--slate-light);text-decoration:line-through;':''}${titleClick?'cursor:pointer;':''}" ${titleClick?`onclick="${titleClick}"`:''}>${titleContent}</div>`;
   return `<div class="ob-task">
     <div class="ob-task-check ${done?'done':''}" ${checkClick?`onclick="${checkClick}"`:''} style="${checkClick?'cursor:pointer;':''}" title="${isAuto?'Completes automatically':'Click to mark done'}">${done?'✓':''}</div>
     <div style="flex:1;">
-      <div style="${done?'color:var(--slate-light);text-decoration:line-through;':''}${titleClick?'cursor:pointer;':''}" ${titleClick?`onclick="${titleClick}"`:''}>${typeTag?`<span class="small" style="font-weight:600;">${typeTag}</span> `:''}${t.title}</div>
+      ${titleHtml}
       ${t.description? `<div class="small mt-1">${t.description}</div>`:''}
     </div>
   </div>`;
@@ -8186,7 +8402,7 @@ function saveTaskEdit(pathId, sectionId, taskId, el){
   } else if(t.type==='template'){
     t.refId = document.getElementById('m-edit-task-ref').value;
     const tpl = byId(state.templates,t.refId);
-    t.title = (tpl.requiresSignature?'Sign: ':'Use template: ')+tpl.title;
+    t.title = 'Use template: '+tpl.title;
   } else if(t.type==='form'){
     t.refId = document.getElementById('m-edit-task-ref').value;
     t.title = 'Fill out: '+byId(state.fillableForms,t.refId).name;
@@ -8367,7 +8583,7 @@ function renderReviewsSection(personId, canManage){
   const reviews = reviewsFor(personId);
   return `
     <div class="section-title">Performance Reviews<span class="count">${reviews.length}</span>
-      ${canManage?`<span class="btn secondary sm" style="margin-left:auto;" onclick="addReviewModal('${personId}')">+ Schedule a Review</span>`:''}
+      ${canManage?`<span class="flex gap-2" style="margin-left:auto;"><span class="btn secondary sm" onclick="addReviewModal('${personId}')">+ Schedule a Review</span><span class="btn secondary sm" onclick="openLogPastReviewModal('${personId}')">+ Log a Past Review</span></span>`:''}
     </div>
     ${reviews.length? `<div class="tbl-card"><table>
       <tr><th>Review</th><th>Scheduled</th><th>Reviewer</th><th>Status</th><th></th></tr>
@@ -8386,8 +8602,74 @@ function renderReviewsSection(personId, canManage){
           </td>
         </tr>`;
       }).join('')}
-    </table></div>` : `<div class="empty-inline">No reviews scheduled yet.${canManage?' New hires get the standard 3/6/12-month cycle automatically — use "+ Schedule a Review" for anything extra.':''}</div>`}
+    </table></div>` : `<div class="empty-inline">No reviews scheduled yet.${canManage?' New hires get the standard 3/6/12-month cycle automatically — use "+ Schedule a Review" for something upcoming, or "+ Log a Past Review" to record one that already happened.':''}</div>`}
   `;
+}
+function openLogPastReviewModal(personId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const p = byId(state.people, personId);
+  const suggestedTemplate = templateForRole(p.roleId||null);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Log a Past Review</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:12px;">For a review that already happened — on paper, verbally, or anywhere outside this app. This records it as completed immediately, no separate scheduling step.</div>
+          <div class="field-row">
+            <div><label>Type</label><select id="m-plrev-type"><option value="3-month">3-Month</option><option value="6-month">6-Month</option><option value="1-year">1-Year</option><option value="annual">Annual</option></select></div>
+            <div><label>Date it happened</label><input type="date" id="m-plrev-date" value="${new Date().toISOString().slice(0,10)}"></div>
+          </div>
+          <label>Reviewer</label><select id="m-plrev-reviewer"><option value="">— none —</option>${state.people.map(p2=>`<option value="${p2.id}" ${p2.id===reviewerFor(personId)?'selected':''}>${p2.name}</option>`).join('')}</select>
+          <label>Template <span class="small" style="font-weight:400;">(optional — rate against specific criteria)</span></label>
+          <select id="m-plrev-template" onchange="document.getElementById('m-plrev-criteria').innerHTML=renderPastReviewCriteriaFields(this.value);">
+            <option value="">— No template, freeform notes only —</option>
+            ${state.performanceReviewTemplates.map(t=>`<option value="${t.id}" ${suggestedTemplate&&t.id===suggestedTemplate.id?'selected':''}>${t.name}${t.roleId?' ('+byId(state.roles,t.roleId)?.title+')':' (General)'}</option>`).join('')}
+          </select>
+          <div id="m-plrev-criteria">${suggestedTemplate?renderPastReviewCriteriaFields(suggestedTemplate.id):''}</div>
+          <label class="mt-2">Overall notes</label><textarea id="m-plrev-notes" style="min-height:100px;" placeholder="Summary of the conversation, growth areas, next steps..."></textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveLoggedPastReview('${personId}',this)">Save as Completed</button></div>
+      </div>
+    </div>`);
+}
+function renderPastReviewCriteriaFields(templateId){
+  if(!templateId) return '';
+  const template = byId(state.performanceReviewTemplates, templateId);
+  if(!template) return '';
+  return template.criteria.map((c,i)=>`<div class="card mt-2" style="padding:14px 16px;">
+    <div style="font-weight:600;font-size:13.5px;margin-bottom:8px;">${c}</div>
+    <select id="m-plrev-rating-${i}" style="margin-bottom:8px;">
+      <option value="">— Rate —</option>
+      <option value="Needs Improvement">Needs Improvement</option>
+      <option value="Meets Expectations">Meets Expectations</option>
+      <option value="Exceeds Expectations">Exceeds Expectations</option>
+    </select>
+    <textarea id="m-plrev-comment-${i}" placeholder="Notes on this specific area..." style="min-height:60px;"></textarea>
+  </div>`).join('');
+}
+function saveLoggedPastReview(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const templateId = document.getElementById('m-plrev-template').value || null;
+  const template = templateId ? byId(state.performanceReviewTemplates, templateId) : null;
+  const review = {
+    id:'prev'+Date.now(), personId,
+    type: document.getElementById('m-plrev-type').value,
+    scheduledDate: document.getElementById('m-plrev-date').value,
+    completedDate: document.getElementById('m-plrev-date').value,
+    status:'completed',
+    reviewerPersonId: document.getElementById('m-plrev-reviewer').value || null,
+    templateId, notes: document.getElementById('m-plrev-notes').value.trim(),
+    criteriaResponses: []
+  };
+  if(template){
+    review.criteriaResponses = template.criteria.map((c,i)=>({
+      criterion: c,
+      rating: document.getElementById('m-plrev-rating-'+i)?.value || '',
+      comment: document.getElementById('m-plrev-comment-'+i)?.value.trim() || ''
+    }));
+  }
+  state.performanceReviews.push(review);
+  saveState(); closeModal(el); toast('Logged'); render();
 }
 function cancelReview(reviewId){
   if(!canEdit()){ toast('Admins only'); return; }
@@ -8587,6 +8869,21 @@ async function renderPdfFirstPageToImage(file){
   await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
   return canvas.toDataURL('image/png');
 }
+async function renderPdfAllPagesToImages(file){
+  const pdfjsLib = await loadPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+  const images = [];
+  for(let i=1;i<=pdf.numPages;i++){
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({scale:2});
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+    images.push(canvas.toDataURL('image/png'));
+  }
+  return images;
+}
 function readFileAsDataUrl(file){
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
@@ -8665,9 +8962,15 @@ function renderFormBuilder(){
       formBuilderState = JSON.parse(JSON.stringify(byId(state.fillableForms, formId)));
       formBuilderState._loadedFor = loadKey;
     } else {
-      formBuilderState = {id:null, name:'', description:'', backgroundImage:null, fields:[], _loadedFor:'new'};
+      formBuilderState = {id:null, name:'', description:'', backgroundImages:[], fields:[], _loadedFor:'new'};
     }
+    if(!formBuilderState.backgroundImages) formBuilderState.backgroundImages = formBuilderState.backgroundImage ? [formBuilderState.backgroundImage] : [];
+    formBuilderState.fields.forEach(f=>{ if(f.page==null) f.page = 0; });
+    formBuilderState.currentPage = 0;
   }
+  const pages = formBuilderState.backgroundImages;
+  const currentPage = Math.min(formBuilderState.currentPage||0, Math.max(0, pages.length-1));
+  const pageFields = formBuilderState.fields.filter(f=>(f.page||0)===currentPage);
   return `
     <div class="crumbs"><a onclick="formBuilderState=null;navigate('fillableForms')">Fillable Forms</a><span class="sep">/</span>${formBuilderState.name||'New Form'}</div>
     <div class="page-head">
@@ -8682,42 +8985,73 @@ function renderFormBuilder(){
       <label>Description <span class="small" style="font-weight:400;">(optional, shown to whoever fills it out)</span></label>
       <input type="text" id="fb-desc" value="${escAttr(formBuilderState.description)}" oninput="formBuilderState.description=this.value;">
     </div>
-    ${!formBuilderState.backgroundImage? `
+    ${!pages.length? `
       <div class="card mt-2">
-        <label>Upload the document <span class="small" style="font-weight:400;">(image, or PDF — first page only for now)</span></label>
+        <label>Upload the document <span class="small" style="font-weight:400;">(a multi-page PDF adds every page automatically, or select several images at once — one per page)</span></label>
         <div class="small" style="margin-bottom:10px;">This is the required first step — once you upload it, the document shows up below and you can click anywhere on it to drop in text fields, dates, and signature boxes, DocuSign-style.</div>
-        <input type="file" id="fb-bg-file" accept="image/*,application/pdf" onchange="handleFormBackgroundUpload(this)">
+        <input type="file" id="fb-bg-file" accept="image/*,application/pdf" multiple onchange="handleFormBackgroundUpload(this)">
         <div id="fb-bg-status" class="small mt-1"></div>
       </div>
     ` : `
       <div class="section-title">Click the document to place a field<span class="count">${formBuilderState.fields.length}</span>
-        <span class="btn secondary sm" style="margin-left:auto;" onclick="formBuilderState.backgroundImage=null;render();">Change Document</span>
+        <input type="file" id="fb-bg-file-more" accept="image/*,application/pdf" multiple style="display:none;" onchange="handleFormBackgroundUpload(this)">
+        <span class="btn secondary sm" style="margin-left:auto;" onclick="document.getElementById('fb-bg-file-more').click()">+ Add Page</span>
+        <span class="btn secondary sm" onclick="removeCurrentFormPage()">Remove This Page</span>
       </div>
-      <div class="fb-canvas-wrap" id="fb-canvas">
-        <img src="${formBuilderState.backgroundImage}">
+      ${pages.length>1? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+        ${pages.map((img,i)=>`<div onclick="formBuilderState.currentPage=${i};render();" style="cursor:pointer;border:2px solid ${i===currentPage?'var(--bronze)':'var(--line-soft)'};border-radius:6px;padding:2px;">
+          <img src="${img}" style="width:50px;height:65px;object-fit:cover;display:block;">
+          <div class="small" style="text-align:center;">${i+1}</div>
+        </div>`).join('')}
+      </div>` : ''}
+      <div class="flex gap-2 mt-2" style="align-items:center;">
+        <span class="btn secondary sm" ${currentPage===0?'disabled style="opacity:.4;"':''} onclick="formBuilderState.currentPage=${currentPage-1};render();">← Prev</span>
+        <div class="small">Page ${currentPage+1} of ${pages.length}</div>
+        <span class="btn secondary sm" ${currentPage>=pages.length-1?'disabled style="opacity:.4;"':''} onclick="formBuilderState.currentPage=${currentPage+1};render();">Next →</span>
+      </div>
+      <div class="fb-canvas-wrap mt-2" id="fb-canvas">
+        <img src="${pages[currentPage]}">
         <div class="fb-overlay" onclick="handleBuilderCanvasClick(event)">
-          ${formBuilderState.fields.map((f,i)=>`
+          ${pageFields.map(f=>`
             <div class="fb-field-marker" data-field-marker="${f.id}" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;cursor:move;" onmousedown="startFieldDrag(event,'${f.id}')">
-              <span class="fb-field-label">${(FORM_FIELD_TYPES[f.type]||FORM_FIELD_TYPES.text).icon} ${f.label}<span class="fb-field-remove" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();removeBuilderField(${i});">✕</span></span>
+              <span class="fb-field-label">${(FORM_FIELD_TYPES[f.type]||FORM_FIELD_TYPES.text).icon} ${f.label}<span class="fb-field-remove" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();removeBuilderField('${f.id}');">✕</span></span>
             </div>
           `).join('')}
         </div>
       </div>
-      <div class="small mt-2" style="color:var(--slate-light);">Click anywhere on the document to drop a new field there. Drag an existing field to move it, or click it (without dragging) to edit its type and label.</div>
+      <div class="small mt-2" style="color:var(--slate-light);">Click anywhere on the document to drop a new field there. Drag an existing field to move it, or click it (without dragging) to edit its type and label. Fields only show up on the page you placed them on.</div>
     `}
   `;
 }
 async function handleFormBackgroundUpload(inputEl){
-  const file = inputEl.files[0];
-  if(!file) return;
+  const files = inputEl.files;
+  if(!files || !files.length) return;
   const status = document.getElementById('fb-bg-status');
   status.textContent = 'Processing…';
   try{
-    formBuilderState.backgroundImage = file.type==='application/pdf' ? await renderPdfFirstPageToImage(file) : await readFileAsDataUrl(file);
+    let newImages = [];
+    if(files.length===1 && files[0].type==='application/pdf'){
+      newImages = await renderPdfAllPagesToImages(files[0]);
+    } else {
+      for(let i=0;i<files.length;i++){ newImages.push(await readFileAsDataUrl(files[i])); }
+    }
+    formBuilderState.backgroundImages = [...(formBuilderState.backgroundImages||[]), ...newImages];
+    formBuilderState.currentPage = formBuilderState.backgroundImages.length - newImages.length;
     render();
   }catch(e){
     status.innerHTML = `<span style="color:var(--rust);">${e.message}</span>`;
   }
+}
+function removeCurrentFormPage(){
+  const pages = formBuilderState.backgroundImages;
+  const idx = Math.min(formBuilderState.currentPage||0, pages.length-1);
+  confirmAction(`Remove page ${idx+1}? Any fields placed on it will be removed too.`, ()=>{
+    pages.splice(idx,1);
+    formBuilderState.fields = formBuilderState.fields.filter(f=>(f.page||0)!==idx);
+    formBuilderState.fields.forEach(f=>{ if((f.page||0)>idx) f.page = f.page-1; });
+    formBuilderState.currentPage = Math.max(0, idx-1);
+    render();
+  });
 }
 function handleBuilderCanvasClick(e){
   const rect = document.getElementById('fb-canvas').getBoundingClientRect();
@@ -8756,10 +9090,10 @@ function openFieldConfigModal(xPct, yPct){
 function confirmAddField(xPct, yPct, el){
   const label = document.getElementById('m-field-label').value.trim();
   if(!label){ toast('Give the field a label'); return; }
-  formBuilderState.fields.push({id:'ff'+Date.now()+Math.random().toString(36).slice(2), type:document.getElementById('m-field-type').value, label, xPct, yPct, widthPct:20});
+  formBuilderState.fields.push({id:'ff'+Date.now()+Math.random().toString(36).slice(2), type:document.getElementById('m-field-type').value, label, xPct, yPct, widthPct:20, page: formBuilderState.currentPage||0});
   closeModal(el); render();
 }
-function removeBuilderField(index){ formBuilderState.fields.splice(index,1); render(); }
+function removeBuilderField(fieldId){ formBuilderState.fields = formBuilderState.fields.filter(f=>f.id!==fieldId); render(); }
 let fbDragState = null;
 function startFieldDrag(e, fieldId){
   e.preventDefault();
@@ -8829,11 +9163,11 @@ function removeFieldById(fieldId){
 function saveFillableForm(){
   if(!canEdit()){ toast('Admins only'); return; }
   if(!formBuilderState.name.trim()){ toast('Name the form first'); return; }
-  if(!formBuilderState.backgroundImage){ toast('Upload a document first'); return; }
+  if(!formBuilderState.backgroundImages || !formBuilderState.backgroundImages.length){ toast('Upload a document first'); return; }
   if(formBuilderState.id){
-    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, backgroundImage:formBuilderState.backgroundImage, fields:formBuilderState.fields});
+    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields});
   } else {
-    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, backgroundImage:formBuilderState.backgroundImage, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
+    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
   }
   saveState(); formBuilderState=null; toast('Saved'); navigate('fillableForms');
 }
@@ -8844,8 +9178,8 @@ function deleteFillableForm(formId){
     saveState(); formBuilderState=null; toast('Deleted'); navigate('fillableForms');
   });
 }
-function fieldOverlayHtml(form, mode, submissionValues){
-  return form.fields.map(f=>{
+function fieldOverlayHtml(form, mode, submissionValues, page){
+  return form.fields.filter(f=>(f.page||0)===page).map(f=>{
     const meta = FORM_FIELD_TYPES[f.type] || FORM_FIELD_TYPES.text;
     if(mode==='fill'){
       if(f.type==='checkbox'){
@@ -8865,16 +9199,20 @@ function fieldOverlayHtml(form, mode, submissionValues){
 function openFillFormModal(personId, formId){
   if(personId!==currentUser().id && !canEdit()){ toast('You can only fill out forms for yourself'); return; }
   const form = byId(state.fillableForms, formId);
+  const pages = form.backgroundImages || (form.backgroundImage ? [form.backgroundImage] : []);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:820px;width:92vw;">
         <div class="modal-head"><strong>${form.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body" style="max-height:68vh;overflow-y:auto;">
           ${form.description? `<div class="small mb-2">${form.description}</div>`:''}
-          <div class="fb-canvas-wrap">
-            <img src="${form.backgroundImage}">
-            <div class="fb-overlay" style="cursor:default;">${fieldOverlayHtml(form,'fill')}</div>
-          </div>
+          ${pages.map((img,i)=>`
+            ${pages.length>1?`<div class="small mt-2 mb-1" style="font-weight:600;">Page ${i+1} of ${pages.length}</div>`:''}
+            <div class="fb-canvas-wrap">
+              <img src="${img}">
+              <div class="fb-overlay" style="cursor:default;">${fieldOverlayHtml(form,'fill',null,i)}</div>
+            </div>
+          `).join('')}
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitFilledForm('${formId}','${personId}',this)">Submit</button></div>
       </div>
@@ -8905,16 +9243,20 @@ function viewFormSubmission(submissionId){
   const s = byId(state.formSubmissions, submissionId);
   const form = byId(state.fillableForms, s.formId);
   const p = byId(state.people, s.personId);
+  const pages = form.backgroundImages || (form.backgroundImage ? [form.backgroundImage] : []);
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:820px;width:92vw;">
         <div class="modal-head"><strong>${form.name} — ${p.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body" style="max-height:68vh;overflow-y:auto;">
           <div class="small mb-2" style="color:var(--slate-light);">Submitted ${fmtDate(s.submittedAt.slice(0,10))}${s.status==='reviewed'?' · Reviewed by '+(byId(state.people,s.reviewedBy)?.name||'—'):''}</div>
-          <div class="fb-canvas-wrap">
-            <img src="${form.backgroundImage}">
-            <div class="fb-overlay" style="cursor:default;">${fieldOverlayHtml(form,'view',s.values)}</div>
-          </div>
+          ${pages.map((img,i)=>`
+            ${pages.length>1?`<div class="small mt-2 mb-1" style="font-weight:600;">Page ${i+1} of ${pages.length}</div>`:''}
+            <div class="fb-canvas-wrap">
+              <img src="${img}">
+              <div class="fb-overlay" style="cursor:default;">${fieldOverlayHtml(form,'view',s.values,i)}</div>
+            </div>
+          `).join('')}
         </div>
         <div class="modal-foot">
           <button class="btn secondary" onclick="closeModal(this)">Close</button>
@@ -9599,21 +9941,18 @@ function renderTemplates(){
         <div class="section-title">${cat}</div>
         <div class="grid cols-3">
           ${state.templates.filter(t=>t.category===cat).map(t=>{
-            const mySig = state.templateSignatures.find(s=>s.personId===currentUser().id && s.templateId===t.id);
             const pendingSuggestion = state.templateReplacementRequests.find(r=>r.templateId===t.id && r.status==='pending');
             return `<div class="card">
               <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-                <strong>${t.title}</strong>${t.requiresSignature?`<span class="pill bronze">Signature required</span>`:''}
+                <strong>${t.title}</strong>
               </div>
               <div class="small mt-1">${t.description||''}</div>
               <div class="small mt-2" style="color:var(--slate-light);">Added ${fmtDate(t.uploadedAt)} by ${byId(state.people,t.uploadedBy)?.name||'—'}</div>
-              ${t.requiresSignature? (mySig? `<div class="mt-2"><span class="pill jade">You signed ${fmtDate(mySig.date)}</span></div>` : ''):''}
               ${pendingSuggestion? `<div class="mt-2"><span class="pill amber">Replacement suggested by ${byId(state.people,pendingSuggestion.requestedBy)?.name||'someone'} — awaiting review</span></div>`:''}
               <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
                 ${t.fileKey || t.url
                   ? `<button class="btn secondary sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
                   : `<button class="btn secondary sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
-                ${t.requiresSignature && !mySig? `<button class="btn bronze sm" onclick="openSignTemplateModal('${currentUser().id}','${t.id}')">Sign</button>`:''}
                 ${canEdit()?`<button class="btn secondary sm" onclick="openTemplateModal('${t.id}')">✎ Edit</button><button class="btn secondary sm" onclick="replaceTemplateFileModal('${t.id}')">🔁 Replace File</button><button class="btn secondary sm" onclick="removeTemplate('${t.id}')">Remove</button>`
                   : (pendingSuggestion && pendingSuggestion.requestedBy===currentUser().id ? `<button class="btn secondary sm" onclick="withdrawTemplateReplacementRequest('${pendingSuggestion.id}')">Withdraw Suggestion</button>` : `<button class="btn secondary sm" onclick="suggestTemplateReplacementModal('${t.id}')">🔁 Suggest Replacement</button>`)}
               </div>
@@ -9639,11 +9978,7 @@ function openTemplateModal(templateId){
           <label>Upload a file ${t?`<span class="small" style="font-weight:400;">(leave blank to keep the current file)</span>`:''}</label><input type="file" id="m-tpl-file">
           <div class="small" style="margin:6px 0 12px;">— or —</div>
           <label>Link to an external doc (Google Doc, Dropbox, etc.)</label><input type="text" id="m-tpl-url" value="${escAttr(t?.url)}" placeholder="https://...">
-          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
-            <input type="checkbox" id="m-tpl-sig" style="width:auto;margin:0;" ${t?.requiresSignature?'checked':''}>
-            Requires a signature (e.g. offer letter, equipment agreement)
-          </label>
-          <div class="small mt-1">When checked, this becomes signable — like a policy — instead of just downloadable.</div>
+          <div class="small mt-1">Need something signed instead of just shared? Build it as a <a onclick="closeModal(this.closest('.modal').querySelector('.miniBtn'));navigate('fillableForms')" style="text-decoration:underline;cursor:pointer;">Fillable Form</a> instead — templates here are always just shared documents, never signable.</div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTemplate(this,'${templateId||''}')">Save</button></div>
       </div>
@@ -9656,11 +9991,10 @@ async function saveTemplate(el, templateId){
   if(!title){ toast('Title is required'); return; }
   const fileInput = document.getElementById('m-tpl-file');
   const url = document.getElementById('m-tpl-url').value.trim();
-  const requiresSignature = document.getElementById('m-tpl-sig').checked;
   const description = document.getElementById('m-tpl-desc').value.trim();
   if(templateId){
     const t = byId(state.templates, templateId);
-    t.title = title; t.category = category; t.description = description; t.requiresSignature = requiresSignature;
+    t.title = title; t.category = category; t.description = description;
     if(fileInput.files[0]){
       const blobKey = 'tplblob_'+templateId+'_'+Date.now();
       await idbPut(blobKey, fileInput.files[0]);
@@ -9676,7 +10010,6 @@ async function saveTemplate(el, templateId){
     id, title, category, description,
     url: fileInput.files[0] ? '' : url,
     fileName: fileInput.files[0] ? fileInput.files[0].name : '',
-    requiresSignature,
     uploadedBy: currentUser().id,
     uploadedAt: new Date().toISOString().slice(0,10)
   };
@@ -9825,7 +10158,7 @@ function downloadTemplateAsWord(id){
   const t = byId(state.templates, id);
   const bodyHtml = `
     <h1 style="font-family:Calibri,Arial,sans-serif;">${t.title}</h1>
-    <p style="font-family:Calibri,Arial,sans-serif;color:#666;"><em>${t.category}${t.requiresSignature?' · Requires signature':''}</em></p>
+    <p style="font-family:Calibri,Arial,sans-serif;color:#666;"><em>${t.category}</em></p>
     <p style="font-family:Calibri,Arial,sans-serif;">${(t.description||'').replace(/\n/g,'<br>')}</p>
     ${t.fileName? `<p style="font-family:Calibri,Arial,sans-serif;color:#666;">Original file on record in BuildStack: ${t.fileName}</p>`:''}
   `;
@@ -9856,7 +10189,7 @@ async function downloadTemplateAsPdf(id){
     const doc = new jsPDF();
     doc.setFontSize(18); doc.text(t.title, 14, 20);
     doc.setFontSize(11); doc.setTextColor(120);
-    doc.text(`${t.category}${t.requiresSignature?' · Requires signature':''}`, 14, 28);
+    doc.text(`${t.category}`, 14, 28);
     doc.setTextColor(20);
     const lines = doc.splitTextToSize(t.description||'(no description on file)', 180);
     doc.text(lines, 14, 42);
@@ -9871,7 +10204,7 @@ function downloadTemplateAsPng(id){
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#FAF9F7'; ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle = '#14161A'; ctx.font = 'bold 34px Arial'; ctx.fillText(t.title, 50, 80);
-  ctx.fillStyle = '#8C8079'; ctx.font = '18px Arial'; ctx.fillText(t.category + (t.requiresSignature?' · Requires signature':''), 50, 115);
+  ctx.fillStyle = '#8C8079'; ctx.font = '18px Arial'; ctx.fillText(t.category, 50, 115);
   ctx.fillStyle = '#14161A'; ctx.font = '20px Arial';
   const words = (t.description||'(no description on file)').split(' ');
   let line=''; let y=165; const maxWidth=900;
