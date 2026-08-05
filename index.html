@@ -7905,17 +7905,18 @@ function renderOnboardingPathEditor(){
     ${path.sections.map((s,i)=>renderSectionEditor(path.id, s, i, path.sections.length)).join('')}
     <button class="btn secondary" onclick="addOnboardingSection('${path.id}')">+ Add Section</button>
     <div class="section-title">Currently enrolled<span class="count">${enrolled.length}</span></div>
-    ${enrolled.length? `<div class="tbl-card"><table><tr><th>Person</th><th>Started</th><th>Progress</th><th></th></tr>
+    ${enrolled.length? `<div class="small mt-1" style="margin-bottom:10px;">Check off Internal and other manually-completed tasks from each person's own profile page — click their name below.</div>
+    <div class="tbl-card"><table><tr><th>Person</th><th>Started</th><th>Progress</th><th></th></tr>
       ${enrolled.map(e=>{
         const p = byId(state.people, e.personId);
         const done = path.sections.filter(s=>sectionIsDone(e.personId,s)).length;
         return `<tr>
           <td class="row-click" onclick="navigate('personDetail',{id:'${e.personId}'})">${p?.name||'—'}</td>
           <td>${fmtDate(e.startDate)}</td><td>${done}/${path.sections.length} sections</td>
-          <td><span class="btn secondary sm" onclick="unenrollPerson('${e.id}')">Remove</span></td>
+          <td><span class="btn secondary sm" onclick="navigate('personDetail',{id:'${e.personId}'})">✓ Check off tasks</span> <span class="btn secondary sm" onclick="unenrollPerson('${e.id}')">Remove</span></td>
         </tr>`;
       }).join('')}
-    </table></div>` : `<div class="empty"><h3>Nobody enrolled yet</h3><p>Enroll a new hire to auto-assign every linked topic and policy in this path.</p></div>`}
+    </table></div>` : `<div class="empty"><h3>Nobody enrolled yet</h3><p>Enroll a new hire to auto-assign every linked topic and policy in this path. Once they're enrolled, come back here or go to their profile page directly — that's where you and they check off tasks, including anything marked Internal.</p></div>`}
   `;
 }
 const OB_TASK_TYPE_META = {
@@ -7947,7 +7948,7 @@ function renderSectionEditor(pathId, section, idx, total){
         <input type="checkbox" style="width:auto;margin:0;" ${section.internal?'checked':''} onchange="toggleSectionInternal('${pathId}','${section.id}',this.checked)">
         Internal section — the new hire never sees this at all
       </label>
-      ${section.internal? `<div class="small mt-1" style="margin-bottom:12px;color:var(--slate-light);">Good for pre-boarding — ordering equipment, setting up accounts, anything your team does before their first day. This whole section is invisible to them, and won't block their own progress.</div>`:''}
+      ${section.internal? `<div class="small mt-1" style="margin-bottom:12px;color:var(--slate-light);">Good for pre-boarding — ordering equipment, setting up accounts, anything your team does before their first day. This whole section is invisible to them, and won't block their own progress. <strong>Check these off from the enrolled person's own profile page</strong>, once someone's enrolled — there's nothing to check off here on the template itself.</div>`:''}
       ${section.tasks.length? section.tasks.map(t=>{
         const meta = OB_TASK_TYPE_META[t.type] || {label:t.type, icon:'•', pill:'gray'};
         return `
