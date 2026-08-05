@@ -7794,7 +7794,7 @@ function sectionQuizPassed(personId, quizId){
   return !!state.quizAttempts.find(a=>a.personId===personId && a.quizId===quizId && a.passed);
 }
 function sectionIsDone(personId, section){
-  return section.tasks.every(t=>taskIsDone(personId,t)) && sectionQuizPassed(personId, section.quizId);
+  return section.tasks.every(t=>taskIsDone(personId,t));
 }
 function toggleCustomTask(personId, taskId){
   if(personId!==currentUser().id && !canEdit()){ toast('You can only update your own tasks'); return; }
