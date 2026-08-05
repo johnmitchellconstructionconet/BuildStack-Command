@@ -2379,14 +2379,14 @@ function renderEmployeeDashboard(){
       return `<div class="section-title">Upcoming Events
           <span class="btn secondary sm" style="margin-left:auto;" onclick="companyStoryTab='events';navigate('companyStory');">See all →</span>
         </div>
-        ${upcoming.length? upcoming.map(renderCompanyEventCard).join('') : `<div class="empty-inline">Nothing on the calendar yet.</div>`}`;
+        ${upcoming.length? upcoming.map(renderCompanyEventCard).join('') : `<div class="empty mt-2"><h3>Nothing on the calendar yet</h3><p>Check back once something's scheduled.</p></div>`}`;
     })()}
     ${(()=>{
       const recentPosts = [...state.companyBoardPosts].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,3);
       return `<div class="section-title">Team Board
           <span class="btn secondary sm" style="margin-left:auto;" onclick="companyStoryTab='board';navigate('companyStory');">See all →</span>
         </div>
-        ${recentPosts.length? recentPosts.map(renderBoardPostCard).join('') : `<div class="empty-inline">Nothing posted yet — be the first. <span class="btn bronze sm" style="margin-left:8px;" onclick="openBoardPostModal()">+ New Post</span></div>`}`;
+        ${recentPosts.length? recentPosts.map(renderBoardPostCard).join('') : `<div class="empty mt-2"><h3>Nothing posted yet</h3><p>Be the first — post an idea, a question, or a win.</p><button class="btn bronze sm mt-2" onclick="openBoardPostModal()">+ New Post</button></div>`}`;
     })()}
     ${(()=>{
       const myTasks = individualTasksFor(u.id).filter(t=>!taskIsDone(u.id,t));
