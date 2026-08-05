@@ -1385,7 +1385,16 @@ async function supabaseSignIn(){
   btn.disabled = true; btn.textContent = 'Signing in…';
   try{
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if(error){ errEl.textContent = error.message; return; }
+    if(error){
+      if(/email.*not.*confirm/i.test(error.message)){
+        errEl.textContent = 'Your email isn\u2019t confirmed yet — check your inbox (and spam folder) for a confirmation link from Supabase, click it, then sign in again.';
+      } else if(/invalid.*credentials|invalid.*login/i.test(error.message)){
+        errEl.textContent = 'That email and password don\u2019t match. If you never finished confirming your email, or aren\u2019t sure you ever set a password, use "Create your login" again with the same email.';
+      } else {
+        errEl.textContent = error.message;
+      }
+      return;
+    }
     const pulled = await pullStateFromSupabase();
     if(pulled==='error'){
       errEl.textContent = 'Signed in, but couldn\u2019t load company data — check your connection and try again. (Your account is fine; nothing was lost.)';
@@ -1429,7 +1438,14 @@ async function supabaseSignUp(){
   btn.disabled = true; btn.textContent = 'Creating account…';
   try{
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
-    if(error){ errEl.textContent = error.message; return; }
+    if(error){
+      if(/already registered|already.*exists/i.test(error.message)){
+        errEl.textContent = 'This email already has a login — you don\u2019t need to create one again. Use "Already have a login? Sign in" below. If you confirmed your email but forgot your password, ask an admin to check Supabase for you.';
+      } else {
+        errEl.textContent = error.message;
+      }
+      return;
+    }
     if(data.session){
       login(person.id);
     } else {
@@ -3285,7 +3301,8 @@ function renderPersonDetail(){
       </div>
       <div class="flex gap-2">
         ${canEdit() && !isOwnProfile && !viewAsPersonId && p.status!=='offboarded'? `<button class="btn secondary" onclick="startViewAs('${p.id}')">👁 View as ${p.name.split(' ')[0]}</button>`:''}
-        ${canEdit()?`<button class="btn secondary" onclick="openMyPhotoModal('${p.id}')">${p.photo?'Change Photo':'Add Photo'}</button>`:''}
+        ${canEdit() || isOwnProfile?`<button class="btn secondary" onclick="openMyPhotoModal('${p.id}')">${p.photo?'Change Photo':'Add Photo'}</button>`:''}
+        ${isOwnProfile?`<button class="btn secondary" onclick="openChangePasswordModal()">Change Password</button>`:''}
         ${canEdit()?`<button class="btn secondary" onclick="openPersonModal('${p.id}')">Edit</button>`:''}
         ${canEdit() && !isOwnProfile && p.status!=='offboarded'? `<button class="btn danger" onclick="offboardEmployeeModal('${p.id}')">Offboard</button>`:''}
         ${canEdit() && !isOwnProfile? `<button class="btn danger" onclick="deletePersonNode('${p.id}')">Delete</button>`:''}
@@ -4000,6 +4017,41 @@ function openMyBioModal(personId){
       </div>
     </div>`);
   hydrateBioPhotos();
+}
+function openChangePasswordModal(){
+  if(viewAsPersonId){ toast('Exit View As first — this would change your own login, not theirs'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-head"><strong>Change Password</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>New password</label><input type="password" id="m-newpass-1" placeholder="At least 6 characters">
+          <label>Confirm new password</label><input type="password" id="m-newpass-2">
+          <div id="m-newpass-error" class="small" style="color:var(--rust);margin-top:6px;"></div>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitPasswordChange(this)">Save New Password</button></div>
+      </div>
+    </div>`);
+}
+async function submitPasswordChange(el){
+  if(viewAsPersonId){ toast('Exit View As first — this would change your own login, not theirs'); return; }
+  const pass1 = document.getElementById('m-newpass-1').value;
+  const pass2 = document.getElementById('m-newpass-2').value;
+  const errEl = document.getElementById('m-newpass-error');
+  errEl.textContent = '';
+  if(pass1.length < 6){ errEl.textContent = 'Password needs to be at least 6 characters.'; return; }
+  if(pass1 !== pass2){ errEl.textContent = 'Passwords don\u2019t match.'; return; }
+  if(!supabaseClient){ errEl.textContent = 'Not connected to the login system right now.'; return; }
+  const btn = el;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await supabaseClient.auth.updateUser({ password: pass1 });
+    if(error){ errEl.textContent = error.message; btn.disabled = false; btn.textContent = 'Save New Password'; return; }
+    closeModal(el); toast('Password updated');
+  }catch(e){
+    errEl.textContent = 'Something went wrong. Try again.';
+    btn.disabled = false; btn.textContent = 'Save New Password';
+  }
 }
 function openMyPhotoModal(personId){
   if(!canEdit() && personId!==currentUser().id){ toast('You can only set your own profile photo'); return; }
