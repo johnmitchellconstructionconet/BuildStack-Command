@@ -8326,7 +8326,7 @@ function renderFormBuilder(){
         <div class="fb-overlay" onclick="handleBuilderCanvasClick(event)">
           ${formBuilderState.fields.map((f,i)=>`
             <div class="fb-field-marker" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
-              <span class="fb-field-label">${f.type==='signature'?'✍️':f.type==='date'?'📅':'📝'} ${f.label}<span class="fb-field-remove" onclick="event.stopPropagation();removeBuilderField(${i});">✕</span></span>
+              <span class="fb-field-label">${(FORM_FIELD_TYPES[f.type]||FORM_FIELD_TYPES.text).icon} ${f.label}<span class="fb-field-remove" onclick="event.stopPropagation();removeBuilderField(${i});">✕</span></span>
             </div>
           `).join('')}
         </div>
@@ -8353,6 +8353,18 @@ function handleBuilderCanvasClick(e){
   const yPct = ((e.clientY - rect.top) / rect.height) * 100;
   openFieldConfigModal(xPct, yPct);
 }
+const FORM_FIELD_TYPES = {
+  text: {label:'Text', icon:'📝', inputType:'text'},
+  name: {label:'Name', icon:'👤', inputType:'text'},
+  email: {label:'Email', icon:'✉️', inputType:'email'},
+  phone: {label:'Phone', icon:'📞', inputType:'tel'},
+  address: {label:'Address', icon:'🏠', inputType:'text'},
+  date: {label:'Date', icon:'📅', inputType:'date'},
+  number: {label:'Number', icon:'#️⃣', inputType:'number'},
+  checkbox: {label:'Checkbox', icon:'☑️', inputType:'checkbox'},
+  initials: {label:'Initials', icon:'✒️', inputType:'text'},
+  signature: {label:'Signature (type full name)', icon:'✍️', inputType:'text'}
+};
 function openFieldConfigModal(xPct, yPct){
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -8361,9 +8373,7 @@ function openFieldConfigModal(xPct, yPct){
         <div class="modal-body">
           <label>Type</label>
           <select id="m-field-type">
-            <option value="text">Text</option>
-            <option value="date">Date</option>
-            <option value="signature">Signature (type full name)</option>
+            ${Object.keys(FORM_FIELD_TYPES).map(k=>`<option value="${k}">${FORM_FIELD_TYPES[k].icon} ${FORM_FIELD_TYPES[k].label}</option>`).join('')}
           </select>
           <label>Label</label><input type="text" id="m-field-label" placeholder="e.g. Full Name">
         </div>
@@ -8398,10 +8408,20 @@ function deleteFillableForm(formId){
 }
 function fieldOverlayHtml(form, mode, submissionValues){
   return form.fields.map(f=>{
-    if(mode==='fill') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
-      <input type="${f.type==='date'?'date':'text'}" class="fb-fill-input" data-field="${f.id}" placeholder="${f.label}" style="${f.type==='signature'?'font-family:cursive;font-size:14px;':''}">
-    </div>`;
-    return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${(submissionValues&&submissionValues[f.id])||''}</div></div>`;
+    const meta = FORM_FIELD_TYPES[f.type] || FORM_FIELD_TYPES.text;
+    if(mode==='fill'){
+      if(f.type==='checkbox'){
+        return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
+          <input type="checkbox" class="fb-fill-input" data-field="${f.id}" data-fieldtype="checkbox" style="width:20px;height:20px;margin:0;">
+        </div>`;
+      }
+      return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
+        <input type="${meta.inputType}" class="fb-fill-input" data-field="${f.id}" data-fieldtype="${f.type}" placeholder="${escAttr(f.label)}" style="${f.type==='signature'?'font-family:cursive;font-size:15px;':f.type==='initials'?'font-family:cursive;font-size:14px;':''}">
+      </div>`;
+    }
+    const val = (submissionValues&&submissionValues[f.id]);
+    if(f.type==='checkbox') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${val?'☑':'☐'}</div></div>`;
+    return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${escHtml(val||'')}</div></div>`;
   }).join('');
 }
 function openFillFormModal(personId, formId){
@@ -8427,8 +8447,13 @@ function submitFilledForm(formId, personId, el){
   const values = {};
   let allFilled = true;
   document.querySelectorAll('.fb-fill-input').forEach(input=>{
-    values[input.dataset.field] = input.value.trim();
-    if(!input.value.trim()) allFilled = false;
+    if(input.dataset.fieldtype==='checkbox'){
+      values[input.dataset.field] = input.checked;
+      if(!input.checked) allFilled = false;
+    } else {
+      values[input.dataset.field] = input.value.trim();
+      if(!input.value.trim()) allFilled = false;
+    }
   });
   if(!allFilled){ toast('Fill in every field before submitting'); return; }
   const id = 'fsub'+Date.now();
