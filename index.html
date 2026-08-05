@@ -3625,6 +3625,7 @@ function renderPersonDetail(){
     ${renderPersonEquipmentSection(p.id)}
     ${renderTimeOffSection(p.id, canApprove(currentUser().id,'timeOff'))}
     ${canSeeReviewsOf(p.id) ? renderReviewsSection(p.id, canEdit()) : ''}
+    ${(canEdit() || isOwnProfile) ? renderPersonDocumentsSection(p.id) : ''}
     <div class="section-title">Roles<span class="count">${seats.filter(s=>s.roleId).length}</span>
       ${canEdit()?`<span class="btn bronze sm" style="margin-left:auto;" onclick="assignRoleModal('${p.id}')">+ Assign a Role</span>`:''}
     </div>
@@ -8559,6 +8560,13 @@ function addDays(dateStr, days){
   const d = new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+days);
   return d.toISOString().slice(0,10);
 }
+function nextWeekday(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const day = d.getDay();
+  if(day===6) d.setDate(d.getDate()+2);
+  else if(day===0) d.setDate(d.getDate()+1);
+  return d.toISOString().slice(0,10);
+}
 /* Auto-run at onboarding: schedules the standard 3/6/12-month cycle. Yearly reviews after
    that are generated one at a time, each triggered by completing the previous one — so we're
    never pre-generating an open-ended future. */
@@ -8570,7 +8578,7 @@ function scheduleStandardReviews(personId, startDate){
   [['3-month',90], ['6-month',180], ['1-year',365]].forEach(([type,days])=>{
     state.performanceReviews.push({
       id:'prev'+Date.now()+Math.random().toString(36).slice(2),
-      personId, type, scheduledDate: addDays(startDate, days),
+      personId, type, scheduledDate: nextWeekday(addDays(startDate, days)),
       status:'scheduled', reviewerPersonId, templateId: template?template.id:null, notes:'', criteriaResponses:[]
     });
   });
@@ -8579,6 +8587,24 @@ function reviewsFor(personId){
   return state.performanceReviews.filter(r=>r.personId===personId).sort((a,b)=> new Date(a.scheduledDate)-new Date(b.scheduledDate));
 }
 function reviewTypeLabel(type){ return {'3-month':'3-Month Review','6-month':'6-Month Review','1-year':'1-Year Review','annual':'Annual Review'}[type]||type; }
+function renderPersonDocumentsSection(personId){
+  const subs = state.formSubmissions.filter(s=>s.personId===personId).sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
+  return `
+    <div class="section-title">Signed &amp; Submitted Documents<span class="count">${subs.length}</span></div>
+    ${subs.length? `<div class="tbl-card"><table>
+      <tr><th>Document</th><th>Submitted</th><th>Status</th><th></th></tr>
+      ${subs.map(s=>{
+        const form = byId(state.fillableForms, s.formId);
+        return `<tr>
+          <td><strong>${form?form.name:'(deleted form)'}</strong></td>
+          <td>${fmtDate(s.submittedAt.slice(0,10))}</td>
+          <td>${s.status==='reviewed'?`<span class="pill jade">Reviewed${s.reviewedBy?' by '+(byId(state.people,s.reviewedBy)?.name||'—'):''}</span>`:`<span class="pill amber">Awaiting review</span>`}</td>
+          <td>${form?`<span class="btn secondary sm" onclick="viewFormSubmission('${s.id}')">View</span>`:''}</td>
+        </tr>`;
+      }).join('')}
+    </table></div>` : `<div class="empty-inline">Nothing signed or submitted yet.</div>`}
+  `;
+}
 function renderReviewsSection(personId, canManage){
   const reviews = reviewsFor(personId);
   return `
@@ -8597,6 +8623,7 @@ function renderReviewsSection(personId, canManage){
           <td class="flex gap-2">
             <span class="btn secondary sm" onclick="downloadReviewIcs('${r.id}')">📅 .ics</span>
             ${r.status==='completed'? `<span class="btn secondary sm" onclick="viewCompletedReview('${r.id}')">View</span>`:''}
+            ${canManage && r.status==='scheduled'?`<span class="btn secondary sm" onclick="editScheduledReviewModal('${r.id}')">Edit</span>`:''}
             ${canManage && r.status==='scheduled'?`<span class="btn bronze sm" onclick="completeReviewModal('${r.id}')">Conduct Review →</span>`:''}
             ${canManage && r.status==='scheduled'?`<span class="btn secondary sm" onclick="cancelReview('${r.id}')">Cancel</span>`:''}
           </td>
@@ -8671,6 +8698,38 @@ function saveLoggedPastReview(personId, el){
   state.performanceReviews.push(review);
   saveState(); closeModal(el); toast('Logged'); render();
 }
+function editScheduledReviewModal(reviewId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const r = byId(state.performanceReviews, reviewId);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Edit ${reviewTypeLabel(r.type)}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Date</label><input type="date" id="m-editrev-date" value="${r.scheduledDate}">
+          <label>Reviewer</label><select id="m-editrev-reviewer"><option value="">— none —</option>${state.people.map(p2=>`<option value="${p2.id}" ${p2.id===r.reviewerPersonId?'selected':''}>${p2.name}</option>`).join('')}</select>
+          <label>Template</label>
+          <select id="m-editrev-template">
+            <option value="">— No template, freeform notes only —</option>
+            ${state.performanceReviewTemplates.map(t=>`<option value="${t.id}" ${r.templateId===t.id?'selected':''}>${t.name}${t.roleId?' ('+byId(state.roles,t.roleId)?.title+')':' (General)'}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveScheduledReviewEdit('${reviewId}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+function saveScheduledReviewEdit(reviewId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const r = byId(state.performanceReviews, reviewId);
+  const pickedDate = document.getElementById('m-editrev-date').value;
+  const newDate = nextWeekday(pickedDate);
+  r.scheduledDate = newDate;
+  r.reviewerPersonId = document.getElementById('m-editrev-reviewer').value || null;
+  r.templateId = document.getElementById('m-editrev-template').value || null;
+  saveState(); closeModal(el);
+  toast(newDate!==pickedDate ? `Saved — moved to ${fmtDate(newDate)} since reviews don\u2019t land on weekends` : 'Saved');
+  render();
+}
 function cancelReview(reviewId){
   if(!canEdit()){ toast('Admins only'); return; }
   const r = byId(state.performanceReviews, reviewId);
@@ -8731,15 +8790,19 @@ function addReviewModal(personId){
 }
 function saveReviewModal(personId, el){
   if(!canEdit()){ toast('Admins only'); return; }
+  const pickedDate = document.getElementById('m-rev-date').value;
+  const scheduledDate = nextWeekday(pickedDate);
   state.performanceReviews.push({
     id:'prev'+Date.now(), personId,
     type: document.getElementById('m-rev-type').value,
-    scheduledDate: document.getElementById('m-rev-date').value,
+    scheduledDate,
     status:'scheduled',
     reviewerPersonId: document.getElementById('m-rev-reviewer').value || null,
     templateId: document.getElementById('m-rev-template').value || null, notes:'', criteriaResponses:[]
   });
-  saveState(); closeModal(el); toast('Scheduled'); render();
+  saveState(); closeModal(el);
+  toast(scheduledDate!==pickedDate ? `Scheduled — moved to ${fmtDate(scheduledDate)} since reviews don\u2019t land on weekends` : 'Scheduled');
+  render();
 }
 function completeReviewModal(reviewId){
   if(!canEdit()){ toast('Admins only'); return; }
@@ -8791,7 +8854,7 @@ function completeReview(reviewId, el){
   if(r.type==='1-year' || r.type==='annual'){
     state.performanceReviews.push({
       id:'prev'+Date.now(), personId:r.personId, type:'annual',
-      scheduledDate: addDays(r.completedDate, 365), status:'scheduled',
+      scheduledDate: nextWeekday(addDays(r.completedDate, 365)), status:'scheduled',
       reviewerPersonId: r.reviewerPersonId, templateId: r.templateId, notes:'', criteriaResponses:[]
     });
   }
