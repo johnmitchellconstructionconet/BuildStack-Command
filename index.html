@@ -219,9 +219,22 @@ tr:last-child td{border-bottom:none;}
 .cs-timeline-title{font-family:'Fraunces',serif;font-weight:500;font-size:17px;}
 .cs-goal-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:18px 20px;box-shadow:var(--shadow-soft);margin-bottom:14px;}
 .cs-roadmap-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:16px 18px;box-shadow:var(--shadow-soft);margin-bottom:10px;}
+.cs-steps-wrap{margin-top:14px;background:var(--bronze-tint);border-radius:10px;padding:14px 16px 6px;}
+.cs-steps-label{font-family:'Montserrat',sans-serif;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--bronze-dark);font-weight:700;}
+.cs-steps-progress-track{flex:1;height:5px;background:rgba(140,128,121,0.2);border-radius:3px;overflow:hidden;margin:0 10px;}
+.cs-steps-progress-fill{height:100%;background:var(--bronze);border-radius:3px;transition:width .25s;}
+.cs-step-row{display:flex;gap:10px;position:relative;padding-bottom:12px;}
+.cs-step-row:last-child{padding-bottom:8px;}
+.cs-step-row::before{content:'';position:absolute;left:9px;top:22px;bottom:0;width:1px;background:rgba(140,128,121,0.3);}
+.cs-step-row:last-child::before{display:none;}
+.cs-step-check{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--bronze);background:var(--panel);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;color:#fff;font-weight:700;transition:background .15s,border-color .15s;position:relative;z-index:1;}
+.cs-step-check.done{background:var(--bronze);}
+.cs-step-text{font-size:13px;line-height:1.4;padding-top:1px;}
+.cs-step-text.done{color:var(--slate-light);text-decoration:line-through;}
 .cs-project-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);overflow:hidden;box-shadow:var(--shadow-soft);transition:box-shadow .2s,transform .2s;}
 .cs-project-card:hover{box-shadow:var(--shadow-2);transform:translateY(-2px);}
 .cs-project-photo{width:100%;height:200px;display:block;background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));color:#fff;}
+.cs-goal-cover-photo{width:calc(100% + 40px);height:170px;display:block;object-fit:cover;margin:-18px -20px 14px;border-radius:var(--radius-m) var(--radius-m) 0 0;cursor:pointer;}
 
 .empty{text-align:center;padding:50px 20px;color:var(--slate);}
 .empty h3{color:var(--ink);margin-bottom:6px;font-size:15px;}
@@ -2030,24 +2043,31 @@ function renderCompanyGoalsTab(){
   const longTerm = goals.filter(g=>g.timeframe==='long');
   const renderGoalCard = (g)=>{
     const statusMeta = {not_started:{label:'Not Started',pill:'gray'}, in_progress:{label:'In Progress',pill:'amber'}, achieved:{label:'Achieved',pill:'jade'}}[g.status] || {label:g.status,pill:'gray'};
+    const images = (g.attachments||[]).filter(a=>a.type.startsWith('image/'));
+    const files = (g.attachments||[]).filter(a=>!a.type.startsWith('image/'));
+    const coverImage = images[0];
+    const restImages = images.slice(1);
     return `<div class="cs-goal-card">
+      ${coverImage?`<img src="${escAttr(coverImage.url)}" class="cs-goal-cover-photo" onclick="window.open('${escJs(coverImage.url)}','_blank')">`:''}
       <div class="flex" style="justify-content:space-between;align-items:flex-start;">
         <strong>${g.title}</strong>
         <span class="pill ${statusMeta.pill}">${statusMeta.label}</span>
       </div>
       ${g.description?`<div class="small mt-1">${g.description}</div>`:''}
       ${g.trackProgress? `<div class="progress-track mt-2"><div class="progress-fill ${g.status==='achieved'?'jade':'bronze'}" style="width:${g.progress||0}%;"></div></div>`:''}
-      ${(g.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-        ${g.attachments.map(a=>a.type.startsWith('image/')
-          ? `<img src="${escAttr(a.url)}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(a.url)}','_blank')">`
-          : `<a href="${escAttr(a.url)}" target="_blank" class="btn secondary sm" style="text-decoration:none;">📎 ${escHtml(a.name)}</a>`
-        ).join('')}
+      ${(restImages.length||files.length)? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+        ${restImages.map(a=>`<img src="${escAttr(a.url)}" style="width:70px;height:70px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(a.url)}','_blank')">`).join('')}
+        ${files.map(a=>`<a href="${escAttr(a.url)}" target="_blank" class="btn secondary sm" style="text-decoration:none;">📎 ${escHtml(a.name)}</a>`).join('')}
       </div>`:''}
-      ${(g.actionSteps||[]).length? `<div class="mt-2" style="border-top:1px solid var(--line-soft);padding-top:10px;">
-        <div class="small" style="font-weight:600;margin-bottom:6px;color:var(--slate-light);">ACTION STEPS — ${g.actionSteps.filter(s=>s.done).length}/${g.actionSteps.length}</div>
-        ${g.actionSteps.map(s=>`<div class="flex gap-2 mt-1" style="align-items:center;">
-          <div class="ob-task-check ${s.done?'done':''}" ${canEditCompanyStory()?`onclick="toggleGoalActionStep('${g.id}','${s.id}')" style="cursor:pointer;"`:''} title="${canEditCompanyStory()?'Click to toggle':'Only admins can check these off'}">${s.done?'✓':''}</div>
-          <span class="small" style="${s.done?'color:var(--slate-light);text-decoration:line-through;':''}">${escHtml(s.text)}</span>
+      ${(g.actionSteps||[]).length? `<div class="cs-steps-wrap">
+        <div class="flex" style="align-items:center;margin-bottom:10px;">
+          <span class="cs-steps-label">Action Steps</span>
+          <div class="cs-steps-progress-track"><div class="cs-steps-progress-fill" style="width:${g.actionSteps.length?Math.round(g.actionSteps.filter(s=>s.done).length/g.actionSteps.length*100):0}%;"></div></div>
+          <span class="small" style="color:var(--bronze-dark);font-weight:600;">${g.actionSteps.filter(s=>s.done).length}/${g.actionSteps.length}</span>
+        </div>
+        ${g.actionSteps.map(s=>`<div class="cs-step-row">
+          <div class="cs-step-check ${s.done?'done':''}" ${canEditCompanyStory()?`onclick="toggleGoalActionStep('${g.id}','${s.id}')" style="cursor:pointer;"`:''} title="${canEditCompanyStory()?'Click to toggle':'Only admins can check these off'}">${s.done?'✓':''}</div>
+          <div class="cs-step-text ${s.done?'done':''}">${escHtml(s.text)}</div>
         </div>`).join('')}
       </div>`:''}
       <div class="flex" style="justify-content:space-between;align-items:center;margin-top:${g.trackProgress?'6px':'10px'};">
