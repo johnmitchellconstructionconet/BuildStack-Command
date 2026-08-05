@@ -615,16 +615,16 @@ function seedData(){
       vision: '',
       founded: '2019-01-01',
       tradePartnersCount: 0,
-      charitiesSupportedCount: 0,
-      jobsCompletedCount: 0,
+      charitableDonations: [],
+      completedJobs: [],
       timeline: [
         {id:'cms_sample1', date:'2019-01-01', title:'[Sample] Company founded', icon:'🚀', description:'Replace this with your actual founding story — swap the date and details from Edit.', photoKeys:[]},
         {id:'cms_sample2', date:'2022-06-15', title:'[Sample] First major project completed', icon:'🏗️', description:'A good spot for a signature job, a big win, or a company outing photo.', photoKeys:[]},
         {id:'cms_sample3', date:'2024-01-10', title:'[Sample] Reached 5 team members', icon:'🎉', description:'Growth milestones, new hires, new locations — whatever marked real progress.', photoKeys:[]}
       ],
       goals: [
-        {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this is just here to show the layout.', timeframe:'short', status:'in_progress', progress:40, targetDate:null},
-        {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — replace with your real growth target.', timeframe:'long', status:'not_started', progress:0, targetDate:null}
+        {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this one has a real number behind it (X of Y roles), so percentage tracking is on.', timeframe:'short', status:'in_progress', trackProgress:true, progress:40, targetDate:null},
+        {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — this is big-picture, not a percentage, so progress tracking is off. Just status.', timeframe:'long', status:'not_started', trackProgress:false, progress:0, targetDate:null}
       ],
       roadmap: [
         {id:'rm_sample1', title:'[Sample] Roll out this platform company-wide', description:'Replace with what you\u2019re actually working on.', quarter:'', status:'in_progress'},
@@ -828,8 +828,10 @@ function migrateState(parsed){
       if(!parsed.companyStory.events) parsed.companyStory.events = [];
       if(!parsed.companyBoardPosts) parsed.companyBoardPosts = [];
       if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
-      if(parsed.companyStory.charitiesSupportedCount==null) parsed.companyStory.charitiesSupportedCount = 0;
-      if(parsed.companyStory.jobsCompletedCount==null) parsed.companyStory.jobsCompletedCount = 0;
+      if(!parsed.companyStory.charitableDonations) parsed.companyStory.charitableDonations = [];
+      if(parsed.companyStory.charitiesSupportedCount!=null) delete parsed.companyStory.charitiesSupportedCount;
+      if(!parsed.companyStory.completedJobs) parsed.companyStory.completedJobs = [];
+      if(parsed.companyStory.jobsCompletedCount!=null) delete parsed.companyStory.jobsCompletedCount;
       if(parsed.tradePartners) delete parsed.tradePartners;
       if(!parsed._companyEventsSampleAddedV1){
         if(!parsed.companyStory.events.length){
@@ -857,8 +859,8 @@ function migrateState(parsed){
         }
         if(!parsed.companyStory.goals.length){
           parsed.companyStory.goals.push(
-            {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this is just here to show the layout.', timeframe:'short', status:'in_progress', progress:40, targetDate:null},
-            {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — replace with your real growth target.', timeframe:'long', status:'not_started', progress:0, targetDate:null}
+            {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this one has a real number behind it (X of Y roles), so percentage tracking is on.', timeframe:'short', status:'in_progress', trackProgress:true, progress:40, targetDate:null},
+            {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — this is big-picture, not a percentage, so progress tracking is off. Just status.', timeframe:'long', status:'not_started', trackProgress:false, progress:0, targetDate:null}
           );
         }
         if(!parsed.companyStory.roadmap.length){
@@ -1611,8 +1613,8 @@ function renderCompanyStory(){
   const locCount = state.locations.length;
   const sopCount = state.topics.filter(t=>t.status!=='Draft').length;
   const partnerCount = cs.tradePartnersCount || 0;
-  const charityCount = cs.charitiesSupportedCount || 0;
-  const jobsCount = cs.jobsCompletedCount || 0;
+  const totalDonated = (cs.charitableDonations||[]).reduce((sum,d)=>sum+(d.amount||0), 0);
+  const jobsCount = (cs.completedJobs||[]).length;
   const storyTab = companyStoryTab;
   const statTiles = [
     years!=null ? {num: years<1?'<1':Math.floor(years), label:`Year${years>=2?'s':''} in business`} : null,
@@ -1620,7 +1622,7 @@ function renderCompanyStory(){
     {num: locCount, label:`Location${locCount!==1?'s':''}`},
     {num: partnerCount, label:'Trade partners onboarded'},
     {num: jobsCount, label:`Job${jobsCount!==1?'s':''} completed`},
-    {num: charityCount, label:'Charities supported'},
+    {num: fmtMoney(totalDonated), label:'Given to charities & causes'},
     {num: sopCount, label:'Processes documented'}
   ].filter(Boolean);
   return `
@@ -1911,9 +1913,9 @@ function renderCompanyGoalsTab(){
         <span class="pill ${statusMeta.pill}">${statusMeta.label}</span>
       </div>
       ${g.description?`<div class="small mt-1">${g.description}</div>`:''}
-      <div class="progress-track mt-2"><div class="progress-fill ${g.status==='achieved'?'jade':'bronze'}" style="width:${g.progress||0}%;"></div></div>
-      <div class="flex" style="justify-content:space-between;align-items:center;margin-top:6px;">
-        <div class="small" style="color:var(--slate-light);">${g.progress||0}% ${g.targetDate?'· Target: '+fmtDate(g.targetDate):''}</div>
+      ${g.trackProgress? `<div class="progress-track mt-2"><div class="progress-fill ${g.status==='achieved'?'jade':'bronze'}" style="width:${g.progress||0}%;"></div></div>`:''}
+      <div class="flex" style="justify-content:space-between;align-items:center;margin-top:${g.trackProgress?'6px':'10px'};">
+        <div class="small" style="color:var(--slate-light);">${g.trackProgress?`${g.progress||0}% `:''}${g.targetDate?(g.trackProgress?'· ':'')+'Target: '+fmtDate(g.targetDate):''}</div>
         ${canEditCompanyStory()?`<div class="flex gap-1">
           <span class="miniBtn" onclick="openGoalModal('${g.id}')" title="Edit">✎</span>
           <span class="miniBtn" onclick="deleteGoal('${g.id}')" title="Delete" style="color:var(--rust);">✕</span>
@@ -1941,6 +1943,7 @@ function renderCompanyGoalsTab(){
 function openGoalModal(id, defaultTimeframe){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const g = id ? byId(state.companyStory.goals, id) : null;
+  const trackProgress = g?.trackProgress || false;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -1952,13 +1955,18 @@ function openGoalModal(id, defaultTimeframe){
             <div><label>Timeframe</label><select id="m-goal-timeframe"><option value="short" ${(g?.timeframe||defaultTimeframe)==='short'?'selected':''}>Short-term</option><option value="long" ${(g?.timeframe||defaultTimeframe)==='long'?'selected':''}>Long-term</option></select></div>
             <div><label>Target date <span class="small" style="font-weight:400;">(optional)</span></label><input type="date" id="m-goal-target" value="${g?.targetDate||''}"></div>
           </div>
-          <div class="field-row">
-            <div><label>Status</label><select id="m-goal-status">
-              <option value="not_started" ${g?.status==='not_started'?'selected':''}>Not Started</option>
-              <option value="in_progress" ${g?.status==='in_progress'?'selected':''}>In Progress</option>
-              <option value="achieved" ${g?.status==='achieved'?'selected':''}>Achieved</option>
-            </select></div>
-            <div><label>Progress (%)</label><input type="text" id="m-goal-progress" value="${g?.progress!=null?g.progress:'0'}"></div>
+          <label>Status</label><select id="m-goal-status">
+            <option value="not_started" ${g?.status==='not_started'?'selected':''}>Not Started</option>
+            <option value="in_progress" ${g?.status==='in_progress'?'selected':''}>In Progress</option>
+            <option value="achieved" ${g?.status==='achieved'?'selected':''}>Achieved</option>
+          </select>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-goal-track" style="width:auto;margin:0;" ${trackProgress?'checked':''} onchange="document.getElementById('m-goal-progress-wrap').style.display=this.checked?'block':'none';">
+            This one has a measurable percentage
+          </label>
+          <div class="small mt-1">Most big-picture goals don't — leave this unchecked and just track status. Check it only for goals with a real number behind them, like "onboard 5 of 10 new roles."</div>
+          <div id="m-goal-progress-wrap" style="display:${trackProgress?'block':'none'};margin-top:10px;">
+            <label>Progress (%)</label><input type="text" id="m-goal-progress" value="${g?.progress!=null?g.progress:'0'}">
           </div>
         </div>
         <div class="modal-foot">
@@ -1973,13 +1981,14 @@ function saveGoal(id, el){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const title = document.getElementById('m-goal-title').value.trim();
   if(!title){ toast('Title is required'); return; }
-  const progress = Math.max(0, Math.min(100, parseInt(document.getElementById('m-goal-progress').value)||0));
+  const trackProgress = document.getElementById('m-goal-track').checked;
+  const progress = trackProgress ? Math.max(0, Math.min(100, parseInt(document.getElementById('m-goal-progress').value)||0)) : 0;
   const data = {
     title, description: document.getElementById('m-goal-desc').value.trim(),
     timeframe: document.getElementById('m-goal-timeframe').value,
     targetDate: document.getElementById('m-goal-target').value || null,
     status: document.getElementById('m-goal-status').value,
-    progress
+    trackProgress, progress
   };
   if(id){ Object.assign(byId(state.companyStory.goals, id), data); }
   else { data.id = 'goal'+Date.now(); state.companyStory.goals.push(data); }
@@ -2083,12 +2092,8 @@ function moveRoadmapItem(id, newStatus){
   r.status = newStatus;
   saveState(); render();
 }
-function renderCompanyEventsTab(){
-  const today = new Date().toISOString().slice(0,10);
-  const events = [...state.companyStory.events].sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const upcoming = events.filter(e=>e.date>=today);
-  const past = events.filter(e=>e.date<today);
-  const renderEventCard = (e)=>`<div class="cs-goal-card">
+function renderCompanyEventCard(e){
+  return `<div class="cs-goal-card">
     <div class="flex" style="justify-content:space-between;align-items:flex-start;">
       <div>
         <strong>${e.title}</strong>
@@ -2101,14 +2106,20 @@ function renderCompanyEventsTab(){
     </div>
     ${e.description?`<div class="small mt-2">${e.description}</div>`:''}
   </div>`;
+}
+function renderCompanyEventsTab(){
+  const today = new Date().toISOString().slice(0,10);
+  const events = [...state.companyStory.events].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const upcoming = events.filter(e=>e.date>=today);
+  const past = events.filter(e=>e.date<today);
   return `
     <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
       <div class="small" style="flex:1;">Company outings, trainings, holidays — whatever's coming up that people should know about.</div>
       ${canEditCompanyStory()?`<button class="btn secondary sm" onclick="openEventModal()">+ Add Event</button>`:''}
     </div>
-    ${!upcoming.length? `<div class="empty mt-2"><h3>Nothing on the calendar yet</h3><p>Add the next company event — an outing, a training day, whatever's coming up.</p></div>` : upcoming.map(renderEventCard).join('')}
+    ${!upcoming.length? `<div class="empty mt-2"><h3>Nothing on the calendar yet</h3><p>Add the next company event — an outing, a training day, whatever's coming up.</p></div>` : upcoming.map(renderCompanyEventCard).join('')}
     ${past.length? `<div class="section-title" style="cursor:pointer;margin-top:20px;" onclick="showPastEvents=!showPastEvents;render();">${showPastEvents?'▾':'▸'} Past events<span class="count">${past.length}</span></div>
-      ${showPastEvents? past.slice().reverse().map(renderEventCard).join('') : ''}` : ''}
+      ${showPastEvents? past.slice().reverse().map(renderCompanyEventCard).join('') : ''}` : ''}
   `;
 }
 let showPastEvents = false;
@@ -2361,6 +2372,21 @@ function renderEmployeeDashboard(){
       </div>
     </div>
     ${renderTeamAtAGlance(u)}
+    ${(()=>{
+      const today = new Date().toISOString().slice(0,10);
+      const upcoming = [...state.companyStory.events].filter(e=>e.date>=today).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
+      return `<div class="section-title">Upcoming Events
+          <span class="btn secondary sm" style="margin-left:auto;" onclick="companyStoryTab='events';navigate('companyStory');">See all →</span>
+        </div>
+        ${upcoming.length? upcoming.map(renderCompanyEventCard).join('') : `<div class="empty-inline">Nothing on the calendar yet.</div>`}`;
+    })()}
+    ${(()=>{
+      const recentPosts = [...state.companyBoardPosts].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,3);
+      return `<div class="section-title">Team Board
+          <span class="btn secondary sm" style="margin-left:auto;" onclick="companyStoryTab='board';navigate('companyStory');">See all →</span>
+        </div>
+        ${recentPosts.length? recentPosts.map(renderBoardPostCard).join('') : `<div class="empty-inline">Nothing posted yet — be the first. <span class="btn bronze sm" style="margin-left:8px;" onclick="openBoardPostModal()">+ New Post</span></div>`}`;
+    })()}
     ${(()=>{
       const myTasks = individualTasksFor(u.id).filter(t=>!taskIsDone(u.id,t));
       if(!myTasks.length) return '';
@@ -8712,23 +8738,34 @@ function renderCompanySettings(){
 
     <div class="section-title">Company Story</div>
     <div class="card">
-      <div class="small" style="margin-bottom:10px;">Feeds the Company page — mission, vision, the founding date behind the "years in business" stat, and the trade partners and charities stats.</div>
+      <div class="small" style="margin-bottom:10px;">Feeds the Company page — mission, vision, the founding date behind the "years in business" stat, and the trade partners stat.</div>
       <label>Founded</label>
       <input type="date" id="cs-founded" value="${state.companyStory.founded||''}">
-      <div class="field-row mt-2">
-        <div><label>Trade partners onboarded</label><input type="text" id="cs-partners-count" value="${state.companyStory.tradePartnersCount||0}" placeholder="0"></div>
-        <div><label>Charities supported</label><input type="text" id="cs-charities-count" value="${state.companyStory.charitiesSupportedCount||0}" placeholder="0"></div>
-      </div>
-      <div class="small mt-1" style="margin-bottom:4px;">Both are plain numbers — you're already tracking the real details elsewhere, these just feed the stats up top.</div>
+      <label class="mt-2">Trade partners onboarded <span class="small" style="font-weight:400;">(a plain number — you're already tracking these elsewhere, this just feeds the stat)</span></label>
+      <input type="text" id="cs-partners-count" value="${state.companyStory.tradePartnersCount||0}" placeholder="0" style="max-width:140px;">
       <label class="mt-2">Jobs completed</label>
-      <div class="flex gap-2" style="align-items:center;">
-        <span class="btn secondary sm" onclick="adjustJobsCompleted(-1)">− Remove Job</span>
-        <div id="jobs-completed-display" style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;min-width:40px;text-align:center;">${state.companyStory.jobsCompletedCount||0}</div>
-        <span class="btn secondary sm" onclick="adjustJobsCompleted(1)">+ Add Job</span>
-      </div>
-      <div class="small mt-1">One click per job — no need to retype the total each time. Set it to a specific starting number below if you need to.</div>
-      <input type="text" id="cs-jobs-count" value="${state.companyStory.jobsCompletedCount||0}" placeholder="0" style="max-width:140px;">
-      <label class="mt-2">Mission</label>
+      <div class="small mt-1" style="margin-bottom:8px;">Tracked by job name, so nothing gets counted twice — and you've got a real list to check against your actual job records if a number ever looks off.</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;">${(state.companyStory.completedJobs||[]).length}</div>
+      ${(state.companyStory.completedJobs||[]).length? `<div class="tbl-card mt-2"><table>
+        <tr><th>Job name</th><th>Completed</th><th>Notes</th><th></th></tr>
+        ${[...state.companyStory.completedJobs].sort((a,b)=>new Date(b.completedDate)-new Date(a.completedDate)).map(j=>`<tr>
+          <td><strong>${j.jobName}</strong></td><td>${fmtDate(j.completedDate)}</td><td class="small">${j.notes||'—'}</td>
+          <td><span class="miniBtn" onclick="deleteCompletedJob('${j.id}')" title="Delete" style="color:var(--rust);">✕</span></td>
+        </tr>`).join('')}
+      </table></div>`:''}
+      <button class="btn secondary sm mt-2" onclick="openLogCompletedJobModal()">+ Log Completed Job</button>
+      <label class="mt-3">Charitable donations</label>
+      <div class="small mt-1" style="margin-bottom:8px;">A running total, not a number to retype — log each gift and the total adds up on its own.</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;">${fmtMoney((state.companyStory.charitableDonations||[]).reduce((s,d)=>s+(d.amount||0),0))}</div>
+      ${(state.companyStory.charitableDonations||[]).length? `<div class="tbl-card mt-2"><table>
+        <tr><th>Date</th><th>Cause</th><th>Amount</th><th></th></tr>
+        ${[...state.companyStory.charitableDonations].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(d=>`<tr>
+          <td>${fmtDate(d.date)}</td><td>${d.cause||'—'}</td><td>${fmtMoney(d.amount)}</td>
+          <td><span class="miniBtn" onclick="deleteDonation('${d.id}')" title="Delete" style="color:var(--rust);">✕</span></td>
+        </tr>`).join('')}
+      </table></div>`:''}
+      <button class="btn secondary sm mt-2" onclick="openAddDonationModal()">+ Log a Donation</button>
+      <label class="mt-3">Mission</label>
       <textarea id="cs-mission" placeholder="Why we exist.">${state.companyStory.mission||''}</textarea>
       <label>Vision</label>
       <textarea id="cs-vision" placeholder="Where we're headed.">${state.companyStory.vision||''}</textarea>
@@ -8818,22 +8855,82 @@ function saveCompanyStorySettings(){
   if(!canEdit()){ toast('Admins only'); return; }
   state.companyStory.founded = document.getElementById('cs-founded').value || null;
   state.companyStory.tradePartnersCount = Math.max(0, parseInt(document.getElementById('cs-partners-count').value)||0);
-  state.companyStory.charitiesSupportedCount = Math.max(0, parseInt(document.getElementById('cs-charities-count').value)||0);
-  state.companyStory.jobsCompletedCount = Math.max(0, parseInt(document.getElementById('cs-jobs-count').value)||0);
   state.companyStory.mission = document.getElementById('cs-mission').value.trim();
   state.companyStory.vision = document.getElementById('cs-vision').value.trim();
   state.companySettings.cultureStory = document.getElementById('cs-culture-story').value.trim();
   saveState(); toast('Saved'); render();
 }
-function adjustJobsCompleted(delta){
+function openAddDonationModal(){
   if(!canEdit()){ toast('Admins only'); return; }
-  state.companyStory.jobsCompletedCount = Math.max(0, (state.companyStory.jobsCompletedCount||0) + delta);
-  saveState();
-  const display = document.getElementById('jobs-completed-display');
-  const input = document.getElementById('cs-jobs-count');
-  if(display) display.textContent = state.companyStory.jobsCompletedCount;
-  if(input) input.value = state.companyStory.jobsCompletedCount;
-  toast(delta>0?'Job added':'Job removed');
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-head"><strong>Log a Donation</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Amount</label><input type="text" id="m-don-amount" placeholder="e.g. 500">
+          <label>Cause / organization <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-don-cause" placeholder="e.g. Ozarks Food Harvest">
+          <label>Date</label><input type="date" id="m-don-date" value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveDonation(this)">Add to Total</button></div>
+      </div>
+    </div>`);
+}
+function saveDonation(el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const amount = parseFloat(document.getElementById('m-don-amount').value);
+  if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
+  state.companyStory.charitableDonations = state.companyStory.charitableDonations || [];
+  state.companyStory.charitableDonations.push({
+    id: 'don'+Date.now(), amount, cause: document.getElementById('m-don-cause').value.trim(),
+    date: document.getElementById('m-don-date').value || new Date().toISOString().slice(0,10)
+  });
+  saveState(); closeModal(el); toast('Added'); render();
+}
+function deleteDonation(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this entry? The total will adjust automatically.', ()=>{
+    state.companyStory.charitableDonations = state.companyStory.charitableDonations.filter(d=>d.id!==id);
+    saveState(); toast('Removed'); render();
+  });
+}
+function openLogCompletedJobModal(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-head"><strong>Log Completed Job</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Job name</label><input type="text" id="m-job-name" placeholder="e.g. Whispering Oaks Custom Build">
+          <label>Completed</label><input type="date" id="m-job-date" value="${new Date().toISOString().slice(0,10)}">
+          <label>Notes <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-job-notes">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveCompletedJob(this)">Log It</button></div>
+      </div>
+    </div>`);
+}
+function saveCompletedJob(el, confirmed){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const jobName = document.getElementById('m-job-name').value.trim();
+  if(!jobName){ toast('Job name is required'); return; }
+  const completedDate = document.getElementById('m-job-date').value;
+  const notes = document.getElementById('m-job-notes').value.trim();
+  state.companyStory.completedJobs = state.companyStory.completedJobs || [];
+  const existing = state.companyStory.completedJobs.find(j=>j.jobName.toLowerCase().trim()===jobName.toLowerCase().trim());
+  if(existing && !confirmed){
+    confirmAction(`"${existing.jobName}" is already logged as completed on ${fmtDate(existing.completedDate)}. Log it again anyway?`, ()=>{
+      saveCompletedJob(el, true);
+    });
+    return;
+  }
+  state.companyStory.completedJobs.push({ id:'job'+Date.now(), jobName, completedDate, notes });
+  saveState(); closeModal(el); toast('Logged'); render();
+}
+function deleteCompletedJob(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this job from the completed list?', ()=>{
+    state.companyStory.completedJobs = state.companyStory.completedJobs.filter(j=>j.id!==id);
+    saveState(); toast('Removed'); render();
+  });
 }
 function saveGearAllowanceDefault(){
   if(document.getElementById('cs-gear-unlimited').checked){
