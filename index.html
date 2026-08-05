@@ -594,21 +594,21 @@ function scheduleSupabaseSave(){
 }
 
 async function pullStateFromSupabase(){
-  if(!supabaseClient) return false;
+  if(!supabaseClient) return 'error';
   try{
     const { data, error } = await supabaseClient
       .from('app_state')
       .select('data')
       .eq('id', 'main')
       .maybeSingle();
-    if(error){ console.error('Supabase load failed:', error.message); return false; }
+    if(error){ console.error('Supabase load failed:', error.message); return 'error'; }
     if(data && data.data){
       state = migrateState(data.data);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return true;
+      return 'loaded';
     }
-    return false;
-  }catch(e){ console.error('Supabase load failed:', e); return false; }
+    return 'empty';
+  }catch(e){ console.error('Supabase load failed:', e); return 'error'; }
 }
 
 async function pushInitialStateToSupabase(){
@@ -1387,7 +1387,11 @@ async function supabaseSignIn(){
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if(error){ errEl.textContent = error.message; return; }
     const pulled = await pullStateFromSupabase();
-    if(!pulled) await pushInitialStateToSupabase();
+    if(pulled==='error'){
+      errEl.textContent = 'Signed in, but couldn\u2019t load company data — check your connection and try again. (Your account is fine; nothing was lost.)';
+      return;
+    }
+    if(pulled==='empty') await pushInitialStateToSupabase();
     const person = state.people.find(p=>p.email && p.email.toLowerCase()===email.toLowerCase());
     if(!person){
       errEl.textContent = 'Signed in, but no profile found for this email. Ask an admin to add you as a person first, using this exact email.';
@@ -1410,7 +1414,12 @@ async function supabaseSignUp(){
   if(!supabaseClient){ errEl.textContent = 'Backend not configured.'; return; }
   if(!email || !password){ errEl.textContent = 'Enter an email and password.'; return; }
   if(password.length < 6){ errEl.textContent = 'Password needs to be at least 6 characters.'; return; }
-  await pullStateFromSupabase();
+  let pulled = await pullStateFromSupabase();
+  if(pulled==='error') pulled = await pullStateFromSupabase();
+  if(pulled==='error'){
+    errEl.textContent = 'Couldn\u2019t reach the company database to check for your profile — check your connection and try again.';
+    return;
+  }
   const person = state.people.find(p=>p.email && p.email.toLowerCase()===email.toLowerCase());
   if(!person){
     errEl.textContent = 'No profile found with this email. Ask an admin to add you as a person first, using this exact email — then come back and create your login.';
@@ -9930,8 +9939,10 @@ async function initApp(){
     const { data: sessionData } = await supabaseClient.auth.getSession();
     if(sessionData && sessionData.session && sessionData.session.user && sessionData.session.user.email){
       const email = sessionData.session.user.email;
-      const pulled = await pullStateFromSupabase();
-      if(!pulled) await pushInitialStateToSupabase();
+      let pulled = await pullStateFromSupabase();
+      if(pulled==='error') pulled = await pullStateFromSupabase();
+      if(pulled==='error'){ renderAuthScreen(); return; }
+      if(pulled==='empty') await pushInitialStateToSupabase();
       const person = state.people.find(p=>p.email && p.email.toLowerCase()===email.toLowerCase());
       if(person && person.status!=='offboarded'){
         login(person.id);
