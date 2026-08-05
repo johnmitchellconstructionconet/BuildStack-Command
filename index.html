@@ -3340,7 +3340,7 @@ function renderPersonDetail(){
         const path = byId(state.onboardingPaths, enr.pathId);
         if(!path) return;
         path.sections.forEach(section=>{
-          section.tasks.filter(t=>t.internal).forEach(t=>internalTasks.push({task:t, pathName:path.name}));
+          section.tasks.filter(t=>t.internal || section.internal).forEach(t=>internalTasks.push({task:t, pathName:path.name+(section.internal?' — '+section.title:'')}));
         });
       });
       if(!internalTasks.length) return '';
@@ -7781,8 +7781,9 @@ function renderMyOnboarding(personId){
   return indivHtml + enrollments.map(enr=>{
     const path = byId(state.onboardingPaths, enr.pathId);
     if(!path) return '';
-    const totalSections = path.sections.length;
-    const doneSections = path.sections.filter(s=>sectionIsDone(personId,s)).length;
+    const visibleSections = path.sections.filter(s=>!s.internal || canEdit());
+    const totalSections = visibleSections.length;
+    const doneSections = visibleSections.filter(s=>sectionIsDone(personId,s)).length;
     let priorDone = true;
     return `
       <div class="card mt-3">
@@ -7792,7 +7793,7 @@ function renderMyOnboarding(personId){
         </div>
         <div class="progress-track mt-2"><div class="progress-fill" style="width:${totalSections?Math.round(doneSections/totalSections*100):0}%;"></div></div>
       </div>
-      ${path.sections.map(section=>{
+      ${visibleSections.map(section=>{
         const locked = !priorDone;
         const isDone = sectionIsDone(personId, section);
         const quiz = section.quizId ? byId(state.quizzes, section.quizId) : null;
@@ -7800,7 +7801,7 @@ function renderMyOnboarding(personId){
         const html = `
         <div class="ob-section ${locked?'locked':''}">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <strong>${section.title}</strong>
+            <strong>${section.title}</strong>${section.internal?` <span class="pill amber">Internal</span>`:''}
             ${isDone? `<span class="pill jade">Complete</span>` : locked? `<span class="pill gray">Locked</span>` : `<span class="pill amber">In progress</span>`}
           </div>
           ${section.tasks.filter(t=>!t.internal || canEdit()).map(t=>renderTaskRow(personId,t,locked)).join('')}
@@ -7935,12 +7936,17 @@ function renderSectionEditor(pathId, section, idx, total){
   const menuOpen = obAddMenuOpenFor===section.id;
   return `
     <div class="ob-section">
-      <div class="flex gap-2" style="align-items:center;margin-bottom:14px;">
+      <div class="flex gap-2" style="align-items:center;margin-bottom:6px;">
         <input type="text" value="${escAttr(section.title)}" onchange="updateSectionTitle('${pathId}','${section.id}',this.value)" style="margin:0;font-weight:700;font-size:15px;">
         <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',-1)" title="Move up">↑</span>
         <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',1)" title="Move down">↓</span>
         <span class="miniBtn" onclick="removeSection('${pathId}','${section.id}')" title="Remove section" style="color:var(--rust);">✕</span>
       </div>
+      <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;margin-bottom:14px;">
+        <input type="checkbox" style="width:auto;margin:0;" ${section.internal?'checked':''} onchange="toggleSectionInternal('${pathId}','${section.id}',this.checked)">
+        Internal section — the new hire never sees this at all
+      </label>
+      ${section.internal? `<div class="small mt-1" style="margin-bottom:12px;color:var(--slate-light);">Good for pre-boarding — ordering equipment, setting up accounts, anything your team does before their first day. This whole section is invisible to them, and won't block their own progress.</div>`:''}
       ${section.tasks.length? section.tasks.map(t=>{
         const meta = OB_TASK_TYPE_META[t.type] || {label:t.type, icon:'•', pill:'gray'};
         return `
@@ -8004,6 +8010,12 @@ function updateSectionTitle(pathId, sectionId, val){
   const path = byId(state.onboardingPaths, pathId);
   byId(path.sections, sectionId).title = val;
   saveState();
+}
+function toggleSectionInternal(pathId, sectionId, checked){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const path = byId(state.onboardingPaths, pathId);
+  byId(path.sections, sectionId).internal = checked;
+  saveState(); render();
 }
 function setSectionQuiz(pathId, sectionId, quizId){
   if(!canEdit()){ toast('Admins only'); return; }
