@@ -3335,23 +3335,24 @@ function renderPersonDetail(){
     </div>
     `}
     ${canEdit() ? (()=>{
-      const internalTasks = [];
+      const checkableTasks = [];
       enrollmentFor(p.id).forEach(enr=>{
         const path = byId(state.onboardingPaths, enr.pathId);
         if(!path) return;
         path.sections.forEach(section=>{
-          section.tasks.filter(t=>t.internal || section.internal).forEach(t=>internalTasks.push({task:t, pathName:path.name+(section.internal?' — '+section.title:'')}));
+          section.tasks.filter(t=>t.type==='custom'||t.type==='external').forEach(t=>checkableTasks.push({task:t, source:path.name+(section.internal?' — '+section.title:''), internal: !!(t.internal||section.internal)}));
         });
       });
-      if(!internalTasks.length) return '';
-      return `<div class="section-title">Internal Tasks <span class="small" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-light);">(hidden from ${p.name.split(' ')[0]} — for your team to handle)</span><span class="count">${internalTasks.length}</span></div>
+      if(!checkableTasks.length) return '';
+      return `<div class="section-title">Onboarding Path Tasks You Can Check Off<span class="small" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-light);"> — for anything your team completes on ${p.name.split(' ')[0]}'s behalf</span><span class="count">${checkableTasks.length}</span></div>
       <div class="card">
-        ${internalTasks.map(({task,pathName})=>{
+        ${checkableTasks.map(({task,source,internal})=>{
           const done = taskIsDone(p.id, task);
           return `<label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
             <input type="checkbox" style="width:auto;margin:0;" ${done?'checked':''} onchange="toggleCustomTask('${p.id}','${task.id}')">
             <span style="${done?'text-decoration:line-through;color:var(--slate-light);':''}">${task.title}</span>
-            <span class="small" style="color:var(--slate-light);margin-left:auto;">${pathName}</span>
+            ${internal?`<span class="pill amber">Internal</span>`:`<span class="small" style="color:var(--slate-light);">${p.name.split(' ')[0]} can also check this off</span>`}
+            <span class="small" style="color:var(--slate-light);margin-left:auto;">${source}</span>
           </label>`;
         }).join('')}
       </div>`;
