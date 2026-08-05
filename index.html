@@ -1761,7 +1761,10 @@ function renderCompanyHistoryTab(){
             ${m.description?`<div class="small mt-1">${m.description}</div>`:''}
             ${((m.photoUrls||[]).length || (m.photoKeys||[]).length)? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
               ${(m.photoUrls||[]).map(url=>`<img src="${escAttr(url)}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(url)}','_blank')">`).join('')}
-              ${(m.photoKeys||[]).map(k=>`<img data-milestone-photo-key="${k}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+              ${(m.photoKeys||[]).map(k=>`<div style="position:relative;width:90px;height:90px;">
+                <img data-milestone-photo-key="${k}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);position:absolute;" onclick="if(this.src)window.open(this.src,'_blank')">
+                <div class="fallback-hint small" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;color:var(--slate-light);font-size:9.5px;line-height:1.3;pointer-events:none;">📷 Not on this device</div>
+              </div>`).join('')}
             </div>`:''}
           </div>
         </div>
@@ -1873,21 +1876,21 @@ function renderCompanyProjectsTab(){
         const restUrls = (p.photoUrls||[]).slice(coverUrl?1:0);
         const restKeys = (p.photoKeys||[]).slice(coverKey?1:0);
         return `
-        <div class="cs-project-card">
-          ${coverUrl? `<img src="${escAttr(coverUrl)}" class="cs-project-photo" style="object-fit:cover;">` : coverKey? `<img data-milestone-photo-key="${coverKey}" class="cs-project-photo" style="object-fit:cover;">` : `<div class="cs-project-photo" style="display:flex;align-items:center;justify-content:center;font-size:32px;">🏗️</div>`}
+        <div class="cs-project-card" ${canEditCompanyStory()?`style="cursor:pointer;" onclick="openProjectModal('${p.id}')"`:''}>
+          ${coverUrl? `<img src="${escAttr(coverUrl)}" class="cs-project-photo" style="object-fit:cover;">` : coverKey? `<div class="cs-project-photo" style="position:relative;"><img data-milestone-photo-key="${coverKey}" style="width:100%;height:100%;object-fit:cover;position:absolute;"><div class="small" style="position:relative;color:var(--slate-light);text-align:center;padding:20px;">📷 Not available on this device — re-upload from wherever this was originally added</div></div>` : `<div class="cs-project-photo" style="display:flex;align-items:center;justify-content:center;font-size:32px;">🏗️</div>`}
           <div style="padding:16px 18px;">
             <div class="flex" style="justify-content:space-between;align-items:flex-start;">
               <strong>${p.name}</strong>
               ${canEditCompanyStory()?`<div class="flex gap-1">
-                <span class="miniBtn" onclick="openProjectModal('${p.id}')" title="Edit">✎</span>
-                <span class="miniBtn" onclick="deleteProject('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>
+                <span class="miniBtn" onclick="event.stopPropagation();openProjectModal('${p.id}')" title="Edit">✎</span>
+                <span class="miniBtn" onclick="event.stopPropagation();deleteProject('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>
               </div>`:''}
             </div>
             <div class="small mt-1" style="color:var(--bronze-dark);font-weight:600;">${fmtDate(p.completedDate)}</div>
             ${p.description?`<div class="small mt-2">${p.description}</div>`:''}
             ${(restUrls.length||restKeys.length)? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-              ${restUrls.map(url=>`<img src="${escAttr(url)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(url)}','_blank')">`).join('')}
-              ${restKeys.map(k=>`<img data-milestone-photo-key="${k}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+              ${restUrls.map(url=>`<img src="${escAttr(url)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="event.stopPropagation();window.open('${escJs(url)}','_blank')">`).join('')}
+              ${restKeys.map(k=>`<img data-milestone-photo-key="${k}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="event.stopPropagation();if(this.src)window.open(this.src,'_blank')" title="Only visible on the device this was uploaded from">`).join('')}
             </div>`:''}
           </div>
         </div>
@@ -2242,6 +2245,38 @@ function deleteCompanyEvent(id){
     saveState(); toast('Removed'); render();
   });
 }
+function extractMentions(text){
+  const mentioned = [];
+  state.people.forEach(p=>{
+    if(p.status==='offboarded') return;
+    const escapedFull = p.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const firstName = p.name.split(' ')[0];
+    const escapedFirst = firstName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const fullPattern = new RegExp('@'+escapedFull+'\\b','i');
+    const firstPattern = new RegExp('@'+escapedFirst+'\\b','i');
+    if(fullPattern.test(text) || firstPattern.test(text)) mentioned.push(p.id);
+  });
+  return [...new Set(mentioned)];
+}
+function highlightMentions(escapedText, mentionedIds){
+  let result = escapedText;
+  (mentionedIds||[]).forEach(id=>{
+    const p = byId(state.people, id);
+    if(!p) return;
+    const firstName = p.name.split(' ')[0];
+    const fullPattern = new RegExp('@'+p.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi');
+    const firstPattern = new RegExp('@'+firstName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi');
+    const chip = `<span class="pill bronze" style="padding:1px 7px;">@${escHtml(p.name)}</span>`;
+    result = result.replace(fullPattern, chip).replace(firstPattern, chip);
+  });
+  return result;
+}
+function notifyMentioned(mentionedIds, message, relatedType, relatedId){
+  (mentionedIds||[]).forEach(id=>{
+    if(id===currentUser().id) return;
+    createNotification('mention', message, {targetPersonId:id, relatedType, relatedId});
+  });
+}
 const BOARD_CATEGORIES = {
   idea: {label:'Idea', icon:'💡', pill:'bronze'},
   question: {label:'Question', icon:'❓', pill:'gray'},
@@ -2277,7 +2312,7 @@ function renderBoardPostCard(p){
       </div>
       ${canRemovePost?`<span class="miniBtn" onclick="deleteBoardPost('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
     </div>
-    <div class="mt-2" style="font-size:14.5px;line-height:1.6;">${escHtml(p.text)}</div>
+    <div class="mt-2" style="font-size:14.5px;line-height:1.6;">${highlightMentions(escHtml(p.text), p.mentions)}</div>
     ${(p.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
       ${p.attachments.map(a=>a.type.startsWith('image/')
         ? `<img src="${escAttr(a.url)}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="window.open('${escJs(a.url)}','_blank')">`
@@ -2295,14 +2330,14 @@ function renderBoardPostCard(p){
           ${avatarHtml(rAuthor, 24, 9)}
           <div style="flex:1;">
             <div class="small" style="font-weight:600;">${rAuthor?rAuthor.name:'Someone'} <span style="font-weight:400;color:var(--slate-light);">· ${fmtDate(r.createdAt.slice(0,10))}</span></div>
-            <div class="small mt-1">${escHtml(r.text)}</div>
+            <div class="small mt-1">${highlightMentions(escHtml(r.text), r.mentions)}</div>
           </div>
           ${canRemoveReply?`<span class="miniBtn" onclick="deleteBoardReply('${p.id}','${r.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
         </div>`;
       }).join('')}
     </div>`:''}
     ${replyOpen? `<div class="flex gap-2 mt-3">
-      <input type="text" id="m-board-reply-${p.id}" placeholder="Write a reply..." style="margin:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitBoardReply('${p.id}');}">
+      <input type="text" id="m-board-reply-${p.id}" placeholder="Write a reply... (type @Name to tag someone)" style="margin:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitBoardReply('${p.id}');}">
       <button class="btn bronze sm" onclick="submitBoardReply('${p.id}')">Send</button>
     </div>`:''}
   </div>`;
@@ -2316,7 +2351,7 @@ function openBoardPostModal(){
           <label>Category</label>
           <select id="m-board-category">${Object.keys(BOARD_CATEGORIES).map(k=>`<option value="${k}">${BOARD_CATEGORIES[k].icon} ${BOARD_CATEGORIES[k].label}</option>`).join('')}</select>
           <label>What's on your mind?</label>
-          <textarea id="m-board-text" style="min-height:100px;" placeholder="Share an idea, ask a question, celebrate a win, flag something you need help with..."></textarea>
+          <textarea id="m-board-text" style="min-height:100px;" placeholder="Share an idea, ask a question, celebrate a win, flag something you need help with... Type @Name to tag someone."></textarea>
           <label class="mt-2">Photo or file <span class="small" style="font-weight:400;">(optional)</span></label>
           <input type="file" id="m-board-attachments" multiple>
         </div>
@@ -2328,10 +2363,13 @@ async function submitBoardPost(el){
   const text = document.getElementById('m-board-text').value.trim();
   if(!text){ toast('Write something first'); return; }
   const attachments = await uploadAttachmentsToStorage(document.getElementById('m-board-attachments'), 'board');
+  const mentions = extractMentions(text);
+  const id = 'bp'+Date.now();
   state.companyBoardPosts.push({
-    id: 'bp'+Date.now(), authorId: currentUser().id, category: document.getElementById('m-board-category').value,
-    text, attachments, createdAt: new Date().toISOString(), replies: []
+    id, authorId: currentUser().id, category: document.getElementById('m-board-category').value,
+    text, attachments, mentions, createdAt: new Date().toISOString(), replies: []
   });
+  notifyMentioned(mentions, `${currentUser().name} tagged you in a Team Board post`, 'boardPost', id);
   saveState(); closeModal(el); toast('Posted'); render();
 }
 function deleteBoardPost(id){
@@ -2347,8 +2385,10 @@ function submitBoardReply(postId){
   const text = input.value.trim();
   if(!text){ return; }
   const p = byId(state.companyBoardPosts, postId);
+  const mentions = extractMentions(text);
   p.replies = p.replies || [];
-  p.replies.push({id:'br'+Date.now(), authorId: currentUser().id, text, createdAt: new Date().toISOString()});
+  p.replies.push({id:'br'+Date.now(), authorId: currentUser().id, text, mentions, createdAt: new Date().toISOString()});
+  notifyMentioned(mentions, `${currentUser().name} tagged you in a reply on the Team Board`, 'boardPost', postId);
   saveState(); toast('Replied'); render();
 }
 function deleteBoardReply(postId, replyId){
@@ -3294,6 +3334,28 @@ function renderPersonDetail(){
       })()}
     </div>
     `}
+    ${canEdit() ? (()=>{
+      const internalTasks = [];
+      enrollmentFor(p.id).forEach(enr=>{
+        const path = byId(state.onboardingPaths, enr.pathId);
+        if(!path) return;
+        path.sections.forEach(section=>{
+          section.tasks.filter(t=>t.internal).forEach(t=>internalTasks.push({task:t, pathName:path.name}));
+        });
+      });
+      if(!internalTasks.length) return '';
+      return `<div class="section-title">Internal Tasks <span class="small" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-light);">(hidden from ${p.name.split(' ')[0]} — for your team to handle)</span><span class="count">${internalTasks.length}</span></div>
+      <div class="card">
+        ${internalTasks.map(({task,pathName})=>{
+          const done = taskIsDone(p.id, task);
+          return `<label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+            <input type="checkbox" style="width:auto;margin:0;" ${done?'checked':''} onchange="toggleCustomTask('${p.id}','${task.id}')">
+            <span style="${done?'text-decoration:line-through;color:var(--slate-light);':''}">${task.title}</span>
+            <span class="small" style="color:var(--slate-light);margin-left:auto;">${pathName}</span>
+          </label>`;
+        }).join('')}
+      </div>`;
+    })() : ''}
     <div class="grid cols-3">
       <div class="card"><div class="stat-label">Seats held</div><div style="font-weight:700;margin-top:4px;">${seats.length}</div></div>
       <div class="card"><div class="stat-label">Start date</div><div style="font-weight:700;margin-top:4px;">${fmtDate(p.startDate)}</div></div>
@@ -7434,7 +7496,7 @@ function individualTasksFor(personId){
   return (state.individualTasks||[]).filter(t=>t.personId===personId);
 }
 function renderIndividualTasksSection(personId, canManage){
-  const tasks = individualTasksFor(personId);
+  const tasks = individualTasksFor(personId).filter(t=>!t.internal || canManage);
   return `
     <div class="subsection-title">Individually assigned tasks<span class="count">${tasks.length}</span>
       ${canManage?`<span class="flex gap-2" style="margin-left:auto;"><span class="btn secondary sm" style="text-transform:none;letter-spacing:0;font-weight:600;" onclick="importRoleTasksModal('individual','${personId}')">⤵ Import from Role</span><span class="btn secondary sm" style="text-transform:none;letter-spacing:0;font-weight:600;" onclick="addIndividualTaskModal('${personId}')">+ Add Task</span></span>`:''}
@@ -7442,7 +7504,7 @@ function renderIndividualTasksSection(personId, canManage){
     ${tasks.length? `<div class="ob-section" style="margin-bottom:0;">
       ${tasks.map(t=>`
         <div class="flex" style="align-items:flex-start;gap:8px;">
-          <div style="flex:1;">${renderTaskRow(personId, t, false)}</div>
+          <div style="flex:1;">${renderTaskRow(personId, t, false)}${t.internal?` <span class="pill amber" style="margin-left:6px;">Internal</span>`:''}</div>
           ${canManage?`<span class="miniBtn" onclick="removeIndividualTask('${t.id}')" title="Remove">✕</span>`:''}
         </div>
       `).join('')}
@@ -7525,7 +7587,12 @@ function addIndividualTaskModal(personId, type){
   } else {
     openModal(`<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal">
       <div class="modal-head"><strong>Add Custom Task</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
-      <div class="modal-body"><label>Title</label><input type="text" id="m-ind-title" placeholder="e.g. Shadow a job site walk"><label>Description (optional)</label><textarea id="m-ind-desc"></textarea></div>
+      <div class="modal-body"><label>Title</label><input type="text" id="m-ind-title" placeholder="e.g. Shadow a job site walk"><label>Description (optional)</label><textarea id="m-ind-desc"></textarea>
+        <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+          <input type="checkbox" id="m-ind-internal" style="width:auto;margin:0;">
+          Internal only — hide this from them
+        </label>
+      </div>
       <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveIndividualTask('${personId}','custom',this)">Add</button></div>
     </div></div>`);
   }
@@ -7557,7 +7624,7 @@ function saveIndividualTask(personId, type, el){
   } else {
     const title = document.getElementById('m-ind-title').value.trim();
     if(!title){ toast('Title required'); return; }
-    task.title = title; task.description = document.getElementById('m-ind-desc').value.trim();
+    task.title = title; task.description = document.getElementById('m-ind-desc').value.trim(); task.internal = document.getElementById('m-ind-internal')?.checked||false;
   }
   state.individualTasks = state.individualTasks || [];
   state.individualTasks.push(task);
@@ -7736,7 +7803,7 @@ function renderMyOnboarding(personId){
             <strong>${section.title}</strong>
             ${isDone? `<span class="pill jade">Complete</span>` : locked? `<span class="pill gray">Locked</span>` : `<span class="pill amber">In progress</span>`}
           </div>
-          ${section.tasks.map(t=>renderTaskRow(personId,t,locked)).join('')}
+          ${section.tasks.filter(t=>!t.internal || canEdit()).map(t=>renderTaskRow(personId,t,locked)).join('')}
           ${quiz? `<div class="ob-quiz-gate">
             <div class="small">Optional test: <strong>${quiz.title}</strong> (passing score ${quiz.passingScore}%)</div>
             ${sectionQuizPassed(personId, quiz.id)? `<span class="pill jade">Passed</span>` : `<button class="btn ${tasksDone && !locked?'bronze':'secondary'} sm" ${(!tasksDone||locked)?'disabled style="opacity:.5;"':''} onclick="navigate('quizTake',{id:'${quiz.id}'})">Take Test</button>`}
@@ -7879,7 +7946,7 @@ function renderSectionEditor(pathId, section, idx, total){
         return `
         <div class="ob-task">
           <div style="flex:1;">
-            <span class="pill ${meta.pill}">${meta.icon} ${meta.label}</span> <span style="font-weight:600;">${t.title}</span>
+            <span class="pill ${meta.pill}">${meta.icon} ${meta.label}</span> <span style="font-weight:600;">${t.title}</span>${t.internal?` <span class="pill amber">Internal</span>`:''}
             ${t.description?`<div class="small mt-1" style="color:var(--slate-light);">${t.description}</div>`:''}
           </div>
           <div class="flex gap-1">
@@ -7960,7 +8027,11 @@ function editTaskModal(pathId, sectionId, taskId){
   let body;
   if(t.type==='custom'){
     body = `<label>Task title</label><input type="text" id="m-edit-task-title" value="${escAttr(t.title)}">
-      <label>Description (optional)</label><textarea id="m-edit-task-desc">${t.description||''}</textarea>`;
+      <label>Description (optional)</label><textarea id="m-edit-task-desc">${t.description||''}</textarea>
+      <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+        <input type="checkbox" id="m-edit-task-internal" style="width:auto;margin:0;" ${t.internal?'checked':''}>
+        Internal only — hide this from the new hire
+      </label>`;
   } else if(t.type==='external'){
     body = `<label>Title</label><input type="text" id="m-edit-task-title" value="${escAttr(t.title)}">
       <label>Link</label><input type="text" id="m-edit-task-url" value="${escAttr(t.url)}">`;
@@ -7994,6 +8065,7 @@ function saveTaskEdit(pathId, sectionId, taskId, el){
   if(t.type==='custom'){
     t.title = document.getElementById('m-edit-task-title').value.trim() || t.title;
     t.description = document.getElementById('m-edit-task-desc').value.trim();
+    t.internal = document.getElementById('m-edit-task-internal').checked;
   } else if(t.type==='external'){
     t.title = document.getElementById('m-edit-task-title').value.trim() || t.title;
     t.url = document.getElementById('m-edit-task-url').value.trim();
@@ -8093,6 +8165,11 @@ function addTaskModal(pathId, sectionId, type){
           <div class="modal-body">
             <label>Task title</label><input type="text" id="m-task-title" placeholder="e.g. Shadow a job site walk">
             <label>Description (optional)</label><textarea id="m-task-desc"></textarea>
+            <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+              <input type="checkbox" id="m-task-internal" style="width:auto;margin:0;">
+              Internal only — hide this from the new hire
+            </label>
+            <div class="small mt-1">For things your team has to do behind the scenes — ordering equipment, setting up payroll — not something the new hire sees or checks off themselves.</div>
           </div>
           <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveTaskToSection('${pathId}','${sectionId}','custom',this)">Add</button></div>
         </div>
@@ -8127,7 +8204,7 @@ function saveTaskToSection(pathId, sectionId, type, el){
   } else {
     const title = document.getElementById('m-task-title').value.trim();
     if(!title){ toast('Title required'); return; }
-    task = {id:'obt'+Date.now(), type:'custom', title, description:document.getElementById('m-task-desc').value.trim()};
+    task = {id:'obt'+Date.now(), type:'custom', title, description:document.getElementById('m-task-desc').value.trim(), internal:document.getElementById('m-task-internal')?.checked||false};
   }
   section.tasks.push(task);
   saveState(); closeModal(el); render();
