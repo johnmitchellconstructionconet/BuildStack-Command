@@ -2123,6 +2123,7 @@ function renderCompanyEventsTab(){
   `;
 }
 let showPastEvents = false;
+let showCompletedJobsList = false;
 function openEventModal(id){
   if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const e = id ? byId(state.companyStory.events, id) : null;
@@ -8746,13 +8747,14 @@ function renderCompanySettings(){
       <label class="mt-2">Jobs completed</label>
       <div class="small mt-1" style="margin-bottom:8px;">Tracked by job name, so nothing gets counted twice — and you've got a real list to check against your actual job records if a number ever looks off.</div>
       <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;">${(state.companyStory.completedJobs||[]).length}</div>
-      ${(state.companyStory.completedJobs||[]).length? `<div class="tbl-card mt-2"><table>
+      ${(state.companyStory.completedJobs||[]).length? `<div class="small mt-2" style="cursor:pointer;font-weight:600;" onclick="showCompletedJobsList=!showCompletedJobsList;render();">${showCompletedJobsList?'▾':'▸'} View completed jobs list</div>
+      ${showCompletedJobsList? `<div class="tbl-card mt-2"><table>
         <tr><th>Job name</th><th>Completed</th><th>Notes</th><th></th></tr>
         ${[...state.companyStory.completedJobs].sort((a,b)=>new Date(b.completedDate)-new Date(a.completedDate)).map(j=>`<tr>
           <td><strong>${j.jobName}</strong></td><td>${fmtDate(j.completedDate)}</td><td class="small">${j.notes||'—'}</td>
           <td><span class="miniBtn" onclick="deleteCompletedJob('${j.id}')" title="Delete" style="color:var(--rust);">✕</span></td>
         </tr>`).join('')}
-      </table></div>`:''}
+      </table></div>`:''}`:''}
       <button class="btn secondary sm mt-2" onclick="openLogCompletedJobModal()">+ Log Completed Job</button>
       <label class="mt-3">Charitable donations</label>
       <div class="small mt-1" style="margin-bottom:8px;">A running total, not a number to retype — log each gift and the total adds up on its own.</div>
