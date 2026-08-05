@@ -7914,20 +7914,37 @@ function renderOnboardingPathEditor(){
     ${path.sections.map((s,i)=>renderSectionEditor(path.id, s, i, path.sections.length)).join('')}
     <button class="btn secondary" onclick="addOnboardingSection('${path.id}')">+ Add Section</button>
     <div class="section-title">Currently enrolled<span class="count">${enrolled.length}</span></div>
-    ${enrolled.length? `<div class="small mt-1" style="margin-bottom:10px;">Check off Internal and other manually-completed tasks from each person's own profile page — click their name below.</div>
+    ${enrolled.length? `<div class="small mt-1" style="margin-bottom:10px;">Click "Tasks" to check off Internal and other manually-completed tasks for that person, right here.</div>
     <div class="tbl-card"><table><tr><th>Person</th><th>Started</th><th>Progress</th><th></th></tr>
       ${enrolled.map(e=>{
         const p = byId(state.people, e.personId);
         const done = path.sections.filter(s=>sectionIsDone(e.personId,s)).length;
+        const expanded = obEnrolleeTasksOpenFor===e.id;
+        const checkableTasks = [];
+        path.sections.forEach(section=>{
+          section.tasks.filter(t=>t.type==='custom'||t.type==='external').forEach(t=>checkableTasks.push({task:t, internal: !!(t.internal||section.internal), sectionTitle:section.title}));
+        });
         return `<tr>
           <td class="row-click" onclick="navigate('personDetail',{id:'${e.personId}'})">${p?.name||'—'}</td>
           <td>${fmtDate(e.startDate)}</td><td>${done}/${path.sections.length} sections</td>
-          <td><span class="btn secondary sm" onclick="navigate('personDetail',{id:'${e.personId}'})">✓ Check off tasks</span> <span class="btn secondary sm" onclick="unenrollPerson('${e.id}')">Remove</span></td>
-        </tr>`;
+          <td><span class="btn secondary sm" onclick="obEnrolleeTasksOpenFor=${expanded?'null':`'${e.id}'`};render();">${expanded?'▾':'▸'} Tasks</span> <span class="btn secondary sm" onclick="unenrollPerson('${e.id}')">Remove</span></td>
+        </tr>
+        ${expanded? `<tr><td colspan="4" style="background:var(--paper);">
+          ${checkableTasks.length? checkableTasks.map(({task,internal,sectionTitle})=>{
+            const taskDone = taskIsDone(e.personId, task);
+            return `<label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+              <input type="checkbox" style="width:auto;margin:0;" ${taskDone?'checked':''} onchange="toggleCustomTask('${e.personId}','${task.id}')">
+              <span style="${taskDone?'text-decoration:line-through;color:var(--slate-light);':''}">${task.title}</span>
+              ${internal?`<span class="pill amber">Internal</span>`:''}
+              <span class="small" style="color:var(--slate-light);margin-left:auto;">${sectionTitle}</span>
+            </label>`;
+          }).join('') : `<div class="small">No manually-checked tasks in this path — everything here completes automatically (signatures, quizzes, etc).</div>`}
+        </td></tr>`:''}`;
       }).join('')}
-    </table></div>` : `<div class="empty"><h3>Nobody enrolled yet</h3><p>Enroll a new hire to auto-assign every linked topic and policy in this path. Once they're enrolled, come back here or go to their profile page directly — that's where you and they check off tasks, including anything marked Internal.</p></div>`}
+    </table></div>` : `<div class="empty"><h3>Nobody enrolled yet</h3><p>Enroll a new hire to auto-assign every linked topic and policy in this path. Once they're enrolled, you'll be able to check off their tasks right here.</p></div>`}
   `;
 }
+let obEnrolleeTasksOpenFor = null;
 const OB_TASK_TYPE_META = {
   topic: {label:'Training', icon:'📘', pill:'jade'},
   policy: {label:'Policy', icon:'📝', pill:'bronze'},
