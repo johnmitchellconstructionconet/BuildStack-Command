@@ -8325,13 +8325,13 @@ function renderFormBuilder(){
         <img src="${formBuilderState.backgroundImage}">
         <div class="fb-overlay" onclick="handleBuilderCanvasClick(event)">
           ${formBuilderState.fields.map((f,i)=>`
-            <div class="fb-field-marker" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
-              <span class="fb-field-label">${(FORM_FIELD_TYPES[f.type]||FORM_FIELD_TYPES.text).icon} ${f.label}<span class="fb-field-remove" onclick="event.stopPropagation();removeBuilderField(${i});">✕</span></span>
+            <div class="fb-field-marker" data-field-marker="${f.id}" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;cursor:move;" onmousedown="startFieldDrag(event,'${f.id}')">
+              <span class="fb-field-label">${(FORM_FIELD_TYPES[f.type]||FORM_FIELD_TYPES.text).icon} ${f.label}<span class="fb-field-remove" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();removeBuilderField(${i});">✕</span></span>
             </div>
           `).join('')}
         </div>
       </div>
-      <div class="small mt-2" style="color:var(--slate-light);">Click anywhere on the document to drop a new field there. Drag isn't supported yet — remove and re-place if it's off.</div>
+      <div class="small mt-2" style="color:var(--slate-light);">Click anywhere on the document to drop a new field there. Drag an existing field to move it, or click it (without dragging) to edit its type and label.</div>
     `}
   `;
 }
@@ -8388,6 +8388,72 @@ function confirmAddField(xPct, yPct, el){
   closeModal(el); render();
 }
 function removeBuilderField(index){ formBuilderState.fields.splice(index,1); render(); }
+let fbDragState = null;
+function startFieldDrag(e, fieldId){
+  e.preventDefault();
+  e.stopPropagation();
+  const rect = document.getElementById('fb-canvas').getBoundingClientRect();
+  fbDragState = { fieldId, rect, startX: e.clientX, startY: e.clientY, moved: false };
+  document.onmousemove = onFieldDragMove;
+  document.onmouseup = onFieldDragEnd;
+}
+function onFieldDragMove(e){
+  if(!fbDragState) return;
+  if(Math.abs(e.clientX-fbDragState.startX)>3 || Math.abs(e.clientY-fbDragState.startY)>3) fbDragState.moved = true;
+  if(!fbDragState.moved) return;
+  const xPct = Math.max(0, Math.min(100, ((e.clientX - fbDragState.rect.left) / fbDragState.rect.width) * 100));
+  const yPct = Math.max(0, Math.min(100, ((e.clientY - fbDragState.rect.top) / fbDragState.rect.height) * 100));
+  const field = byId(formBuilderState.fields, fbDragState.fieldId);
+  if(field){ field.xPct = xPct; field.yPct = yPct; }
+  const marker = document.querySelector(`[data-field-marker="${fbDragState.fieldId}"]`);
+  if(marker){ marker.style.left = xPct+'%'; marker.style.top = yPct+'%'; }
+}
+function onFieldDragEnd(e){
+  document.onmousemove = null;
+  document.onmouseup = null;
+  const wasDrag = fbDragState && fbDragState.moved;
+  const fieldId = fbDragState ? fbDragState.fieldId : null;
+  fbDragState = null;
+  if(wasDrag) render();
+  else if(fieldId) openEditFieldModal(fieldId);
+}
+function openEditFieldModal(fieldId){
+  const f = byId(formBuilderState.fields, fieldId);
+  if(!f) return;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head"><strong>Edit Field</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Type</label>
+          <select id="m-field-type-edit">
+            ${Object.keys(FORM_FIELD_TYPES).map(k=>`<option value="${k}" ${f.type===k?'selected':''}>${FORM_FIELD_TYPES[k].icon} ${FORM_FIELD_TYPES[k].label}</option>`).join('')}
+          </select>
+          <label>Label</label><input type="text" id="m-field-label-edit" value="${escAttr(f.label)}">
+          <label>Width <span class="small" style="font-weight:400;">(% of document width)</span></label><input type="text" id="m-field-width-edit" value="${f.widthPct}">
+        </div>
+        <div class="modal-foot">
+          <button class="btn danger" style="margin-right:auto;" onclick="removeFieldById('${fieldId}');closeModal(this)">Delete</button>
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="confirmEditField('${fieldId}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function confirmEditField(fieldId, el){
+  const f = byId(formBuilderState.fields, fieldId);
+  if(!f) return;
+  const label = document.getElementById('m-field-label-edit').value.trim();
+  if(!label){ toast('Give the field a label'); return; }
+  f.type = document.getElementById('m-field-type-edit').value;
+  f.label = label;
+  f.widthPct = parseFloat(document.getElementById('m-field-width-edit').value) || f.widthPct;
+  closeModal(el); render();
+}
+function removeFieldById(fieldId){
+  formBuilderState.fields = formBuilderState.fields.filter(f=>f.id!==fieldId);
+  render();
+}
 function saveFillableForm(){
   if(!canEdit()){ toast('Admins only'); return; }
   if(!formBuilderState.name.trim()){ toast('Name the form first'); return; }
