@@ -213,6 +213,8 @@ tr:last-child td{border-bottom:none;}
 .cs-timeline-title{font-weight:700;font-size:14.5px;}
 .cs-goal-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:16px 18px;box-shadow:var(--shadow-soft);margin-bottom:12px;}
 .cs-roadmap-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:14px 16px;box-shadow:var(--shadow-soft);margin-bottom:10px;}
+.cs-project-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);overflow:hidden;box-shadow:var(--shadow-soft);}
+.cs-project-photo{width:100%;height:180px;display:block;background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));color:#fff;}
 
 .empty{text-align:center;padding:50px 20px;color:var(--slate);}
 .empty h3{color:var(--ink);margin-bottom:6px;font-size:15px;}
@@ -604,10 +606,25 @@ function seedData(){
       mission: '',
       vision: '',
       founded: '2019-01-01',
-      timeline: [],
-      goals: [],
-      roadmap: []
+      tradePartnersCount: 0,
+      timeline: [
+        {id:'cms_sample1', date:'2019-01-01', title:'[Sample] Company founded', icon:'🚀', description:'Replace this with your actual founding story — swap the date and details from Edit.', photoKeys:[]},
+        {id:'cms_sample2', date:'2022-06-15', title:'[Sample] First major project completed', icon:'🏗️', description:'A good spot for a signature job, a big win, or a company outing photo.', photoKeys:[]},
+        {id:'cms_sample3', date:'2024-01-10', title:'[Sample] Reached 5 team members', icon:'🎉', description:'Growth milestones, new hires, new locations — whatever marked real progress.', photoKeys:[]}
+      ],
+      goals: [
+        {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this is just here to show the layout.', timeframe:'short', status:'in_progress', progress:40, targetDate:null},
+        {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — replace with your real growth target.', timeframe:'long', status:'not_started', progress:0, targetDate:null}
+      ],
+      roadmap: [
+        {id:'rm_sample1', title:'[Sample] Roll out this platform company-wide', description:'Replace with what you\u2019re actually working on.', quarter:'', status:'in_progress'},
+        {id:'rm_sample2', title:'[Sample] Something planned next', description:'', quarter:'', status:'planned'}
+      ],
+      projects: [
+        {id:'proj_sample1', name:'[Sample] Completed Project', completedDate:'2024-08-01', description:'Replace with a real finished job — a signature project, a tough one you\u2019re proud of, whatever tells the story best.', photoKeys:[]}
+      ]
     },
+    _companyStorySamplesAddedV1: true,
     templateSignatures: [],
     individualTasks: [],
     gearCatalog: [
@@ -792,7 +809,40 @@ function migrateState(parsed){
         const existingCats = [...new Set((parsed.templates||[]).map(t=>t.category).filter(Boolean))];
         parsed.templateCategories = existingCats.length ? existingCats : ['Contracts & Forms','Job Templates','HR & Onboarding'];
       }
-      if(!parsed.companyStory) parsed.companyStory = { mission:'', vision:'', founded:'2019-01-01', timeline:[], goals:[], roadmap:[] };
+      if(!parsed.companyStory) parsed.companyStory = { mission:'', vision:'', founded:'2019-01-01', tradePartnersCount:0, timeline:[], goals:[], roadmap:[], projects:[] };
+      if(!parsed.companyStory.projects) parsed.companyStory.projects = [];
+      if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
+      if(parsed.tradePartners) delete parsed.tradePartners;
+      if(!parsed._tradePartnersProjectsSamplesAddedV1){
+        if(!parsed.companyStory.projects.length){
+          parsed.companyStory.projects.push(
+            {id:'proj_sample1', name:'[Sample] Completed Project', completedDate:'2024-08-01', description:'Replace with a real finished job — a signature project, a tough one you\u2019re proud of, whatever tells the story best.', photoKeys:[]}
+          );
+        }
+        parsed._tradePartnersProjectsSamplesAddedV1 = true;
+      }
+      if(!parsed._companyStorySamplesAddedV1){
+        if(!parsed.companyStory.timeline.length){
+          parsed.companyStory.timeline.push(
+            {id:'cms_sample1', date: parsed.companyStory.founded || '2019-01-01', title:'[Sample] Company founded', icon:'🚀', description:'Replace this with your actual founding story — swap the date and details from Edit.', photoKeys:[]},
+            {id:'cms_sample2', date:'2022-06-15', title:'[Sample] First major project completed', icon:'🏗️', description:'A good spot for a signature job, a big win, or a company outing photo.', photoKeys:[]},
+            {id:'cms_sample3', date:'2024-01-10', title:'[Sample] Reached 5 team members', icon:'🎉', description:'Growth milestones, new hires, new locations — whatever marked real progress.', photoKeys:[]}
+          );
+        }
+        if(!parsed.companyStory.goals.length){
+          parsed.companyStory.goals.push(
+            {id:'goal_sample1', title:'[Sample] Fill out onboarding for every role', description:'Replace with a real short-term goal — this is just here to show the layout.', timeframe:'short', status:'in_progress', progress:40, targetDate:null},
+            {id:'goal_sample2', title:'[Sample] Expand into a new market', description:'A good long-term example — replace with your real growth target.', timeframe:'long', status:'not_started', progress:0, targetDate:null}
+          );
+        }
+        if(!parsed.companyStory.roadmap.length){
+          parsed.companyStory.roadmap.push(
+            {id:'rm_sample1', title:'[Sample] Roll out this platform company-wide', description:'Replace with what you\u2019re actually working on.', quarter:'', status:'in_progress'},
+            {id:'rm_sample2', title:'[Sample] Something planned next', description:'', quarter:'', status:'planned'}
+          );
+        }
+        parsed._companyStorySamplesAddedV1 = true;
+      }
       (parsed.templates||[]).forEach(t=>{ if(t.requiresSignature===undefined) t.requiresSignature = false; });
       if(!parsed.templateSignatures) parsed.templateSignatures = [];
       if(!parsed.gearCatalog) parsed.gearCatalog = [];
@@ -1587,6 +1637,7 @@ function render(){
   c.innerHTML = (renderers[currentView]||renderDashboard)();
   if(currentView==='orgchart'){ requestAnimationFrame(drawOrgConnectors); }
   if(currentView==='personDetail'){ hydrateBioPhotos(); }
+  if(currentView==='companyStory'){ hydrateMilestonePhotos(); }
 }
 async function hydrateBioPhotos(){
   const imgs = document.querySelectorAll('img[data-bio-photo-key]');
@@ -1614,12 +1665,15 @@ function companyYearsInBusiness(){
   const ms = new Date() - new Date(founded+'T00:00:00');
   return Math.max(0, ms / (1000*60*60*24*365.25));
 }
+function canEditCompanyStory(){ return canEdit() && workMode==='admin'; }
 function renderCompanyStory(){
   const cs = state.companyStory;
   const years = companyYearsInBusiness();
   const teamSize = state.people.filter(p=>p.status!=='offboarded').length;
   const locCount = state.locations.length;
   const sopCount = state.topics.filter(t=>t.status!=='Draft').length;
+  const partnerCount = state.companyStory.tradePartnersCount || 0;
+  const projectCount = cs.projects.length;
   const storyTab = companyStoryTab;
   return `
     <div class="cs-hero">
@@ -1630,6 +1684,8 @@ function renderCompanyStory(){
           ${years!=null?`<div class="cs-stat"><div class="cs-stat-num">${years<1?'<1':Math.floor(years)}</div><div class="cs-stat-label">Year${years>=2?'s':''} in business</div></div>`:''}
           <div class="cs-stat"><div class="cs-stat-num">${teamSize}</div><div class="cs-stat-label">Team members</div></div>
           <div class="cs-stat"><div class="cs-stat-num">${locCount}</div><div class="cs-stat-label">Location${locCount!==1?'s':''}</div></div>
+          <div class="cs-stat"><div class="cs-stat-num">${partnerCount}</div><div class="cs-stat-label">Trade partners onboarded</div></div>
+          <div class="cs-stat"><div class="cs-stat-num">${projectCount}</div><div class="cs-stat-label">Project${projectCount!==1?'s':''} completed</div></div>
           <div class="cs-stat"><div class="cs-stat-num">${sopCount}</div><div class="cs-stat-label">Processes documented</div></div>
         </div>
       </div>
@@ -1637,33 +1693,29 @@ function renderCompanyStory(){
     <div class="tabs mt-3">
       <div class="tab ${storyTab==='overview'?'active':''}" onclick="companyStoryTab='overview';render();">Mission &amp; Vision</div>
       <div class="tab ${storyTab==='history'?'active':''}" onclick="companyStoryTab='history';render();">Where We Came From</div>
+      <div class="tab ${storyTab==='projects'?'active':''}" onclick="companyStoryTab='projects';render();">Projects</div>
       <div class="tab ${storyTab==='goals'?'active':''}" onclick="companyStoryTab='goals';render();">Goals</div>
       <div class="tab ${storyTab==='roadmap'?'active':''}" onclick="companyStoryTab='roadmap';render();">Roadmap</div>
     </div>
-    ${storyTab==='overview'?renderCompanyOverviewTab():storyTab==='history'?renderCompanyHistoryTab():storyTab==='goals'?renderCompanyGoalsTab():renderCompanyRoadmapTab()}
+    ${storyTab==='overview'?renderCompanyOverviewTab():storyTab==='history'?renderCompanyHistoryTab():storyTab==='projects'?renderCompanyProjectsTab():storyTab==='goals'?renderCompanyGoalsTab():renderCompanyRoadmapTab()}
   `;
 }
 let companyStoryTab = 'overview';
 function renderCompanyOverviewTab(){
   const cs = state.companyStory;
   return `
-    ${canEdit()? `<div class="flex gap-2 mt-3" style="align-items:center;">
-      <label style="margin:0;">Founded</label>
-      <input type="date" id="m-cs-founded" value="${cs.founded||''}" style="margin:0;width:auto;" onchange="saveCompanyFoundedDate(this.value)">
-      <span class="small" style="color:var(--slate-light);">Drives the "years in business" stat up top.</span>
-    </div>`:''}
     <div class="grid cols-2 mt-3">
       <div class="cs-pillar-card">
         <div class="cs-pillar-icon">🎯</div>
         <div class="cs-pillar-label">Mission</div>
-        ${cs.mission? `<div class="cs-pillar-text">${cs.mission}</div>` : `<div class="empty-inline">No mission statement yet.${canEdit()?` <span onclick="openCompanyStoryTextModal('mission')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
-        ${canEdit() && cs.mission?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('mission')">Edit</span>`:''}
+        ${cs.mission? `<div class="cs-pillar-text">${cs.mission}</div>` : `<div class="empty-inline">No mission statement yet.${canEditCompanyStory()?` <span onclick="openCompanyStoryTextModal('mission')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
+        ${canEditCompanyStory() && cs.mission?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('mission')">Edit</span>`:''}
       </div>
       <div class="cs-pillar-card">
         <div class="cs-pillar-icon">🔭</div>
         <div class="cs-pillar-label">Vision</div>
-        ${cs.vision? `<div class="cs-pillar-text">${cs.vision}</div>` : `<div class="empty-inline">No vision statement yet.${canEdit()?` <span onclick="openCompanyStoryTextModal('vision')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
-        ${canEdit() && cs.vision?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('vision')">Edit</span>`:''}
+        ${cs.vision? `<div class="cs-pillar-text">${cs.vision}</div>` : `<div class="empty-inline">No vision statement yet.${canEditCompanyStory()?` <span onclick="openCompanyStoryTextModal('vision')" style="text-decoration:underline;cursor:pointer;">Write one.</span>`:''}</div>`}
+        ${canEditCompanyStory() && cs.vision?`<span class="btn secondary sm mt-2" onclick="openCompanyStoryTextModal('vision')">Edit</span>`:''}
       </div>
     </div>
     ${state.companySettings.cultureStory? `<div class="section-title mt-3">Who We Are</div><div class="card">${state.companySettings.cultureStory}</div>`:''}
@@ -1675,7 +1727,7 @@ function saveCompanyFoundedDate(val){
   saveState(); render();
 }
 function openCompanyStoryTextModal(field){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const cs = state.companyStory;
   const label = field==='mission'?'Mission':'Vision';
   openModal(`
@@ -1691,7 +1743,7 @@ function openCompanyStoryTextModal(field){
     </div>`);
 }
 function saveCompanyStoryText(field, el){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   state.companyStory[field] = document.getElementById('m-cs-text').value.trim();
   saveState(); closeModal(el); toast('Saved'); render();
 }
@@ -1699,8 +1751,8 @@ function renderCompanyHistoryTab(){
   const timeline = [...state.companyStory.timeline].sort((a,b)=>new Date(a.date)-new Date(b.date));
   return `
     <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
-      <div class="small" style="flex:1;">The milestones that got us here — funding, first hires, big jobs, whatever mattered.</div>
-      ${canEdit()?`<button class="btn secondary sm" onclick="openTimelineMilestoneModal()">+ Add Milestone</button>`:''}
+      <div class="small" style="flex:1;">The milestones that got us here — funding, first hires, big jobs, company outings, whatever mattered.</div>
+      ${canEditCompanyStory()?`<button class="btn secondary sm" onclick="openTimelineMilestoneModal()">+ Add Milestone</button>`:''}
     </div>
     ${!timeline.length? `<div class="empty mt-2"><h3>No history yet</h3><p>Add the first milestone — when the company started is a good one.</p></div>` : `
     <div class="cs-timeline mt-3">
@@ -1713,21 +1765,32 @@ function renderCompanyHistoryTab(){
                 <div class="cs-timeline-date">${fmtDate(m.date)}</div>
                 <div class="cs-timeline-title">${m.title}</div>
               </div>
-              ${canEdit()?`<div class="flex gap-1">
+              ${canEditCompanyStory()?`<div class="flex gap-1">
                 <span class="miniBtn" onclick="openTimelineMilestoneModal('${m.id}')" title="Edit">✎</span>
                 <span class="miniBtn" onclick="deleteTimelineMilestone('${m.id}')" title="Delete" style="color:var(--rust);">✕</span>
               </div>`:''}
             </div>
             ${m.description?`<div class="small mt-1">${m.description}</div>`:''}
+            ${(m.photoKeys||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+              ${m.photoKeys.map(k=>`<img data-milestone-photo-key="${k}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+            </div>`:''}
           </div>
         </div>
       `).join('')}
     </div>`}
   `;
 }
+async function hydrateMilestonePhotos(){
+  const imgs = document.querySelectorAll('img[data-milestone-photo-key]');
+  for(const img of imgs){
+    const key = img.dataset.milestonePhotoKey;
+    try{ const blob = await idbGet(key); if(blob) img.src = URL.createObjectURL(blob); }catch(e){}
+  }
+}
 function openTimelineMilestoneModal(id){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const m = id ? byId(state.companyStory.timeline, id) : null;
+  const photoKeys = m?.photoKeys || [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -1740,6 +1803,14 @@ function openTimelineMilestoneModal(id){
           <label>Title</label><input type="text" id="m-ms-title" value="${escAttr(m?.title)}" placeholder="e.g. Company founded">
           <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
           <textarea id="m-ms-desc">${m?.description||''}</textarea>
+          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(optional — company outings, job site shots, whatever fits)</span></label>
+          ${photoKeys.length? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+            ${photoKeys.map(k=>`<div style="position:relative;">
+              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <span onclick="removeMilestonePhoto('${id}','${k}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
+            </div>`).join('')}
+          </div>` : ''}
+          <input type="file" id="m-ms-photos-new" accept="image/*" multiple>
         </div>
         <div class="modal-foot">
           ${m?`<button class="btn danger" style="margin-right:auto;" onclick="deleteTimelineMilestone('${m.id}');closeModal(this)">Delete</button>`:''}
@@ -1748,21 +1819,135 @@ function openTimelineMilestoneModal(id){
         </div>
       </div>
     </div>`);
+  hydrateMilestonePhotos();
 }
-function saveTimelineMilestone(id, el){
-  if(!canEdit()){ toast('Admins only'); return; }
+async function removeMilestonePhoto(id, key, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const m = byId(state.companyStory.timeline, id);
+  if(m) m.photoKeys = (m.photoKeys||[]).filter(k=>k!==key);
+  saveState();
+  try{ await idbDelete(key); }catch(e){}
+  el.closest('div').remove();
+  toast('Photo removed');
+}
+async function saveTimelineMilestone(id, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const date = document.getElementById('m-ms-date').value;
   const title = document.getElementById('m-ms-title').value.trim();
   if(!date || !title){ toast('Date and title are required'); return; }
   const data = { date, title, icon: document.getElementById('m-ms-icon').value.trim(), description: document.getElementById('m-ms-desc').value.trim() };
-  if(id){ Object.assign(byId(state.companyStory.timeline, id), data); }
-  else { data.id = 'cms'+Date.now(); state.companyStory.timeline.push(data); }
+  const newKeys = await savePhotosToLog(document.getElementById('m-ms-photos-new'), 'milestone_'+(id||'new'+Date.now()));
+  if(id){
+    const existing = byId(state.companyStory.timeline, id);
+    data.photoKeys = [...(existing.photoKeys||[]), ...newKeys];
+    Object.assign(existing, data);
+  } else {
+    data.id = 'cms'+Date.now();
+    data.photoKeys = newKeys;
+    state.companyStory.timeline.push(data);
+  }
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteTimelineMilestone(id){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   confirmAction('Remove this milestone?', ()=>{
     state.companyStory.timeline = state.companyStory.timeline.filter(m=>m.id!==id);
+    saveState(); toast('Removed'); render();
+  });
+}
+function renderCompanyProjectsTab(){
+  const projects = [...state.companyStory.projects].sort((a,b)=>new Date(b.completedDate)-new Date(a.completedDate));
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
+      <div class="small" style="flex:1;">The work you're proud of — signature jobs, tough ones, whatever tells the story best.</div>
+      ${canEditCompanyStory()?`<button class="btn secondary sm" onclick="openProjectModal()">+ Add Project</button>`:''}
+    </div>
+    ${!projects.length? `<div class="empty mt-2"><h3>No completed projects yet</h3><p>Add the first one — this is the closest thing this page has to a portfolio.</p></div>` : `
+    <div class="grid cols-2 mt-3">
+      ${projects.map(p=>`
+        <div class="cs-project-card">
+          ${(p.photoKeys||[]).length? `<img data-milestone-photo-key="${p.photoKeys[0]}" class="cs-project-photo" style="object-fit:cover;">` : `<div class="cs-project-photo" style="display:flex;align-items:center;justify-content:center;font-size:32px;">🏗️</div>`}
+          <div style="padding:16px 18px;">
+            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+              <strong>${p.name}</strong>
+              ${canEditCompanyStory()?`<div class="flex gap-1">
+                <span class="miniBtn" onclick="openProjectModal('${p.id}')" title="Edit">✎</span>
+                <span class="miniBtn" onclick="deleteProject('${p.id}')" title="Delete" style="color:var(--rust);">✕</span>
+              </div>`:''}
+            </div>
+            <div class="small mt-1" style="color:var(--bronze-dark);font-weight:600;">${fmtDate(p.completedDate)}</div>
+            ${p.description?`<div class="small mt-2">${p.description}</div>`:''}
+            ${(p.photoKeys||[]).length>1? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+              ${p.photoKeys.slice(1).map(k=>`<img data-milestone-photo-key="${k}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--line-soft);" onclick="if(this.src)window.open(this.src,'_blank')">`).join('')}
+            </div>`:''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`}
+  `;
+}
+function openProjectModal(id){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const p = id ? byId(state.companyStory.projects, id) : null;
+  const photoKeys = p?.photoKeys || [];
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${p?'Edit Project':'Add Project'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Project name</label><input type="text" id="m-proj-name" value="${escAttr(p?.name)}" placeholder="e.g. Whispering Oaks Custom Build">
+          <label>Completed</label><input type="date" id="m-proj-date" value="${p?.completedDate||''}">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
+          <textarea id="m-proj-desc">${p?.description||''}</textarea>
+          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(the first one becomes the cover photo)</span></label>
+          ${photoKeys.length? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;margin-bottom:10px;">
+            ${photoKeys.map(k=>`<div style="position:relative;">
+              <img data-milestone-photo-key="${k}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--line-soft);">
+              <span onclick="removeProjectPhoto('${id}','${k}',this)" style="position:absolute;top:-6px;right:-6px;background:var(--rust);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;">✕</span>
+            </div>`).join('')}
+          </div>` : ''}
+          <input type="file" id="m-proj-photos-new" accept="image/*" multiple>
+        </div>
+        <div class="modal-foot">
+          ${p?`<button class="btn danger" style="margin-right:auto;" onclick="deleteProject('${p.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveProject('${id||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+  hydrateMilestonePhotos();
+}
+async function removeProjectPhoto(id, key, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const p = byId(state.companyStory.projects, id);
+  if(p) p.photoKeys = (p.photoKeys||[]).filter(k=>k!==key);
+  saveState();
+  try{ await idbDelete(key); }catch(e){}
+  el.closest('div').remove();
+  toast('Photo removed');
+}
+async function saveProject(id, el){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  const name = document.getElementById('m-proj-name').value.trim();
+  const completedDate = document.getElementById('m-proj-date').value;
+  if(!name || !completedDate){ toast('Name and completion date are required'); return; }
+  const data = { name, completedDate, description: document.getElementById('m-proj-desc').value.trim() };
+  const newKeys = await savePhotosToLog(document.getElementById('m-proj-photos-new'), 'project_'+(id||'new'+Date.now()));
+  if(id){
+    const existing = byId(state.companyStory.projects, id);
+    data.photoKeys = [...(existing.photoKeys||[]), ...newKeys];
+    Object.assign(existing, data);
+  } else {
+    data.id = 'proj'+Date.now();
+    data.photoKeys = newKeys;
+    state.companyStory.projects.push(data);
+  }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteProject(id){
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
+  confirmAction('Remove this project?', ()=>{
+    state.companyStory.projects = state.companyStory.projects.filter(p=>p.id!==id);
     saveState(); toast('Removed'); render();
   });
 }
@@ -1781,7 +1966,7 @@ function renderCompanyGoalsTab(){
       <div class="progress-track mt-2"><div class="progress-fill ${g.status==='achieved'?'jade':'bronze'}" style="width:${g.progress||0}%;"></div></div>
       <div class="flex" style="justify-content:space-between;align-items:center;margin-top:6px;">
         <div class="small" style="color:var(--slate-light);">${g.progress||0}% ${g.targetDate?'· Target: '+fmtDate(g.targetDate):''}</div>
-        ${canEdit()?`<div class="flex gap-1">
+        ${canEditCompanyStory()?`<div class="flex gap-1">
           <span class="miniBtn" onclick="openGoalModal('${g.id}')" title="Edit">✎</span>
           <span class="miniBtn" onclick="deleteGoal('${g.id}')" title="Delete" style="color:var(--rust);">✕</span>
         </div>`:''}
@@ -1792,13 +1977,13 @@ function renderCompanyGoalsTab(){
     <div class="grid cols-2 mt-3">
       <div>
         <div class="section-title" style="margin-top:0;">Short-Term<span class="count">${shortTerm.length}</span>
-          ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'short')">+ Add Goal</span>`:''}
+          ${canEditCompanyStory()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'short')">+ Add Goal</span>`:''}
         </div>
         ${shortTerm.length? shortTerm.map(renderGoalCard).join('') : `<div class="empty-inline">No short-term goals set yet.</div>`}
       </div>
       <div>
         <div class="section-title" style="margin-top:0;">Long-Term<span class="count">${longTerm.length}</span>
-          ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'long')">+ Add Goal</span>`:''}
+          ${canEditCompanyStory()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openGoalModal(null,'long')">+ Add Goal</span>`:''}
         </div>
         ${longTerm.length? longTerm.map(renderGoalCard).join('') : `<div class="empty-inline">No long-term goals set yet.</div>`}
       </div>
@@ -1806,7 +1991,7 @@ function renderCompanyGoalsTab(){
   `;
 }
 function openGoalModal(id, defaultTimeframe){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const g = id ? byId(state.companyStory.goals, id) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -1837,7 +2022,7 @@ function openGoalModal(id, defaultTimeframe){
     </div>`);
 }
 function saveGoal(id, el){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const title = document.getElementById('m-goal-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const progress = Math.max(0, Math.min(100, parseInt(document.getElementById('m-goal-progress').value)||0));
@@ -1853,7 +2038,7 @@ function saveGoal(id, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteGoal(id){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   confirmAction('Remove this goal?', ()=>{
     state.companyStory.goals = state.companyStory.goals.filter(g=>g.id!==id);
     saveState(); toast('Removed'); render();
@@ -1869,7 +2054,7 @@ function renderCompanyRoadmapTab(){
   return `
     <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:20px 0 4px;">
       <div class="small" style="flex:1;">What we're actually working on right now, and what's next.</div>
-      ${canEdit()?`<button class="btn secondary sm" onclick="openRoadmapItemModal()">+ Add Item</button>`:''}
+      ${canEditCompanyStory()?`<button class="btn secondary sm" onclick="openRoadmapItemModal()">+ Add Item</button>`:''}
     </div>
     <div class="grid cols-3 mt-2">
       ${cols.map(col=>{
@@ -1880,14 +2065,14 @@ function renderCompanyRoadmapTab(){
             <div class="cs-roadmap-card">
               <div class="flex" style="justify-content:space-between;align-items:flex-start;">
                 <strong>${r.title}</strong>
-                ${canEdit()?`<div class="flex gap-1">
+                ${canEditCompanyStory()?`<div class="flex gap-1">
                   <span class="miniBtn" onclick="openRoadmapItemModal('${r.id}')" title="Edit">✎</span>
                   <span class="miniBtn" onclick="deleteRoadmapItem('${r.id}')" title="Delete" style="color:var(--rust);">✕</span>
                 </div>`:''}
               </div>
               ${r.description?`<div class="small mt-1">${r.description}</div>`:''}
               ${r.quarter?`<div class="small mt-2" style="color:var(--slate-light);">${r.quarter}</div>`:''}
-              ${canEdit()?`<div class="flex gap-1 mt-2">
+              ${canEditCompanyStory()?`<div class="flex gap-1 mt-2">
                 ${cols.filter(c=>c.key!==r.status).map(c=>`<span class="btn secondary sm" onclick="moveRoadmapItem('${r.id}','${c.key}')">→ ${c.label}</span>`).join('')}
               </div>`:''}
             </div>
@@ -1898,7 +2083,7 @@ function renderCompanyRoadmapTab(){
   `;
 }
 function openRoadmapItemModal(id){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const r = id ? byId(state.companyStory.roadmap, id) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -1925,7 +2110,7 @@ function openRoadmapItemModal(id){
     </div>`);
 }
 function saveRoadmapItem(id, el){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const title = document.getElementById('m-rm-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const data = {
@@ -1938,14 +2123,14 @@ function saveRoadmapItem(id, el){
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function deleteRoadmapItem(id){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   confirmAction('Remove this roadmap item?', ()=>{
     state.companyStory.roadmap = state.companyStory.roadmap.filter(r=>r.id!==id);
     saveState(); toast('Removed'); render();
   });
 }
 function moveRoadmapItem(id, newStatus){
-  if(!canEdit()){ toast('Admins only'); return; }
+  if(!canEditCompanyStory()){ toast('Switch to Admin mode to edit this'); return; }
   const r = byId(state.companyStory.roadmap, id);
   r.status = newStatus;
   saveState(); render();
@@ -2657,17 +2842,9 @@ function renderPeople(){
   const gate = featureGate('people','People Directory'); if(gate) return gate;
   const visiblePeople = state.people.filter(p=>canSeePersonByLocation(p.id) && p.status!=='offboarded');
   const formerPeople = canEdit() ? state.people.filter(p=>p.status==='offboarded') : [];
-  const culture = state.companySettings.cultureStory;
   return `
     <div class="page-head"><div><div class="page-eyebrow">Organization</div><div class="page-title">People</div><div class="page-desc">${state.companySettings.restrictByLocation && !canEdit()?'Showing your location only.':'Your whole team, at a glance.'}</div></div>
     ${canEdit()?`<button class="btn bronze" onclick="openNewEmployeeWizard()">+ Add New Employee</button>`:''}</div>
-    ${culture? `<div class="card mt-2" style="background:var(--paper);">
-      <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-        <div class="small" style="font-weight:600;color:var(--slate);margin-bottom:6px;">Who we are</div>
-        ${canEdit()?`<span class="btn secondary sm" onclick="openCultureStoryModal()">Edit</span>`:''}
-      </div>
-      <div style="font-size:14px;line-height:1.7;">${culture}</div>
-    </div>` : canEdit()? `<div class="empty-inline mt-2">Nothing here yet — add a bit about who you are as a company. <span class="btn bronze sm" style="margin-left:8px;" onclick="openCultureStoryModal()">Add It</span></div>` : ''}
     <div class="grid cols-3">
       ${visiblePeople.map(p=>{
         const mine = myAssignments(p.id);
@@ -2675,7 +2852,7 @@ function renderPeople(){
         return `
         <div class="card people-card ${!p.isPlaceholder?'hover':''}" style="padding:0;overflow:hidden;" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
-          <div style="width:100%;height:190px;${p.photo?`background:url('${escAttr(p.photo)}') center ${p.photoPositionY!=null?p.photoPositionY:25}%/cover;`:`background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));display:flex;align-items:center;justify-content:center;`}">
+          <div style="width:100%;aspect-ratio:1/1;${p.photo?`background:url('${escAttr(p.photo)}') center ${p.photoPositionY!=null?p.photoPositionY:25}%/cover;`:`background:linear-gradient(135deg,var(--bronze),var(--bronze-dark));display:flex;align-items:center;justify-content:center;`}">
             ${!p.photo?`<span style="color:#fff;font-size:52px;font-weight:700;font-family:'Space Grotesk',sans-serif;">${p?initials(p.name):'?'}</span>`:''}
           </div>
           <div style="padding:18px 20px 20px;text-align:center;">
@@ -3422,7 +3599,7 @@ function openMyPhotoModal(personId){
           <label>Upload a photo</label>
           <input type="file" id="m-my-photo" accept="image/*" onchange="previewMyPhotoFile(this)">
           <label class="mt-2">Preview <span class="small" style="font-weight:400;">(this is exactly how it'll look on the People page)</span></label>
-          <div style="width:100%;height:160px;border-radius:10px;overflow:hidden;background:${p.photo?`url('${escAttr(p.photo)}')`:'var(--line-soft)'};background-size:cover;background-position:center ${currentPos}%;" id="m-my-photo-preview"></div>
+          <div style="width:220px;max-width:100%;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:${p.photo?`url('${escAttr(p.photo)}')`:'var(--line-soft)'};background-size:cover;background-position:center ${currentPos}%;margin:0 auto;" id="m-my-photo-preview"></div>
           <label class="mt-2">Vertical position <span class="small" style="font-weight:400;">(drag until nothing important is cut off)</span></label>
           <input type="range" id="m-my-photo-pos" min="0" max="100" value="${currentPos}" style="width:100%;" oninput="document.getElementById('m-my-photo-preview').style.backgroundPosition='center '+this.value+'%';">
         </div>
@@ -8393,6 +8570,21 @@ function renderCompanySettings(){
       <div class="small mt-1">Off by default — everyone sees everyone company-wide. This only affects the People page; the Org Chart always stays fully visible to everyone regardless of this setting. Owners and admins always see every location.</div>
     </div>
 
+    <div class="section-title">Company Story</div>
+    <div class="card">
+      <div class="small" style="margin-bottom:10px;">Feeds the Company page — mission, vision, the founding date behind the "years in business" stat, and the trade partners count.</div>
+      <label>Founded</label>
+      <input type="date" id="cs-founded" value="${state.companyStory.founded||''}">
+      <label class="mt-2">Trade partners onboarded <span class="small" style="font-weight:400;">(a plain number — you're already tracking these elsewhere, this just feeds the stat)</span></label>
+      <input type="text" id="cs-partners-count" value="${state.companyStory.tradePartnersCount||0}" placeholder="0">
+      <label class="mt-2">Mission</label>
+      <textarea id="cs-mission" placeholder="Why we exist.">${state.companyStory.mission||''}</textarea>
+      <label>Vision</label>
+      <textarea id="cs-vision" placeholder="Where we're headed.">${state.companyStory.vision||''}</textarea>
+      <button class="btn secondary sm mt-2" onclick="saveCompanyStorySettings()">Save</button>
+      <div class="small mt-2">Milestones, completed projects, goals, and the roadmap are managed from the <a onclick="navigate('companyStory')" style="text-decoration:underline;cursor:pointer;">Company page</a> itself.</div>
+    </div>
+
     <div class="section-title">Gear &amp; Allowance</div>
     <div class="card">
       <label>Default annual gear allowance (per employee)</label>
@@ -8468,6 +8660,14 @@ function toggleManagersSeeCompletion(checked){
 function toggleRestrictByLocation(checked){
   state.companySettings.restrictByLocation = checked;
   saveState(); toast('Saved');
+}
+function saveCompanyStorySettings(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  state.companyStory.founded = document.getElementById('cs-founded').value || null;
+  state.companyStory.tradePartnersCount = Math.max(0, parseInt(document.getElementById('cs-partners-count').value)||0);
+  state.companyStory.mission = document.getElementById('cs-mission').value.trim();
+  state.companyStory.vision = document.getElementById('cs-vision').value.trim();
+  saveState(); toast('Saved'); render();
 }
 function saveGearAllowanceDefault(){
   if(document.getElementById('cs-gear-unlimited').checked){
