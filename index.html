@@ -2731,6 +2731,10 @@ function renderEmployeeDashboard(){
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Dashboard</div><div class="page-title">Welcome back, ${u.name.split(' ')[0]}</div><div class="page-desc">Here's what's assigned to you right now.</div></div>
+      ${(()=>{ const v = todaysVerse(); return `<div style="max-width:280px;text-align:right;">
+        <div style="font-family:'Fraunces',serif;font-style:italic;font-size:12px;line-height:1.45;color:var(--slate);">"${v.text}"</div>
+        <div class="small mt-1" style="font-weight:600;color:var(--bronze-dark);font-size:11px;">${v.ref} · <span title="Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), copyright © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved." style="text-decoration:underline dotted;cursor:help;">ESV</span></div>
+      </div>`; })()}
     </div>
     ${pendingOnboarding.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('onboarding')">
       <strong>📋 ${pendingOnboarding.length} onboarding task${pendingOnboarding.length!==1?'s':''} waiting on you</strong>${pendingForms.length?` — including ${pendingForms.length===1?'a form':pendingForms.length+' forms'} to fill out (${pendingForms.map(t=>t.title).join(', ')})`:''}
@@ -2762,13 +2766,6 @@ function renderEmployeeDashboard(){
       </div>
     </div>
     ${renderTeamAtAGlance(u)}
-    ${(()=>{ const v = todaysVerse(); return `
-    <div class="section-title">Verse of the Day</div>
-    <div class="card mb-3">
-      <div style="font-family:'Fraunces',serif;font-style:italic;font-size:14.5px;line-height:1.6;color:var(--ink);">"${v.text}"</div>
-      <div class="small mt-2" style="font-weight:600;color:var(--bronze-dark);">${v.ref} <span style="font-weight:400;color:var(--slate-light);">· ESV</span></div>
-      <div class="small mt-1" style="color:var(--slate-light);font-size:10px;">Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), copyright © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.</div>
-    </div>`; })()}
     ${(()=>{
       const today = new Date().toISOString().slice(0,10);
       const upcoming = [...state.companyStory.events].filter(e=>e.date>=today).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
