@@ -4176,7 +4176,7 @@ function openPositionModal(positionId, prefillParentId){
             <div><label>Location</label><select id="m-pos-location">${state.locations.map(l=>`<option value="${l.id}" ${(pos?pos.locationId===l.id:l.id===state.locations[0]?.id)?'selected':''}>${l.name}</option>`).join('')}</select></div>
           </div>
 
-          <select id="m-pos-role" class="hidden">${state.roles.map(r=>`<option value="${r.id}" ${pos?.roleId===r.id?'selected':''}>${r.title}</option>`).join('')}</select>
+          <select id="m-pos-role" class="hidden"><option value="">— none —</option>${state.roles.map(r=>`<option value="${r.id}" ${pos?.roleId===r.id?'selected':''}>${r.title}</option>`).join('')}</select>
           ${pos && pos.roleId ? `
             <label>Role</label>
             <div class="card" style="padding:12px 14px;">
@@ -9779,6 +9779,19 @@ function openNewEmployeeWizard(){
           `).join('')}
 
           <div class="section-title" style="margin-top:22px;">Seat on the org chart</div>
+          ${state.positions.some(p=>!p.personId)? `
+          <div class="flex gap-3 mt-1" style="margin-bottom:12px;">
+            <label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-bottom:0;"><input type="radio" name="nw-seatmode" value="existing" checked style="width:auto;margin:0;" onchange="document.getElementById('nw-existing-seat-wrap').style.display='block';document.getElementById('nw-new-seat-wrap').style.display='none';">Fill an existing open seat</label>
+            <label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-bottom:0;"><input type="radio" name="nw-seatmode" value="new" style="width:auto;margin:0;" onchange="document.getElementById('nw-existing-seat-wrap').style.display='none';document.getElementById('nw-new-seat-wrap').style.display='block';">Create a new seat</label>
+          </div>
+          <div id="nw-existing-seat-wrap">
+            <label>Open seat</label>
+            <select id="nw-existing-seat">
+              ${state.positions.filter(p=>!p.personId).map(p=>`<option value="${p.id}">${p.title}${byId(state.departments,p.departmentId)?' — '+byId(state.departments,p.departmentId).name:''}</option>`).join('')}
+            </select>
+            <div class="small mt-1">Their title, department, role, and reporting line will all come from this seat — nothing to fill in below.</div>
+          </div>
+          <div id="nw-new-seat-wrap" class="hidden">` : `<div id="nw-new-seat-wrap">`}
           <label>Job title / seat</label>
           <input type="text" id="nw-title" placeholder="e.g. Site Superintendent">
           <div class="field-row">
@@ -9788,6 +9801,7 @@ function openNewEmployeeWizard(){
           <label>Linked role</label><select id="nw-role" onchange="const match=window._pathsByRole&&window._pathsByRole[this.value]; if(match) document.getElementById('nw-onboarding').value=match;"><option value="">— none —</option>${state.roles.map(r=>`<option value="${r.id}">${r.title}</option>`).join('')}</select>
           <label>Reports to (which seat)</label>
           <select id="nw-parent"><option value="">— nobody (top of chart) —</option>${state.positions.map(p=>`<option value="${p.id}">${p.title}${p.personId?' — '+byId(state.people,p.personId)?.name:''}</option>`).join('')}</select>
+          </div>
 
           <div class="section-title" style="margin-top:22px;">Onboarding (optional)</div>
           <label>Enroll in a path</label>
@@ -9813,13 +9827,17 @@ function openNewEmployeeWizard(){
 }
 async function saveNewEmployee(el){
   const name = document.getElementById('nw-name').value.trim();
-  const title = document.getElementById('nw-title').value.trim();
   const email = document.getElementById('nw-email').value.trim();
   if(!name){ toast('Name is required'); return; }
   if(!email){ toast('Email is required — this is how they\u2019ll log in'); return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('That doesn\u2019t look like a valid email'); return; }
   if(state.people.some(p=>p.email && p.email.toLowerCase()===email.toLowerCase())){ toast('Someone already has that email on file — including offboarded people. Emails must be unique so logins never get confused between two profiles.'); return; }
-  if(!title){ toast('Seat / job title is required'); return; }
+  const seatMode = document.querySelector('input[name="nw-seatmode"]:checked')?.value || 'new';
+  const fillingExisting = seatMode==='existing';
+  const existingSeat = fillingExisting ? byId(state.positions, document.getElementById('nw-existing-seat').value) : null;
+  if(fillingExisting && !existingSeat){ toast('Pick an open seat, or switch to creating a new one'); return; }
+  const title = fillingExisting ? existingSeat.title : document.getElementById('nw-title').value.trim();
+  if(!fillingExisting && !title){ toast('Seat / job title is required'); return; }
   const hiddenFeatures = TOGGLEABLE_FEATURES.filter(f=>!document.getElementById('nw-feat-'+f.key).checked).map(f=>f.key);
   const personId = 'u'+Date.now();
   const startDate = document.getElementById('nw-start').value || new Date().toISOString().slice(0,10);
@@ -9838,16 +9856,23 @@ async function saveNewEmployee(el){
     hiddenFeatures, timeOffOverrides,
     title, departmentId:null, roleId:null, managerId:null
   });
-  const roleId = document.getElementById('nw-role').value || null;
-  const positionId = 'pos'+Date.now();
-  state.positions.push({
-    id: positionId, title,
-    departmentId: document.getElementById('nw-dept').value,
-    locationId: document.getElementById('nw-location-seat').value,
-    roleId,
-    parentPositionId: document.getElementById('nw-parent').value || null,
-    personId, status:null
-  });
+  let roleId;
+  if(fillingExisting){
+    roleId = existingSeat.roleId || null;
+    existingSeat.personId = personId;
+    existingSeat.status = null;
+  } else {
+    roleId = document.getElementById('nw-role').value || null;
+    const positionId = 'pos'+Date.now();
+    state.positions.push({
+      id: positionId, title,
+      departmentId: document.getElementById('nw-dept').value,
+      locationId: document.getElementById('nw-location-seat').value,
+      roleId,
+      parentPositionId: document.getElementById('nw-parent').value || null,
+      personId, status:null
+    });
+  }
   syncPersonPrimaryFields(personId);
   if(roleId) syncRoleAssignments(personId);
   state.policies.forEach(p=>ensurePolicyAssignedToEveryone(p.id));
