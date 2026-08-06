@@ -10332,11 +10332,9 @@ let templateBulkSelection = new Set();
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
   const activeTab = currentParams.tab || 'all';
-  const rolesInUse = state.roles.filter(r=>state.templates.some(t=>(t.roleIds||[]).includes(r.id)));
-  const contractCategories = state.templateCategories.filter(c=>/contract/i.test(c));
+  const rolesInUse = state.roles;
   const matchesFilters = t => {
     if(activeTab==='all') return true;
-    if(activeTab==='contracts') return contractCategories.includes(t.category);
     return (t.roleIds||[]).includes(activeTab);
   };
   const cats = state.templateCategories.filter(c=>state.templates.some(t=>t.category===c && matchesFilters(t)));
@@ -10359,15 +10357,12 @@ function renderTemplates(){
         <span class="small" style="color:var(--slate-light);">Click any card below to select or deselect it. Tagging adds this role — it doesn\u2019t remove any roles already on a template.</span>
       </div>`}
     </div>`:''}
-    ${state.templates.length? `<div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
-      <div class="tabs" style="margin:0;">
-        <div class="tab ${activeTab==='all'?'active':''}" onclick="navigate('templates',{tab:'all'})">All</div>
-        ${contractCategories.length?`<div class="tab ${activeTab==='contracts'?'active':''}" onclick="navigate('templates',{tab:'contracts'})">Contracts</div>`:''}
-      </div>
-      ${rolesInUse.length? `<select id="tpl-role-dropdown" onchange="navigate('templates',{tab:this.value})" style="max-width:260px;margin:0;">
-        <option value="all" ${(activeTab==='all'||activeTab==='contracts')?'selected':''}>Filter by role...</option>
+    ${state.templates.length && rolesInUse.length? `<div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
+      ${activeTab!=='all'?`<span class="btn secondary sm" onclick="navigate('templates',{tab:'all'})">✕ Clear filter</span>`:''}
+      <select id="tpl-role-dropdown" onchange="navigate('templates',{tab:this.value})" style="max-width:260px;margin:0;">
+        <option value="all" ${activeTab==='all'?'selected':''}>Filter by role...</option>
         ${rolesInUse.map(r=>`<option value="${r.id}" ${activeTab===r.id?'selected':''}>${r.title}</option>`).join('')}
-      </select>`:''}
+      </select>
     </div>`:''}
     ${!state.templates.length? `<div class="empty"><h3>No templates yet</h3><p>Add your first one — a change order form, a punch list, anything the team reaches for on every job.</p></div>` :
       !cats.length? `<div class="empty mt-2"><h3>Nothing here yet</h3><p>No templates match this tab.</p></div>` :
