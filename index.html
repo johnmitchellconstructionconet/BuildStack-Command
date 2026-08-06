@@ -147,6 +147,12 @@ a{color:inherit;text-decoration:none;}
 .card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:22px;box-shadow:var(--shadow-soft);transition:box-shadow .2s, transform .2s, border-color .2s;}
 .tpl-card{display:flex;flex-direction:column;}
 .tpl-card .tpl-card-actions{margin-top:auto;padding-top:14px;}
+.tpl-kebab-wrap{position:relative;}
+.tpl-kebab-menu{position:absolute;top:28px;right:0;background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:170px;z-index:10;padding:6px;display:none;}
+.tpl-kebab-menu.open{display:block;}
+.tpl-kebab-menu button{display:block;width:100%;text-align:left;padding:8px 10px;border:none;background:none;border-radius:6px;font-size:13px;font-family:inherit;cursor:pointer;color:var(--ink);}
+.tpl-kebab-menu button:hover{background:var(--bronze-tint);}
+.tpl-kebab-menu button.danger-item{color:var(--rust);}
 .card.hover:hover{box-shadow:var(--shadow-2);border-color:var(--line);cursor:pointer;transform:translateY(-2px);}
 .stat-card{padding:20px 22px;}
 .stat-card .stat-label{font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:.07em;font-weight:500;}
@@ -10322,6 +10328,17 @@ function deleteTemplateCategory(name){
   state.templateCategories = state.templateCategories.filter(c=>c!==name);
   saveState(); toast('Deleted'); refreshCategoryManageModal();
 }
+function toggleTplKebab(event, templateId){
+  event.stopPropagation();
+  const menu = document.getElementById('tpl-kebab-'+templateId);
+  const wasOpen = menu.classList.contains('open');
+  closeTplKebabs();
+  if(!wasOpen) menu.classList.add('open');
+}
+function closeTplKebabs(){
+  document.querySelectorAll('.tpl-kebab-menu.open').forEach(m=>m.classList.remove('open'));
+}
+document.addEventListener('click', closeTplKebabs);
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
   const activeCat = currentParams.cat || 'all';
@@ -10349,19 +10366,30 @@ function renderTemplates(){
         <div class="grid cols-3">
           ${state.templates.filter(t=>t.category===cat && matchesFilters(t)).map(t=>{
             const pendingSuggestion = state.templateReplacementRequests.find(r=>r.templateId===t.id && r.status==='pending');
+            const hasFile = t.fileKey || t.url;
             return `<div class="card tpl-card">
               <div class="flex" style="justify-content:space-between;align-items:flex-start;">
                 <strong>${t.title}</strong>
+                <div class="tpl-kebab-wrap">
+                  <span class="miniBtn" onclick="toggleTplKebab(event,'${t.id}')" title="More actions">⋮</span>
+                  <div class="tpl-kebab-menu" id="tpl-kebab-${t.id}">
+                    ${canEdit()?`
+                      <button onclick="closeTplKebabs();openTemplateModal('${t.id}')">✎ Edit</button>
+                      <button onclick="closeTplKebabs();replaceTemplateFileModal('${t.id}')">🔁 Replace File</button>
+                      <button class="danger-item" onclick="closeTplKebabs();removeTemplate('${t.id}')">Remove</button>
+                    ` : (pendingSuggestion && pendingSuggestion.requestedBy===currentUser().id
+                      ? `<button onclick="closeTplKebabs();withdrawTemplateReplacementRequest('${pendingSuggestion.id}')">Withdraw Suggestion</button>`
+                      : `<button onclick="closeTplKebabs();suggestTemplateReplacementModal('${t.id}')">🔁 Suggest Replacement</button>`)}
+                  </div>
+                </div>
               </div>
               ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
               <div class="small mt-2" style="color:var(--slate-light);">Added ${fmtDate(t.uploadedAt)} by ${byId(state.people,t.uploadedBy)?.name||'—'}</div>
               ${pendingSuggestion? `<div class="mt-2"><span class="pill amber">Replacement suggested by ${byId(state.people,pendingSuggestion.requestedBy)?.name||'someone'} — awaiting review</span></div>`:''}
-              <div class="tpl-card-actions flex gap-2" style="flex-wrap:wrap;">
-                ${t.fileKey || t.url
-                  ? `<button class="btn secondary sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
-                  : `<button class="btn secondary sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
-                ${canEdit()?`<button class="btn secondary sm" onclick="openTemplateModal('${t.id}')">✎ Edit</button><button class="btn secondary sm" onclick="replaceTemplateFileModal('${t.id}')">🔁 Replace File</button><button class="btn secondary sm" onclick="removeTemplate('${t.id}')">Remove</button>`
-                  : (pendingSuggestion && pendingSuggestion.requestedBy===currentUser().id ? `<button class="btn secondary sm" onclick="withdrawTemplateReplacementRequest('${pendingSuggestion.id}')">Withdraw Suggestion</button>` : `<button class="btn secondary sm" onclick="suggestTemplateReplacementModal('${t.id}')">🔁 Suggest Replacement</button>`)}
+              <div class="tpl-card-actions flex gap-2">
+                ${hasFile
+                  ? `<button class="btn bronze sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
+                  : `<button class="btn bronze sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
               </div>
             </div>`;
           }).join('')}
