@@ -694,6 +694,9 @@ function seedData(){
       ]
     },
     companyBoardPosts: [],
+    contracts: [],
+    personFiles: [],
+    externalTools: [],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -890,6 +893,9 @@ function migrateState(parsed){
       if(!parsed.companyBoardPosts) parsed.companyBoardPosts = [];
       if(!parsed.processSuggestions) parsed.processSuggestions = [];
       if(!parsed.trainings) parsed.trainings = [];
+      if(!parsed.contracts) parsed.contracts = [];
+      if(!parsed.personFiles) parsed.personFiles = [];
+      if(!parsed.externalTools) parsed.externalTools = [];
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
       if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
@@ -945,6 +951,9 @@ function migrateState(parsed){
       if(!parsed.maintenanceLog) parsed.maintenanceLog = parsed.vehicleMaintenanceLog || [];
       if(!parsed.notifications) parsed.notifications = [];
       if(!parsed.performanceReviewTemplates) parsed.performanceReviewTemplates = [{id:'prt1', name:'General Performance Review', roleId:null, criteria:['Quality of work','Reliability and attendance','Communication with team and clients','Growth since last review']}];
+      parsed.performanceReviewTemplates.forEach(t=>{
+        t.criteria = (t.criteria||[]).map((c,i)=> typeof c==='string' ? {id:'crit'+Date.now()+i, text:c, type:'tier'} : c);
+      });
       if(!parsed.performanceReviews) parsed.performanceReviews = [];
       if(!parsed.disciplinaryActions) parsed.disciplinaryActions = [];
       if(!parsed.offboardingRecords) parsed.offboardingRecords = [];
@@ -1692,6 +1701,67 @@ async function hydrateBioPhotos(){
 window.addEventListener('resize', ()=>{ if(currentView==='orgchart') drawOrgConnectors(); });
 
 /* ================= DASHBOARD ================= */
+/* ================= EXTERNAL TOOLS (dashboard launcher) ================= */
+/* Everyone sees this — the whole point is a single landing spot for BuilderTrend, Gmail,
+   whatever else the team lives in day to day. Only admins can add/edit/remove/reorder. */
+function renderExternalToolsSection(){
+  const tools = [...state.externalTools].sort((a,b)=>(a.order||0)-(b.order||0));
+  if(!tools.length && !canEdit()) return '';
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:center;margin:18px 0 10px;">
+      <div class="small" style="font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:0.4px;font-size:11px;">Your Tools</div>
+      ${canEdit()?`<span class="btn secondary sm" onclick="manageExternalToolsModal()">Manage</span>`:''}
+    </div>
+    ${!tools.length? `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">No tools linked yet.${canEdit()?' Click Manage to add BuilderTrend, Gmail, or anything else your team uses daily.':''}</div>` : `
+    <div class="flex gap-2 mt-1 mb-2" style="flex-wrap:wrap;">
+      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:8px;padding:10px 16px;text-decoration:none;color:var(--ink);">
+        <span style="font-size:16px;">${t.icon||'🔗'}</span><strong style="font-size:13.5px;">${escHtml(t.name)}</strong>
+      </a>`).join('')}
+    </div>`}
+  `;
+}
+function manageExternalToolsModal(){
+  if(!canEdit()) return;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Manage Your Tools</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small mt-1" style="margin-bottom:10px;">These show up on everyone's dashboard as quick links — BuilderTrend, Gmail, anything your team opens every day.</div>
+          <div id="m-tools-list">
+            ${[...state.externalTools].sort((a,b)=>(a.order||0)-(b.order||0)).map(t=>externalToolRow(t)).join('')}
+          </div>
+          <button class="btn secondary sm mt-2" onclick="addExternalToolRow()">+ Add Tool</button>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveExternalTools(this)">Save</button></div>
+      </div>
+    </div>`);
+}
+function externalToolRow(t){
+  const id = t?.id || 'tool'+Date.now()+Math.random().toString(36).slice(2);
+  return `<div class="flex gap-2 mt-2" data-tool-id="${id}" style="align-items:center;">
+    <input type="text" class="m-tool-icon" value="${escAttr(t?.icon||'🔗')}" style="width:48px;text-align:center;flex-shrink:0;" placeholder="🔗">
+    <input type="text" class="m-tool-name" value="${escAttr(t?.name)}" placeholder="e.g. BuilderTrend" style="flex:1;">
+    <input type="text" class="m-tool-url" value="${escAttr(t?.url)}" placeholder="https://..." style="flex:2;">
+    <span class="miniBtn" onclick="this.closest('[data-tool-id]').remove()" title="Remove">✕</span>
+  </div>`;
+}
+function addExternalToolRow(){
+  document.getElementById('m-tools-list').insertAdjacentHTML('beforeend', externalToolRow(null));
+}
+function saveExternalTools(el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const rows = Array.from(document.querySelectorAll('#m-tools-list [data-tool-id]'));
+  const tools = rows.map((row,i)=>{
+    const name = row.querySelector('.m-tool-name').value.trim();
+    const url = row.querySelector('.m-tool-url').value.trim();
+    const icon = row.querySelector('.m-tool-icon').value.trim();
+    if(!name || !url) return null;
+    return { id: row.dataset.toolId, name, url: /^https?:\/\//i.test(url) ? url : 'https://'+url, icon: icon||'🔗', order: i };
+  }).filter(Boolean);
+  state.externalTools = tools;
+  saveState(); closeModal(el); toast('Saved'); render();
+}
 function renderDashboard(){
   const u = currentUser();
   const isAdmin = (u.accessLevel==='owner' || u.accessLevel==='admin');
@@ -2749,6 +2819,7 @@ function renderEmployeeDashboard(){
         <div class="small mt-1" style="font-weight:600;color:var(--bronze-dark);font-size:11px;">${v.ref} · <span title="Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), copyright © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved." style="text-decoration:underline dotted;cursor:help;">ESV</span></div>
       </div>`; })()}
     </div>
+    ${renderExternalToolsSection()}
     ${pendingOnboarding.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('onboarding')">
       <strong>📋 ${pendingOnboarding.length} onboarding task${pendingOnboarding.length!==1?'s':''} waiting on you</strong>${pendingForms.length?` — including ${pendingForms.length===1?'a form':pendingForms.length+' forms'} to fill out (${pendingForms.map(t=>t.title).join(', ')})`:''}
     </div>`:''}
@@ -2842,6 +2913,7 @@ function renderAdminDashboard(){
         <button class="btn secondary" onclick="navigate('reports')">View full reports</button>
       </div>
     </div>
+    ${renderExternalToolsSection()}
     ${overdueMaintenance.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
       <strong>⚠ ${overdueMaintenance.length} item${overdueMaintenance.length!==1?'s':''} due for maintenance</strong> — ${overdueMaintenance.map(a=>a.name).join(', ')}
     </div>`:''}
@@ -2952,13 +3024,25 @@ function submitTrainingSignoff(trainingId, personId, el){
   saveState(); closeModal(el); toast('Marked complete'); render();
 }
 function renderManageTrainings(){
+  const filterRole = currentParams.role || 'all';
+  const matchesFilters = t => filterRole==='all' || (t.tags||[]).includes(byId(state.roles,filterRole)?.title);
+  const filtersActive = filterRole!=='all';
+  const visible = state.trainings.filter(matchesFilters);
   return `
-    <div class="flex" style="justify-content:flex-end;margin:14px 0;">
+    <div class="flex gap-2" style="justify-content:flex-end;align-items:center;margin:14px 0;flex-wrap:wrap;">
+      ${state.trainings.length && state.roles.length?`
+        ${filtersActive?`<span class="btn secondary sm" onclick="navigate('mytraining',{role:'all'})">✕ Clear filter</span>`:''}
+        <select onchange="navigate('mytraining',{role:this.value})" style="max-width:220px;margin:0;">
+          <option value="all" ${filterRole==='all'?'selected':''}>Filter by role...</option>
+          ${state.roles.map(r=>`<option value="${r.id}" ${filterRole===r.id?'selected':''}>${r.title}</option>`).join('')}
+        </select>
+      `:''}
       <button class="btn bronze" onclick="openCreateTrainingModal()">+ New Training</button>
     </div>
-    ${!state.trainings.length? `<div class="empty"><h3>No trainings yet</h3><p>Videos, SOPs, policies, or anything you write yourself — assign any of it to a person, a department, or the whole company.</p></div>` : `
+    ${!state.trainings.length? `<div class="empty"><h3>No trainings yet</h3><p>Videos, SOPs, policies, or anything you write yourself — assign any of it to a person, a department, or the whole company.</p></div>` :
+      (filtersActive && !visible.length)? `<div class="empty"><h3>Nothing matches this filter</h3></div>` : `
     <div class="grid cols-2">
-      ${state.trainings.map(t=>{
+      ${visible.map(t=>{
         const meta = TRAINING_CONTENT_TYPES[t.contentType] || {label:t.contentType, icon:'📄'};
         const assignments = state.trainingAssignments.filter(a=>a.trainingId===t.id);
         const completions = state.trainingCompletions.filter(c=>c.trainingId===t.id).length;
@@ -3011,6 +3095,12 @@ function openCreateTrainingModal(trainingId){
             <input type="checkbox" id="m-training-signoff" style="width:auto;margin:0;" ${t?.requiresSignoff?'checked':''}>
             Requires typing their name to confirm completion
           </label>
+          <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter trainings by role)</span></label>
+          <div class="flex gap-2" style="flex-wrap:wrap;">
+            ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
+              <input type="checkbox" class="m-training-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${(t?.tags||[]).includes(r.title)?'checked':''}> ${r.title}
+            </label>`).join('') || `<div class="small">No roles set up yet.</div>`}
+          </div>
         </div>
         <div class="modal-foot">
           ${t?`<button class="btn danger" style="margin-right:auto;" onclick="deleteTraining('${t.id}');closeModal(this)">Delete</button>`:''}
@@ -3041,7 +3131,7 @@ function saveTraining(trainingId, el){
   const title = document.getElementById('m-training-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const contentType = document.getElementById('m-training-type').value;
-  const data = { title, description: document.getElementById('m-training-desc').value.trim(), contentType, quizId: document.getElementById('m-training-quiz').value||null, requiresSignoff: document.getElementById('m-training-signoff').checked };
+  const data = { title, description: document.getElementById('m-training-desc').value.trim(), contentType, quizId: document.getElementById('m-training-quiz').value||null, requiresSignoff: document.getElementById('m-training-signoff').checked, tags: Array.from(document.querySelectorAll('.m-training-role:checked')).map(el=>el.value) };
   if(contentType==='freeform') data.freeformContent = document.getElementById('m-training-freeform').value.trim();
   else { const refEl = document.getElementById('m-training-ref'); if(refEl) data.refId = refEl.value; }
   if(trainingId){ Object.assign(byId(state.trainings, trainingId), data); }
@@ -3133,7 +3223,21 @@ function openAssignment(id){
 let libraryTab = 'category';
 function renderLibrary(){
   const lib = state.libraries[0];
+  const filterCat = currentParams.cat || 'all';
+  const filterRole = currentParams.role || 'all';
+  const filterPhase = currentParams.phase || 'all';
+  const matchesFilters = t => {
+    if(filterCat!=='all' && t.subjectId!==filterCat) return false;
+    if(filterRole!=='all'){
+      const role = byId(state.roles, filterRole);
+      if(!role || !(t.tags||[]).includes(role.title)) return false;
+    }
+    if(filterPhase!=='all' && !(t.phaseIds||[]).includes(filterPhase)) return false;
+    return true;
+  };
+  const filtersActive = filterCat!=='all' || filterRole!=='all' || filterPhase!=='all';
   const subs = state.subjects.filter(s=>s.libraryId===lib.id);
+  const matchingTopics = state.topics.filter(matchesFilters);
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Knowledge Library</div><div class="page-title">${lib.name}</div><div class="page-desc">${lib.description}</div></div>
@@ -3146,7 +3250,31 @@ function renderLibrary(){
       <div class="tab ${libraryTab==='suggestions'?'active':''}" onclick="libraryTab='suggestions';render();">Suggestions</div>
     </div>
     ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : libraryTab==='suggestions'? renderProcessSuggestionsTab() : `
-    <div class="grid cols-3">
+    <div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
+      ${filtersActive?`<span class="btn secondary sm" onclick="navigate('library',{cat:'all',role:'all',phase:'all'})">✕ Clear filters</span>`:''}
+      <select onchange="navigate('library',{cat:this.value,role:'${filterRole}',phase:'${filterPhase}'})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterCat==='all'?'selected':''}>Filter by category...</option>
+        ${subs.map(s=>`<option value="${s.id}" ${filterCat===s.id?'selected':''}>${s.name}</option>`).join('')}
+      </select>
+      ${state.roles.length?`<select onchange="navigate('library',{cat:'${filterCat}',role:this.value,phase:'${filterPhase}'})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterRole==='all'?'selected':''}>Filter by role...</option>
+        ${state.roles.map(r=>`<option value="${r.id}" ${filterRole===r.id?'selected':''}>${r.title}</option>`).join('')}
+      </select>`:''}
+      ${state.projectPhases.length?`<select onchange="navigate('library',{cat:'${filterCat}',role:'${filterRole}',phase:this.value})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterPhase==='all'?'selected':''}>Filter by project phase...</option>
+        ${[...state.projectPhases].sort((a,b)=>a.order-b.order).map(ph=>`<option value="${ph.id}" ${filterPhase===ph.id?'selected':''}>${ph.name}</option>`).join('')}
+      </select>`:''}
+    </div>
+    ${filtersActive? `
+      ${!matchingTopics.length? `<div class="empty mt-2"><h3>Nothing matches these filters</h3></div>` : `
+      <div class="grid cols-3 mt-2">
+        ${matchingTopics.map(t=>`<div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
+          <div style="font-weight:600;font-size:13.3px;">${t.name}</div>
+          <div class="small mt-1">${byId(state.subjects,t.subjectId)?.name||''}</div>
+        </div>`).join('')}
+      </div>`}
+    ` : `
+    <div class="grid cols-3 mt-2">
       ${subs.map(s=>{
         const topicCount = state.topics.filter(t=>t.subjectId===s.id).length;
         return `<div class="card hover" onclick="navigate('librarySubject',{id:'${s.id}'})">
@@ -3154,7 +3282,7 @@ function renderLibrary(){
           <div class="small mt-1">${topicCount} topic${topicCount!==1?'s':''}</div>
         </div>`;
       }).join('')}
-    </div>`}
+    </div>`}`}
   `;
 }
 function renderProcessSuggestionsTab(){
@@ -3589,19 +3717,37 @@ function retakeQuizFromTopic(quizId){ quizState = {}; navigate('quizTake',{id:qu
 
 /* ================= POLICIES ================= */
 function renderPolicies(){
+  const filterCat = currentParams.cat || 'all';
+  const filterRole = currentParams.role || 'all';
+  const cats = [...new Set(state.policies.map(p=>p.category))];
+  const matchesFilters = p => (filterCat==='all'||p.category===filterCat) && (filterRole==='all'||(p.tags||[]).includes(byId(state.roles,filterRole)?.title));
+  const filtersActive = filterCat!=='all' || filterRole!=='all';
+  const visible = state.policies.filter(matchesFilters);
   return `
     <div class="page-head"><div><div class="page-eyebrow">Policies</div><div class="page-title">Company Policies</div></div>
     ${canEdit()?`<button class="btn bronze" onclick="openPolicyModal()">+ New Policy</button>`:''}</div>
+    ${state.policies.length? `<div class="flex gap-2 mt-1 mb-2" style="align-items:center;flex-wrap:wrap;">
+      ${filtersActive?`<span class="btn secondary sm" onclick="navigate('policies',{cat:'all',role:'all'})">✕ Clear filters</span>`:''}
+      <select onchange="navigate('policies',{cat:this.value,role:'${filterRole}'})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterCat==='all'?'selected':''}>Filter by category...</option>
+        ${cats.map(c=>`<option value="${escAttr(c)}" ${filterCat===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      ${state.roles.length?`<select onchange="navigate('policies',{cat:'${filterCat}',role:this.value})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterRole==='all'?'selected':''}>Filter by role...</option>
+        ${state.roles.map(r=>`<option value="${r.id}" ${filterRole===r.id?'selected':''}>${r.title}</option>`).join('')}
+      </select>`:''}
+    </div>`:''}
+    ${filtersActive && !visible.length? `<div class="empty"><h3>Nothing matches these filters</h3></div>` : `
     <div class="tbl-card"><table>
       <tr><th>Policy</th><th>Category</th><th>Version</th><th>Effective</th><th>Your status</th></tr>
-      ${state.policies.map(p=>{
+      ${visible.map(p=>{
         const ack = state.acknowledgments.find(a=>a.personId===currentUser().id && a.policyId===p.id && a.version===p.version);
         return `<tr class="row-click" onclick="navigate('policyDetail',{id:'${p.id}'})">
           <td><strong>${p.title}</strong></td><td>${p.category}</td><td>v${p.version}</td><td>${fmtDate(p.effectiveDate)}</td>
           <td>${ack?`<span class="pill jade">Signed ${fmtDate(ack.date)}</span>`:`<span class="pill rust">Needs signature</span>`}</td>
         </tr>`;
       }).join('')}
-    </table></div>
+    </table></div>`}
   `;
 }
 function renderPolicyDetail(){
@@ -3641,6 +3787,12 @@ function openPolicyModal(policyId){
           </div>
           <label>Policy text</label><textarea id="m-pol-body" style="min-height:160px;">${p?.body||''}</textarea>
           ${p?`<div class="small mt-1">Editing the text without changing the version number won't require anyone to re-sign. Bump the version if this is a material change and you want people to re-acknowledge it.</div>`:''}
+          <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter policies by role)</span></label>
+          <div class="flex gap-2" style="flex-wrap:wrap;">
+            ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
+              <input type="checkbox" class="m-pol-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${(p?.tags||[]).includes(r.title)?'checked':''}> ${r.title}
+            </label>`).join('') || `<div class="small">No roles set up yet.</div>`}
+          </div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="savePolicyForm('${policyId||''}',this)">Save</button></div>
       </div>
@@ -3657,7 +3809,8 @@ function savePolicyForm(policyId, el){
     version: document.getElementById('m-pol-version').value.trim() || '1.0',
     effectiveDate: document.getElementById('m-pol-effective').value,
     status: document.getElementById('m-pol-status').value,
-    body: document.getElementById('m-pol-body').value.trim()
+    body: document.getElementById('m-pol-body').value.trim(),
+    tags: Array.from(document.querySelectorAll('.m-pol-role:checked')).map(el=>el.value)
   };
   let policy;
   if(policyId){ policy = byId(state.policies, policyId); Object.assign(policy, data); }
@@ -3900,6 +4053,7 @@ function renderPersonDetail(){
       <tr><th>Policy</th><th>Version</th><th>Date</th></tr>
       ${acks.map(a=>`<tr><td>${byId(state.policies,a.policyId)?.title}</td><td>v${a.version}</td><td>${fmtDate(a.date)}</td></tr>`).join('')}
     </table></div>
+    ${canSeePersonFiles()? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderPersonFilesSection(p.id)}</div>` : ''}
     ${canSeeDisciplinary()? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderDisciplinarySection(p.id)}</div>` : ''}
   `;
 }
@@ -5877,6 +6031,75 @@ function renderOffboardingBanner(personId){
   `;
 }
 
+/* ================= EMPLOYEE FILES ================= */
+/* Admin-only, same posture as disciplinary actions — DISC assessments and similar sensitive
+   HR documents aren't things an employee should browse on their own profile without context. */
+function canSeePersonFiles(){ return canEdit() && !viewAsPersonId; }
+function personFilesFor(personId){
+  return state.personFiles.filter(f=>f.personId===personId).sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt));
+}
+function renderPersonFilesSection(personId){
+  if(!canSeePersonFiles()) return '';
+  const files = personFilesFor(personId);
+  return `
+    <div class="section-title" style="margin-top:30px;">📁 Employee Files<span class="count">${files.length}</span>
+      <span class="btn secondary sm" style="margin-left:auto;" onclick="addPersonFileModal('${personId}')">+ Add File</span>
+    </div>
+    <div class="small mt-1" style="color:var(--slate-light);">DISC assessments, background checks, or anything else you want on hand — visible to admins only, never to the employee themselves.</div>
+    ${!files.length? `<div class="empty-inline mt-2">No files on hand yet.</div>` : `
+    <div class="tbl-card mt-2"><table>
+      <tr><th>File</th><th>Note</th><th>Added</th><th></th></tr>
+      ${files.map(f=>`<tr>
+        <td><strong>${escHtml(f.fileName)}</strong></td>
+        <td>${escHtml(f.notes||'')}</td>
+        <td>${fmtDate(f.uploadedAt)} by ${byId(state.people,f.uploadedBy)?.name||'—'}</td>
+        <td class="flex gap-2">
+          ${f.url?`<span class="btn secondary sm" onclick="window.open('${f.url}','_blank')">View</span>`:''}
+          <span class="miniBtn" onclick="deletePersonFile('${f.id}')" title="Delete">✕</span>
+        </td>
+      </tr>`).join('')}
+    </table></div>`}
+  `;
+}
+function addPersonFileModal(personId){
+  if(!canEdit()) return;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Add File</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>File</label>
+          <input type="file" id="m-pf-file">
+          <label class="mt-2">Note <span class="small" style="font-weight:400;">(optional — e.g. "DISC assessment, Aug 2026")</span></label>
+          <input type="text" id="m-pf-notes" placeholder="What is this?">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="savePersonFile('${personId}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+async function savePersonFile(personId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const fileInput = document.getElementById('m-pf-file');
+  if(!fileInput.files[0]){ toast('Choose a file first'); return; }
+  const notes = document.getElementById('m-pf-notes').value.trim();
+  try{
+    const url = await uploadPhotoToStorage(fileInput.files[0], 'person-files');
+    state.personFiles.push({
+      id: 'pf'+Date.now(), personId, url, fileName: fileInput.files[0].name, notes,
+      uploadedBy: currentUser().id, uploadedAt: new Date().toISOString().slice(0,10)
+    });
+    saveState(); closeModal(el); toast('Saved'); render();
+  }catch(e){
+    toast('Upload failed: ' + (e.message||'unknown error'));
+  }
+}
+function deletePersonFile(fileId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Delete this file? This cannot be undone.', ()=>{
+    state.personFiles = state.personFiles.filter(f=>f.id!==fileId);
+    saveState(); toast('Deleted'); render();
+  });
+}
 /* ================= DISCIPLINARY ACTIONS ================= */
 /* Deliberately admin-only — not shown to the employee themselves, including through View As.
    That's a real policy choice, not a default to take for granted; flip canSeeDisciplinary if
@@ -9067,20 +9290,51 @@ function openLogPastReviewModal(personId){
       </div>
     </div>`);
 }
+function renderCriterionInput(criterion, idPrefix, existing){
+  existing = existing || {};
+  const type = criterion.type || 'tier';
+  let ratingField = '';
+  if(type==='scale5'){
+    ratingField = `<div class="flex gap-2 mt-1" id="${idPrefix}-scale-${criterion.id}">
+      ${[1,2,3,4,5].map(n=>`<label class="flex gap-2" style="align-items:center;width:auto;font-weight:500;">
+        <input type="radio" name="${idPrefix}-rating-${criterion.id}" value="${n}" style="width:auto;margin:0;" ${String(existing.rating)===String(n)?'checked':''}> ${n}
+      </label>`).join('')}
+    </div>`;
+  } else if(type==='tier'){
+    ratingField = `<select id="${idPrefix}-rating-${criterion.id}" style="margin-bottom:8px;">
+      <option value="">— Rate —</option>
+      <option value="Needs Improvement" ${existing.rating==='Needs Improvement'?'selected':''}>Needs Improvement</option>
+      <option value="Meets Expectations" ${existing.rating==='Meets Expectations'?'selected':''}>Meets Expectations</option>
+      <option value="Exceeds Expectations" ${existing.rating==='Exceeds Expectations'?'selected':''}>Exceeds Expectations</option>
+    </select>`;
+  }
+  return `<div class="card mt-2" style="padding:14px 16px;">
+    <div style="font-weight:600;font-size:13.5px;margin-bottom:8px;">${escHtml(criterion.text)}</div>
+    ${ratingField}
+    <textarea id="${idPrefix}-comment-${criterion.id}" placeholder="Notes on this specific area..." style="min-height:60px;margin-top:${type==='notes'?'0':'8px'};">${existing.comment||''}</textarea>
+  </div>`;
+}
+function readCriterionResponse(criterion, idPrefix){
+  const type = criterion.type || 'tier';
+  let rating = '';
+  if(type==='scale5'){
+    const checked = document.querySelector(`input[name="${idPrefix}-rating-${criterion.id}"]:checked`);
+    rating = checked ? checked.value : '';
+  } else if(type==='tier'){
+    rating = document.getElementById(`${idPrefix}-rating-${criterion.id}`)?.value || '';
+  }
+  return {
+    criterionId: criterion.id,
+    criterion: criterion.text,
+    rating,
+    comment: document.getElementById(`${idPrefix}-comment-${criterion.id}`)?.value.trim() || ''
+  };
+}
 function renderPastReviewCriteriaFields(templateId){
   if(!templateId) return '';
   const template = byId(state.performanceReviewTemplates, templateId);
   if(!template) return '';
-  return template.criteria.map((c,i)=>`<div class="card mt-2" style="padding:14px 16px;">
-    <div style="font-weight:600;font-size:13.5px;margin-bottom:8px;">${c}</div>
-    <select id="m-plrev-rating-${i}" style="margin-bottom:8px;">
-      <option value="">— Rate —</option>
-      <option value="Needs Improvement">Needs Improvement</option>
-      <option value="Meets Expectations">Meets Expectations</option>
-      <option value="Exceeds Expectations">Exceeds Expectations</option>
-    </select>
-    <textarea id="m-plrev-comment-${i}" placeholder="Notes on this specific area..." style="min-height:60px;"></textarea>
-  </div>`).join('');
+  return template.criteria.map(c=>renderCriterionInput(c, 'm-plrev')).join('');
 }
 function saveLoggedPastReview(personId, el){
   if(!canEdit()){ toast('Admins only'); return; }
@@ -9097,11 +9351,7 @@ function saveLoggedPastReview(personId, el){
     criteriaResponses: []
   };
   if(template){
-    review.criteriaResponses = template.criteria.map((c,i)=>({
-      criterion: c,
-      rating: document.getElementById('m-plrev-rating-'+i)?.value || '',
-      comment: document.getElementById('m-plrev-comment-'+i)?.value.trim() || ''
-    }));
+    review.criteriaResponses = template.criteria.map(c=>readCriterionResponse(c, 'm-plrev'));
   }
   state.performanceReviews.push(review);
   saveState(); closeModal(el); toast('Logged'); render();
@@ -9155,15 +9405,19 @@ function viewCompletedReview(reviewId){
         <div class="modal-head"><strong>${reviewTypeLabel(r.type)} — ${byId(state.people,r.personId)?.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
           <div class="small" style="margin-bottom:12px;color:var(--slate-light);">Completed ${fmtDate(r.completedDate)} by ${byId(state.people,r.reviewerPersonId)?.name||'—'}${template?' · '+template.name:''}</div>
-          ${(r.criteriaResponses||[]).map(cr=>`
+          ${(r.criteriaResponses||[]).map(cr=>{
+            const isNumeric = /^[1-5]$/.test(String(cr.rating));
+            const pillColor = isNumeric ? (Number(cr.rating)>=4?'jade':Number(cr.rating)===3?'gray':'rust') : (cr.rating==='Exceeds Expectations'?'jade':cr.rating==='Needs Improvement'?'rust':'gray');
+            const pillLabel = isNumeric ? `${cr.rating}/5` : cr.rating;
+            return `
             <div class="card mt-2" style="padding:12px 14px;">
               <div class="flex" style="justify-content:space-between;align-items:center;">
                 <strong style="font-size:13.5px;">${cr.criterion}</strong>
-                ${cr.rating?`<span class="pill ${cr.rating==='Exceeds Expectations'?'jade':cr.rating==='Needs Improvement'?'rust':'gray'}">${cr.rating}</span>`:''}
+                ${cr.rating?`<span class="pill ${pillColor}">${pillLabel}</span>`:''}
               </div>
               ${cr.comment?`<div class="small mt-1">${cr.comment}</div>`:''}
             </div>
-          `).join('')}
+          `;}).join('')}
           ${r.notes? `<div class="mt-2"><div class="small" style="font-weight:600;margin-bottom:4px;">Overall notes</div><div class="card" style="padding:12px 14px;font-size:13.5px;">${r.notes}</div></div>`:''}
         </div>
         <div class="modal-foot">
@@ -9225,19 +9479,7 @@ function completeReviewModal(reviewId){
         <div class="modal-body">
           ${template? `
             <div class="small" style="margin-bottom:14px;font-weight:600;">${template.name}</div>
-            ${template.criteria.map((c,i)=>{
-              const existing = existingResponses[c] || {};
-              return `<div class="card mt-2" style="padding:14px 16px;">
-                <div style="font-weight:600;font-size:13.5px;margin-bottom:8px;">${c}</div>
-                <select id="m-rev-rating-${i}" style="margin-bottom:8px;">
-                  <option value="">— Rate —</option>
-                  <option value="Needs Improvement" ${existing.rating==='Needs Improvement'?'selected':''}>Needs Improvement</option>
-                  <option value="Meets Expectations" ${existing.rating==='Meets Expectations'?'selected':''}>Meets Expectations</option>
-                  <option value="Exceeds Expectations" ${existing.rating==='Exceeds Expectations'?'selected':''}>Exceeds Expectations</option>
-                </select>
-                <textarea id="m-rev-comment-${i}" placeholder="Notes on this specific area..." style="min-height:60px;">${existing.comment||''}</textarea>
-              </div>`;
-            }).join('')}
+            ${template.criteria.map(c=>renderCriterionInput(c, 'm-rev', existingResponses[c.text])).join('')}
           ` : `<div class="empty-inline mb-2">No template attached — just log freeform notes below.</div>`}
           <label class="mt-2">Overall notes</label><textarea id="m-rev-notes" style="min-height:100px;" placeholder="Summary of the conversation, growth areas, next steps...">${r.notes||''}</textarea>
         </div>
@@ -9253,11 +9495,7 @@ function completeReview(reviewId, el){
   r.completedDate = new Date().toISOString().slice(0,10);
   r.notes = document.getElementById('m-rev-notes').value.trim();
   if(template){
-    r.criteriaResponses = template.criteria.map((c,i)=>({
-      criterion: c,
-      rating: document.getElementById('m-rev-rating-'+i).value,
-      comment: document.getElementById('m-rev-comment-'+i).value.trim()
-    }));
+    r.criteriaResponses = template.criteria.map(c=>readCriterionResponse(c, 'm-rev'));
   }
   if(r.type==='1-year' || r.type==='annual'){
     state.performanceReviews.push({
@@ -9407,14 +9645,31 @@ function newQuizPickTopicModal(){
 }
 function renderFillableForms(){
   if(!canEdit()){ return `<div class="empty"><h3>Admins only</h3><p>Ask an owner or admin about fillable forms.</p></div>`; }
+  const filterCat = currentParams.cat || 'all';
+  const filterRole = currentParams.role || 'all';
+  const matchesFilters = f => (filterCat==='all'||f.category===filterCat) && (filterRole==='all'||(f.tags||[]).includes(byId(state.roles,filterRole)?.title));
+  const filtersActive = filterCat!=='all' || filterRole!=='all';
+  const visible = state.fillableForms.filter(matchesFilters);
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Resources</div><div class="page-title">Fillable Forms</div><div class="page-desc">Upload a document, click to place fields, then assign it to someone as a task — they fill it out and sign right here, no printing or DocuSign needed.</div></div>
       <button class="btn bronze" onclick="formBuilderState=null;navigate('formBuilder',{})">+ New Form</button>
     </div>
-    ${!state.fillableForms.length? `<div class="empty"><h3>No fillable forms yet</h3><p>Direct deposit authorization, tool agreements, anything you currently print and hand someone a pen for.</p></div>` : `
+    ${state.fillableForms.length? `<div class="flex gap-2 mt-1 mb-2" style="align-items:center;flex-wrap:wrap;">
+      ${filtersActive?`<span class="btn secondary sm" onclick="navigate('fillableForms',{cat:'all',role:'all'})">✕ Clear filters</span>`:''}
+      <select onchange="navigate('fillableForms',{cat:this.value,role:'${filterRole}'})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterCat==='all'?'selected':''}>Filter by category...</option>
+        ${state.templateCategories.map(c=>`<option value="${escAttr(c)}" ${filterCat===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      ${state.roles.length?`<select onchange="navigate('fillableForms',{cat:'${filterCat}',role:this.value})" style="max-width:220px;margin:0;">
+        <option value="all" ${filterRole==='all'?'selected':''}>Filter by role...</option>
+        ${state.roles.map(r=>`<option value="${r.id}" ${filterRole===r.id?'selected':''}>${r.title}</option>`).join('')}
+      </select>`:''}
+    </div>`:''}
+    ${!state.fillableForms.length? `<div class="empty"><h3>No fillable forms yet</h3><p>Direct deposit authorization, tool agreements, anything you currently print and hand someone a pen for.</p></div>` :
+      (filtersActive && !visible.length)? `<div class="empty"><h3>Nothing matches these filters</h3></div>` : `
     <div class="grid cols-3">
-      ${state.fillableForms.map(f=>{
+      ${visible.map(f=>{
         const subCount = state.formSubmissions.filter(s=>s.formId===f.id).length;
         return `<div class="card hover" onclick="formBuilderState=null;navigate('formBuilder',{formId:'${f.id}'})">
           <strong>${f.name}</strong>
@@ -9433,7 +9688,7 @@ function renderFormBuilder(){
       formBuilderState = JSON.parse(JSON.stringify(byId(state.fillableForms, formId)));
       formBuilderState._loadedFor = loadKey;
     } else {
-      formBuilderState = {id:null, name:'', description:'', backgroundImages:[], fields:[], _loadedFor:'new'};
+      formBuilderState = {id:null, name:'', description:'', category: state.templateCategories[0]||'', tags:[], backgroundImages:[], fields:[], _loadedFor:'new'};
     }
     if(!formBuilderState.backgroundImages) formBuilderState.backgroundImages = formBuilderState.backgroundImage ? [formBuilderState.backgroundImage] : [];
     formBuilderState.fields.forEach(f=>{ if(f.page==null) f.page = 0; });
@@ -9455,6 +9710,16 @@ function renderFormBuilder(){
       <label>Form name</label><input type="text" id="fb-name" value="${escAttr(formBuilderState.name)}" oninput="formBuilderState.name=this.value;" placeholder="e.g. Direct Deposit Authorization">
       <label>Description <span class="small" style="font-weight:400;">(optional, shown to whoever fills it out)</span></label>
       <input type="text" id="fb-desc" value="${escAttr(formBuilderState.description)}" oninput="formBuilderState.description=this.value;">
+      <label>Category</label>
+      <select id="fb-cat" onchange="formBuilderState.category=this.value;">
+        ${state.templateCategories.map(c=>`<option value="${escAttr(c)}" ${formBuilderState.category===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter forms by role)</span></label>
+      <div class="flex gap-2" style="flex-wrap:wrap;">
+        ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
+          <input type="checkbox" class="fb-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${(formBuilderState.tags||[]).includes(r.title)?'checked':''}> ${r.title}
+        </label>`).join('') || `<div class="small">No roles set up yet.</div>`}
+      </div>
     </div>
     ${!pages.length? `
       <div class="card mt-2">
@@ -9635,10 +9900,12 @@ function saveFillableForm(){
   if(!canEdit()){ toast('Admins only'); return; }
   if(!formBuilderState.name.trim()){ toast('Name the form first'); return; }
   if(!formBuilderState.backgroundImages || !formBuilderState.backgroundImages.length){ toast('Upload a document first'); return; }
+  const category = document.getElementById('fb-cat').value;
+  const tags = Array.from(document.querySelectorAll('.fb-role:checked')).map(el=>el.value);
   if(formBuilderState.id){
-    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields});
+    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, category, tags, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields});
   } else {
-    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
+    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, category, tags, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
   }
   saveState(); formBuilderState=null; toast('Saved'); navigate('fillableForms');
 }
@@ -9753,9 +10020,11 @@ function openReviewTemplateModal(templateId, prefillRoleId){
           <label>Name</label><input type="text" id="m-rt-name" value="${escAttr(t?.name)}" placeholder="e.g. Site Superintendent Review">
           <label>Which role is this for? <span class="small" style="font-weight:400;">(optional — leave blank for the general template used when no role-specific one exists)</span></label>
           <select id="m-rt-role"><option value="">— General / all roles —</option>${state.roles.map(r=>`<option value="${r.id}" ${(t?t.roleId===r.id:prefillRoleId===r.id)?'selected':''}>${r.title}</option>`).join('')}</select>
-          <label class="mt-2">Evaluation criteria <span class="small" style="font-weight:400;">(type one, press Enter)</span></label>
-          <div class="chip-list" id="m-rt-criteria-list">${(t?.criteria||[]).map(x=>chipHtml(x)).join('')}</div>
-          <input type="text" id="m-rt-criteria-input" placeholder="Type a criterion, press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();addChipItem('m-rt-criteria-list',this);}">
+          <label class="mt-2">Evaluation criteria <span class="small" style="font-weight:400;">(each one can be scored a different way)</span></label>
+          <div id="m-rt-criteria-rows">
+            ${(t?.criteria||[]).map(c=>reviewCriterionRow(c)).join('')}
+          </div>
+          <button class="btn secondary sm mt-2" onclick="addReviewCriterionRow()">+ Add Criterion</button>
         </div>
         <div class="modal-foot">
           ${t?`<button class="btn danger" style="margin-right:auto;" onclick="deleteReviewTemplate('${t.id}');closeModal(this)">Delete</button>`:''}
@@ -9765,11 +10034,36 @@ function openReviewTemplateModal(templateId, prefillRoleId){
       </div>
     </div>`);
 }
+const REVIEW_CRITERION_TYPES = {
+  scale5: {label:'1–5 rating scale'},
+  tier: {label:'Needs / Meets / Exceeds'},
+  notes: {label:'Notes only, no rating'}
+};
+function reviewCriterionRow(c){
+  const id = c?.id || 'crit'+Date.now()+Math.random().toString(36).slice(2);
+  return `<div class="card mt-2" style="padding:12px 14px;" data-criterion-id="${id}">
+    <div class="flex gap-2">
+      <input type="text" class="m-rt-crit-text" value="${escAttr(c?.text)}" placeholder="e.g. Quality of work" style="flex:1;">
+      <span class="miniBtn" onclick="this.closest('[data-criterion-id]').remove()" title="Remove">✕</span>
+    </div>
+    <select class="m-rt-crit-type mt-2">
+      ${Object.keys(REVIEW_CRITERION_TYPES).map(k=>`<option value="${k}" ${(c?.type||'tier')===k?'selected':''}>${REVIEW_CRITERION_TYPES[k].label}</option>`).join('')}
+    </select>
+  </div>`;
+}
+function addReviewCriterionRow(){
+  document.getElementById('m-rt-criteria-rows').insertAdjacentHTML('beforeend', reviewCriterionRow(null));
+}
 function saveReviewTemplate(templateId, el){
   if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-rt-name').value.trim();
   if(!name){ toast('Name is required'); return; }
-  const data = { name, roleId: document.getElementById('m-rt-role').value || null, criteria: getChipValues('m-rt-criteria-list') };
+  const criteria = Array.from(document.querySelectorAll('#m-rt-criteria-rows [data-criterion-id]')).map(row=>({
+    id: row.dataset.criterionId,
+    text: row.querySelector('.m-rt-crit-text').value.trim(),
+    type: row.querySelector('.m-rt-crit-type').value
+  })).filter(c=>c.text);
+  const data = { name, roleId: document.getElementById('m-rt-role').value || null, criteria };
   if(templateId){ Object.assign(byId(state.performanceReviewTemplates, templateId), data); }
   else { data.id = 'prt'+Date.now(); state.performanceReviewTemplates.push(data); }
   saveState(); closeModal(el); toast('Saved'); render();
@@ -10010,6 +10304,130 @@ function copyInviteMessage(btn){
 }
 
 /* ================= COMPANY SETTINGS ================= */
+function contractStatus(c){
+  if(!c.expirationDate) return {label:'No expiration', pill:'gray'};
+  const today = new Date().toISOString().slice(0,10);
+  const daysLeft = Math.ceil((new Date(c.expirationDate) - new Date(today)) / 86400000);
+  if(daysLeft < 0) return {label:'Expired', pill:'rust'};
+  if(daysLeft <= 30) return {label:`Expires in ${daysLeft} day${daysLeft!==1?'s':''}`, pill:'amber'};
+  return {label:'Active', pill:'jade'};
+}
+function renderContractsTabContent(){
+  const sorted = [...state.contracts].sort((a,b)=>(a.expirationDate||'9999').localeCompare(b.expirationDate||'9999'));
+  return `
+    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin:16px 0;">
+      <div class="small" style="flex:1;">Signed vendor, insurance, and service agreements — internal only, visible to admins alone.</div>
+      <button class="btn bronze sm" onclick="openContractModal()">+ Add Contract</button>
+    </div>
+    ${!sorted.length? `<div class="empty"><h3>No contracts on file yet</h3><p>Insurance policies, vendor agreements, leases — anything signed that you want a record of, with a heads-up before it lapses.</p></div>` : `
+    <div class="tbl-card"><table>
+      <tr><th>Contract</th><th>Party</th><th>Type</th><th>Signed</th><th>Expires</th><th>Status</th><th></th></tr>
+      ${sorted.map(c=>{
+        const status = contractStatus(c);
+        return `<tr>
+          <td><strong>${escHtml(c.title)}</strong></td>
+          <td>${escHtml(c.party)}</td>
+          <td>${escHtml(c.contractType)}</td>
+          <td>${c.signedDate?fmtDate(c.signedDate):'—'}</td>
+          <td>${c.expirationDate?fmtDate(c.expirationDate):'—'}${c.autoRenew?' <span class="small" style="color:var(--slate-light);">(auto-renews)</span>':''}</td>
+          <td><span class="pill ${status.pill}">${status.label}</span></td>
+          <td class="flex gap-2">
+            ${(c.fileKey||c.url)?`<span class="btn secondary sm" onclick="viewContract('${c.id}')">👁 View</span>`:''}
+            <span class="btn secondary sm" onclick="openContractModal('${c.id}')">Edit</span>
+            <span class="btn danger sm" onclick="deleteContract('${c.id}')">Remove</span>
+          </td>
+        </tr>`;
+      }).join('')}
+    </table></div>`}
+  `;
+}
+function openContractModal(contractId){
+  if(!canEdit()) return;
+  const c = contractId ? byId(state.contracts, contractId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${c?'Edit Contract':'Add Contract'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Contract title</label><input type="text" id="m-contract-title" value="${escAttr(c?.title)}" placeholder="e.g. General Liability Insurance">
+          <div class="field-row">
+            <div><label>Other party / vendor</label><input type="text" id="m-contract-party" value="${escAttr(c?.party)}" placeholder="e.g. Progressive Commercial"></div>
+            <div>
+              <label>Contract type</label>
+              <select id="m-contract-type" onchange="document.getElementById('m-contract-type-other-wrap').style.display=this.value==='Other'?'block':'none';">
+                ${['Insurance','Vendor Agreement','Lease','Service Agreement','Subcontractor Agreement','Other'].map(opt=>`<option value="${opt}" ${(c?.contractType===opt || (opt==='Other' && c?.contractType && !['Insurance','Vendor Agreement','Lease','Service Agreement','Subcontractor Agreement'].includes(c.contractType)))?'selected':''}>${opt}</option>`).join('')}
+              </select>
+              <div id="m-contract-type-other-wrap" class="mt-1" style="display:${(c?.contractType && !['Insurance','Vendor Agreement','Lease','Service Agreement','Subcontractor Agreement'].includes(c.contractType))?'block':'none'};">
+                <input type="text" id="m-contract-type-other" value="${escAttr((c?.contractType && !['Insurance','Vendor Agreement','Lease','Service Agreement','Subcontractor Agreement'].includes(c.contractType))?c.contractType:'')}" placeholder="Type the contract type">
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div><label>Signed date</label><input type="date" id="m-contract-signed" value="${c?.signedDate||''}"></div>
+            <div><label>Expiration date <span class="small" style="font-weight:400;">(optional)</span></label><input type="date" id="m-contract-expires" value="${c?.expirationDate||''}"></div>
+          </div>
+          <label class="flex gap-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-contract-autorenew" style="width:auto;margin:0;" ${c?.autoRenew?'checked':''}>
+            Auto-renews
+          </label>
+          <label class="mt-2">Notes <span class="small" style="font-weight:400;">(optional)</span></label>
+          <textarea id="m-contract-notes">${c?.notes||''}</textarea>
+          <label class="mt-2">Signed document ${c?.fileName?`<span class="small" style="font-weight:400;">(currently: ${escHtml(c.fileName)} — upload a new file to replace it)</span>`:''}</label>
+          <input type="file" id="m-contract-file" accept=".pdf,.doc,.docx,image/*">
+        </div>
+        <div class="modal-foot">
+          ${c?`<button class="btn danger" style="margin-right:auto;" onclick="deleteContract('${c.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveContract('${contractId||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+async function saveContract(contractId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const title = document.getElementById('m-contract-title').value.trim();
+  if(!title){ toast('Contract title is required'); return; }
+  const typeSelected = document.getElementById('m-contract-type').value;
+  const contractType = typeSelected==='Other' ? (document.getElementById('m-contract-type-other').value.trim() || 'Other') : typeSelected;
+  const data = {
+    title,
+    party: document.getElementById('m-contract-party').value.trim(),
+    contractType,
+    signedDate: document.getElementById('m-contract-signed').value || null,
+    expirationDate: document.getElementById('m-contract-expires').value || null,
+    autoRenew: document.getElementById('m-contract-autorenew').checked,
+    notes: document.getElementById('m-contract-notes').value.trim()
+  };
+  const fileInput = document.getElementById('m-contract-file');
+  if(fileInput.files[0]){
+    try{
+      data.url = await uploadPhotoToStorage(fileInput.files[0], 'contracts');
+      data.fileName = fileInput.files[0].name;
+    }catch(e){
+      toast('File upload failed: ' + (e.message||'unknown error') + ' — saving the rest of the contract anyway.');
+    }
+  }
+  if(contractId){ Object.assign(byId(state.contracts, contractId), data); }
+  else {
+    data.id = 'contract'+Date.now();
+    data.addedBy = currentUser().id;
+    data.addedAt = new Date().toISOString().slice(0,10);
+    state.contracts.push(data);
+  }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function viewContract(contractId){
+  const c = byId(state.contracts, contractId);
+  if(c.url) window.open(c.url, '_blank');
+}
+function deleteContract(contractId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Delete this contract record? This cannot be undone.', ()=>{
+    state.contracts = state.contracts.filter(c=>c.id!==contractId);
+    saveState(); toast('Deleted'); render();
+  });
+}
+let companySettingsTab = 'general';
 function renderCompanySettings(){
   if(!canEdit()){ return `<div class="empty"><h3>Admins only</h3><p>Ask an owner or admin to make changes here.</p></div>`; }
   const cs = state.companySettings;
@@ -10017,6 +10435,11 @@ function renderCompanySettings(){
   const openaiKey = getOpenAiKey();
   return `
     <div class="page-head"><div><div class="page-eyebrow">Admin</div><div class="page-title">Company Settings</div><div class="page-desc">Core company info and platform-wide configuration.</div></div></div>
+    <div class="tabs">
+      <div class="tab ${companySettingsTab==='general'?'active':''}" onclick="companySettingsTab='general';render();">General</div>
+      <div class="tab ${companySettingsTab==='contracts'?'active':''}" onclick="companySettingsTab='contracts';render();">Contracts</div>
+    </div>
+    ${companySettingsTab==='contracts'? renderContractsTabContent() : `
 
     <div class="section-title">Branding</div>
     <div class="card">
@@ -10186,6 +10609,7 @@ function renderCompanySettings(){
       <div class="card hover" onclick="navigate('orgchart')"><strong>Org Chart</strong><div class="small mt-1">${state.positions.length} seats</div></div>
       <div class="card hover" onclick="navigate('reports')"><strong>Reports</strong><div class="small mt-1">Completion &amp; overdue tracking</div></div>
     </div>
+    `}
   `;
 }
 function toggleManagersSeeCompletion(checked){
