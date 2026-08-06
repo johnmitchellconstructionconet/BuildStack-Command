@@ -341,7 +341,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
 .orgnode .avatar{margin:0 auto 6px;}
 .orgnode-name{font-weight:700;font-size:12.5px;}
 .orgnode-title{font-size:10.8px;color:var(--slate);}
-.orglevel{display:flex;justify-content:center;flex-wrap:wrap;gap:30px;margin-bottom:34px;position:relative;}
+.orglevel{display:flex;justify-content:center;flex-wrap:nowrap;gap:30px;margin-bottom:34px;position:relative;width:max-content;min-width:100%;}
 .org-family{display:flex;gap:22px;flex-wrap:nowrap;padding:12px;border-radius:16px;background:rgba(140,128,121,0.05);}
 
 .toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;padding:12px 18px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:var(--shadow-2);z-index:200;display:flex;align-items:center;gap:8px;}
@@ -3951,9 +3951,11 @@ function renderOrgChart(){
       </div>`:''}
     </div>
     ${!levels.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
-    <div id="org-canvas" style="position:relative;">
+    <div id="org-canvas-scroll" style="overflow-x:auto;padding-bottom:8px;">
+    <div id="org-canvas" style="position:relative;width:max-content;min-width:100%;">
       <svg id="org-lines" style="position:absolute;top:0;left:0;pointer-events:none;z-index:0;"></svg>
       ${levels.map(level=>renderOrgLevel(level)).join('')}
+    </div>
     </div>
   `;
 }
@@ -3968,9 +3970,9 @@ function orgNode(pos){
   return `<div class="orgnode ${!occupant?'orgnode-open':''}" id="orgnode-${pos.id}" onclick="${(orgEditMode&&canEdit())?`openPositionModal('${pos.id}')`:(occupant?`navigate('personDetail',{id:'${occupant.id}'})`:'')}">
     ${(orgEditMode&&canEdit())?`<div class="org-drag-handle" title="Drag onto another seat to change who this reports to" onmousedown="startDragConnect(event,'${pos.id}')">⠿</div>`:''}
     ${avatarHtml(occupant, 40, 14)}
-    <div class="orgnode-name">${occupant?occupant.name:'Open Seat'}</div>
+    <div class="orgnode-name">${occupant?occupant.name:(pos.status==='Outsourced'?(pos.outsourcedCompany||'Outsourced'):'Open Seat')}</div>
     <div class="orgnode-title">${pos.title}</div>
-    ${!occupant?`<div class="mt-1"><span class="pill amber">${pos.status||'Open'}</span></div>`:''}
+    ${!occupant?`<div class="mt-1"><span class="pill amber">${pos.status==='Outsourced'?`Outsourced${pos.outsourcedCompany?' — '+pos.outsourcedCompany:''}`:(pos.status||'Open')}</span></div>`:''}
     ${otherSeats.length? `<div class="small mt-1" style="color:var(--bronze-dark);font-weight:600;">also holds ${otherSeats.length} other seat${otherSeats.length>1?'s':''}</div>`:''}
     ${orgEditMode && parentRole? `<div class="small mt-1">reports to whoever holds: ${parentRole.title}${parentOccupant?' ('+parentOccupant.name+')':' — currently open'}</div>`:''}
     ${orgEditMode && !parentRole && parentOccupant? `<div class="small mt-1">reports to ${parentOccupant.name}</div>`:''}
@@ -4236,7 +4238,11 @@ function openPositionModal(positionId, prefillParentId){
 
           <div id="m-pos-open-fields" style="display:${pos && !pos.personId ? 'block':'none'};" class="mt-2">
             <label>Seat status</label>
-            <select id="m-pos-status">${['Open','Hiring','Planned','Future'].map(s=>`<option value="${s}" ${pos?.status===s?'selected':''}>${s}</option>`).join('')}</select>
+            <select id="m-pos-status" onchange="document.getElementById('m-pos-outsourced-wrap').style.display=this.value==='Outsourced'?'block':'none';">${['Open','Hiring','Planned','Future','Outsourced'].map(s=>`<option value="${s}" ${pos?.status===s?'selected':''}>${s}</option>`).join('')}</select>
+            <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2">
+              <label>Company name</label>
+              <input type="text" id="m-pos-outsourced-company" value="${escAttr(pos?.outsourcedCompany)}" placeholder="e.g. Acme Drafting Services">
+            </div>
           </div>
         </div>
         <div class="modal-foot">
@@ -4279,6 +4285,7 @@ function savePositionModal(existingId){
     }
   }
 
+  const seatStatus = personId ? null : document.getElementById('m-pos-status').value;
   const data = {
     title,
     departmentId,
@@ -4287,7 +4294,8 @@ function savePositionModal(existingId){
     parentPositionId: reportsType==='seat' ? (document.getElementById('m-pos-parent').value || null) : null,
     parentRoleId: reportsType==='role' ? (document.getElementById('m-pos-parent-role').value || null) : null,
     personId,
-    status: personId ? null : document.getElementById('m-pos-status').value
+    status: seatStatus,
+    outsourcedCompany: seatStatus==='Outsourced' ? document.getElementById('m-pos-outsourced-company').value.trim() : null
   };
   let id = existingId;
   if(id){ Object.assign(byId(state.positions, id), data); }
@@ -9782,7 +9790,7 @@ function openNewEmployeeWizard(){
           `).join('')}
 
           <div class="section-title" style="margin-top:22px;">Seat on the org chart</div>
-          ${state.positions.some(p=>!p.personId)? `
+          ${state.positions.some(p=>!p.personId && p.status!=='Outsourced')? `
           <div class="flex gap-3 mt-1" style="margin-bottom:12px;">
             <label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-bottom:0;"><input type="radio" name="nw-seatmode" value="existing" checked style="width:auto;margin:0;" onchange="document.getElementById('nw-existing-seat-wrap').style.display='block';document.getElementById('nw-new-seat-wrap').style.display='none';">Fill an existing open seat</label>
             <label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-bottom:0;"><input type="radio" name="nw-seatmode" value="new" style="width:auto;margin:0;" onchange="document.getElementById('nw-existing-seat-wrap').style.display='none';document.getElementById('nw-new-seat-wrap').style.display='block';">Create a new seat</label>
@@ -9790,7 +9798,7 @@ function openNewEmployeeWizard(){
           <div id="nw-existing-seat-wrap">
             <label>Open seat</label>
             <select id="nw-existing-seat">
-              ${state.positions.filter(p=>!p.personId).map(p=>`<option value="${p.id}">${p.title}${byId(state.departments,p.departmentId)?' — '+byId(state.departments,p.departmentId).name:''}</option>`).join('')}
+              ${state.positions.filter(p=>!p.personId && p.status!=='Outsourced').map(p=>`<option value="${p.id}">${p.title}${byId(state.departments,p.departmentId)?' — '+byId(state.departments,p.departmentId).name:''}</option>`).join('')}
             </select>
             <div class="small mt-1">Their title, department, role, and reporting line will all come from this seat — nothing to fill in below.</div>
           </div>
