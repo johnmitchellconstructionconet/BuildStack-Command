@@ -3907,7 +3907,11 @@ function renderPersonDetail(){
 /* ---- Org chart: built from POSITIONS (seats), not people — a person can hold several ---- */
 let orgEditMode = false;
 function toggleOrgEdit(){ orgEditMode=!orgEditMode; render(); }
-function personPositions(personId){ return state.positions.filter(p=>p.personId===personId); }
+function personPositions(personId){ return state.positions.filter(p=>p.personId===personId || (p.additionalPersonIds||[]).includes(personId)); }
+function allSeatOccupants(pos){
+  const ids = [pos.personId, ...(pos.additionalPersonIds||[])].filter(Boolean);
+  return ids.map(id=>byId(state.people,id)).filter(Boolean);
+}
 /* A seat can report to a specific other seat, OR to "whoever holds this role" — resolved
    dynamically, so re-orgs and turnover don't require manually rewiring every subordinate. */
 function getEffectiveParentPositionId(pos){
@@ -3988,6 +3992,7 @@ function renderOrgChart(){
 }
 function orgNode(pos){
   const occupant = pos.personId ? byId(state.people, pos.personId) : null;
+  const additionalOccupants = (pos.additionalPersonIds||[]).map(id=>byId(state.people,id)).filter(Boolean);
   const otherSeats = occupant ? personPositions(occupant.id).filter(p=>p.id!==pos.id) : [];
   const effectiveParentId = getEffectiveParentPositionId(pos);
   const parentPos = byId(state.positions, effectiveParentId);
@@ -3999,17 +4004,18 @@ function orgNode(pos){
     ${(orgEditMode&&canEdit())?`<div class="org-drag-handle" title="Drag onto another seat to change who this reports to" onmousedown="startDragConnect(event,'${pos.id}')">⠿</div>`:''}
     ${avatarHtml(occupant, 40, 14)}
     <div class="orgnode-name">${occupant?occupant.name:(pos.status==='Outsourced'?(pos.outsourcedCompany||'Outsourced'):'Open Seat')}</div>
+    ${additionalOccupants.length? `<div class="small mt-1" style="color:var(--slate);">+ ${additionalOccupants.slice(0,2).map(o=>`<span style="cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation();navigate('personDetail',{id:'${o.id}'})">${o.name}</span>`).join(', ')}${additionalOccupants.length>2?` +${additionalOccupants.length-2} more`:''}</div>`:''}
     <div class="orgnode-title">${pos.title}</div>
-    ${!occupant?`<div class="mt-1"><span class="pill amber">${pos.status==='Outsourced'?`Outsourced${pos.outsourcedCompany?' — '+pos.outsourcedCompany:''}`:(pos.status||'Open')}</span></div>`:''}
+    ${!occupant?`<div class="mt-1"><span class="pill ${({Open:'gray',Hiring:'jade',Planned:'amber',Future:'bronze',Outsourced:'rust'})[pos.status]||'gray'}">${pos.status==='Outsourced'?`Outsourced${pos.outsourcedCompany?' — '+pos.outsourcedCompany:''}`:(pos.status||'Open')}</span></div>`:''}
     ${otherSeats.length? `<div class="small mt-1" style="color:var(--bronze-dark);font-weight:600;">also holds ${otherSeats.length} other seat${otherSeats.length>1?'s':''}</div>`:''}
-    ${orgEditMode && parentRole? `<div class="small mt-1">reports to whoever holds: ${parentRole.title}${parentOccupant?' ('+parentOccupant.name+')':' — currently open'}</div>`:''}
-    ${orgEditMode && !parentRole && parentOccupant? `<div class="small mt-1">reports to ${parentOccupant.name}</div>`:''}
+    ${parentRole? `<div class="small mt-1" style="${orgEditMode?'':'visibility:hidden;'}">reports to whoever holds: ${parentRole.title}${parentOccupant?' ('+parentOccupant.name+')':' — currently open'}</div>`:''}
+    ${!parentRole && parentOccupant? `<div class="small mt-1" style="${orgEditMode?'':'visibility:hidden;'}">reports to ${parentOccupant.name}</div>`:''}
     ${role && role.title!==pos.title? `<div class="mt-1">${canSeeRoleDetail(role.id)?`<span class="pill bronze" style="cursor:pointer;" onclick="event.stopPropagation();navigate('roleDetail',{id:'${role.id}'})">${role.title}</span>`:`<span class="pill gray">${role.title}</span>`}</div>`:''}
-    ${role? `<div class="mt-1"><span class="seat-kpi-link" onclick="event.stopPropagation();showSeatKpis('${pos.id}')">📊 View KPIs</span></div>` : (orgEditMode? `<div class="small mt-1" style="color:var(--slate-light);">No role linked — no training auto-assigns here</div>`:'')}
-    ${(orgEditMode&&canEdit())?`<div class="mt-2 flex gap-2" style="justify-content:center;flex-wrap:wrap;">
+    ${role? `<div class="mt-1"><span class="seat-kpi-link" onclick="event.stopPropagation();showSeatKpis('${pos.id}')">📊 View KPIs</span></div>` : `<div class="small mt-1" style="color:var(--slate-light);${orgEditMode?'':'visibility:hidden;'}">No role linked — no training auto-assigns here</div>`}
+    <div class="mt-2 flex gap-2" style="justify-content:center;flex-wrap:wrap;${(orgEditMode&&canEdit())?'':'visibility:hidden;'}">
         <span class="btn secondary sm" onclick="event.stopPropagation();openPositionModal(null,'${pos.id}')">+ Add Below</span>
         <span class="btn danger sm" onclick="event.stopPropagation();deletePositionNode('${pos.id}')">Remove</span>
-      </div>`:''}
+      </div>
   </div>`;
 }
 let orgNodeMoveState = null;
@@ -4307,6 +4313,12 @@ function openPositionModal(positionId, prefillParentId){
           </select>
           <div id="m-pos-multiseat-note" class="small mt-1" style="color:var(--bronze-dark);">${pos?.personId?buildMultiSeatNote(pos.personId,pos.id):''}</div>
 
+          <label class="mt-2">Also sitting in this seat <span class="small" style="font-weight:400;">(optional — for job-sharing or more than one person doing this exact job)</span></label>
+          <select id="m-pos-additional-people" multiple style="min-height:90px;">
+            ${state.people.filter(p=>p.id!==pos?.personId).map(p=>`<option value="${p.id}" ${(pos?.additionalPersonIds||[]).includes(p.id)?'selected':''}>${p.name}</option>`).join('')}
+          </select>
+          <div class="small mt-1" style="color:var(--slate-light);">Ctrl/Cmd-click to select more than one.</div>
+
           <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2">
             <label>Company name</label>
             <input type="text" id="m-pos-outsourced-company" value="${escAttr(pos?.outsourcedCompany)}" placeholder="e.g. Acme Drafting Services">
@@ -4359,6 +4371,7 @@ function savePositionModal(existingId){
     }
   }
 
+  const additionalPersonIds = Array.from(document.getElementById('m-pos-additional-people').selectedOptions).map(o=>o.value);
   const seatStatus = personId ? null : (isOutsourced ? 'Outsourced' : document.getElementById('m-pos-status').value);
   const data = {
     title,
@@ -4368,6 +4381,7 @@ function savePositionModal(existingId){
     parentPositionId: reportsType==='seat' ? (document.getElementById('m-pos-parent').value || null) : null,
     parentRoleId: reportsType==='role' ? (document.getElementById('m-pos-parent-role').value || null) : null,
     personId,
+    additionalPersonIds,
     status: seatStatus,
     outsourcedCompany: isOutsourced ? document.getElementById('m-pos-outsourced-company').value.trim() : null
   };
@@ -4382,7 +4396,7 @@ function savePositionModal(existingId){
     }
   }
   saveState();
-  if(personId){ syncPersonPrimaryFields(personId); syncRoleAssignments(personId); }
+  [personId, ...additionalPersonIds].filter(Boolean).forEach(pid=>{ syncPersonPrimaryFields(pid); syncRoleAssignments(pid); });
   document.querySelector('.modal-backdrop')?.remove();
   toast('Saved'); render();
 }
