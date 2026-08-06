@@ -321,8 +321,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
 .quiz-opt.incorrect{border-color:var(--rust);background:var(--rust-tint);}
 
 .orgnode{position:relative;z-index:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:154px;text-align:center;cursor:pointer;box-shadow:var(--shadow-1);transition:box-shadow .18s, transform .18s;}
-.org-reorder-controls{position:absolute;top:6px;right:6px;display:flex;gap:2px;}
-.org-reorder-controls .miniBtn{width:20px;height:20px;font-size:12px;}
+.org-move-handle{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:6px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:grab;color:var(--bronze-dark);z-index:3;}
+.org-move-handle:active{cursor:grabbing;}
 .org-drag-handle{position:absolute;top:-9px;left:50%;transform:translateX(-50%);width:20px;height:20px;border-radius:50%;background:var(--bronze);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:grab;z-index:6;box-shadow:0 1px 4px rgba(0,0,0,0.35);}
 .org-drag-handle:active{cursor:grabbing;}
 .orgnode.drop-target{box-shadow:0 0 0 3px var(--jade);}
@@ -3917,6 +3917,29 @@ function getEffectiveParentPositionId(pos){
   }
   return pos.parentPositionId || null;
 }
+function ensureOrgPositionsHaveCoordinates(){
+  const anyMissing = state.positions.some(p=>p.x==null || p.y==null);
+  if(!anyMissing) return false;
+  const levels = orgLevels();
+  const BOX_W = 180, SIB_GAP = 24, FAMILY_GAP = 50, ROW_H = 210;
+  levels.forEach((level, levelIdx)=>{
+    const groups = {}; const order = [];
+    level.forEach(p=>{
+      const parentId = getEffectiveParentPositionId(p) || '__root__';
+      if(!groups[parentId]){ groups[parentId] = []; order.push(parentId); }
+      groups[parentId].push(p);
+    });
+    let xCursor = 40;
+    order.forEach(pid=>{
+      groups[pid].forEach(p=>{
+        if(p.x==null || p.y==null){ p.x = xCursor; p.y = 40 + levelIdx*ROW_H; }
+        xCursor += BOX_W + SIB_GAP;
+      });
+      xCursor += FAMILY_GAP;
+    });
+  });
+  return true;
+}
 function orgLevels(){
   const roots = state.positions.filter(p=> !getEffectiveParentPositionId(p) || !byId(state.positions,getEffectiveParentPositionId(p)));
   const levels = []; let current = roots; const seen = new Set(roots.map(r=>r.id));
@@ -3943,20 +3966,22 @@ function renderOrgLevel(level){
 }
 function renderOrgChart(){
   const gate = featureGate('orgchart','Org Chart'); if(gate) return gate;
-  const levels = orgLevels();
+  if(ensureOrgPositionsHaveCoordinates()) saveState();
+  const maxX = state.positions.reduce((m,p)=>Math.max(m,(p.x||0)+220), 800);
+  const maxY = state.positions.reduce((m,p)=>Math.max(m,(p.y||0)+220), 400);
   return `
     <div class="page-head">
-      <div><div class="page-eyebrow">Organization</div><div class="page-title">Org Chart</div><div class="page-desc">${orgEditMode?'Edit mode — add seats below any box, drag reporting lines by editing a seat, or reassign who sits where.':'Click a seat to view that person\u2019s profile. Click "View KPIs" to see what that seat is measured on.'}</div></div>
+      <div><div class="page-eyebrow">Organization</div><div class="page-title">Org Chart</div><div class="page-desc">${orgEditMode?'Edit mode — drag any box by its move handle to reposition it, or drag the ⠿ handle onto another box to change who it reports to.':'Click a seat to view that person\u2019s profile. Click "View KPIs" to see what that seat is measured on.'}</div></div>
       ${canEdit()?`<div class="flex gap-2">
         <button class="btn secondary" onclick="toggleOrgEdit()">${orgEditMode?'Done Editing':'Edit Org Chart'}</button>
         ${orgEditMode?`<button class="btn bronze" onclick="openPositionModal(null)">+ Add Seat</button>`:''}
       </div>`:''}
     </div>
-    ${!levels.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
+    ${!state.positions.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
     <div id="org-canvas-scroll" style="overflow-x:auto;padding-bottom:8px;">
-    <div id="org-canvas" style="position:relative;width:max-content;min-width:100%;">
+    <div id="org-canvas" style="position:relative;width:${maxX}px;height:${maxY}px;min-width:100%;">
       <svg id="org-lines" style="position:absolute;top:0;left:0;pointer-events:none;z-index:0;"></svg>
-      ${levels.map(level=>renderOrgLevel(level)).join('')}
+      ${state.positions.map(orgNode).join('')}
     </div>
     </div>
   `;
@@ -3969,14 +3994,9 @@ function orgNode(pos){
   const parentOccupant = parentPos && parentPos.personId ? byId(state.people, parentPos.personId) : null;
   const parentRole = pos.parentRoleId ? byId(state.roles, pos.parentRoleId) : null;
   const role = byId(state.roles, pos.roleId);
-  const siblings = state.positions.filter(p=>getEffectiveParentPositionId(p)===effectiveParentId);
-  const siblingIdx = siblings.indexOf(pos);
-  return `<div class="orgnode ${!occupant?'orgnode-open':''}" id="orgnode-${pos.id}" onclick="${(orgEditMode&&canEdit())?`openPositionModal('${pos.id}')`:(occupant?`navigate('personDetail',{id:'${occupant.id}'})`:'')}">
+  return `<div class="orgnode ${!occupant?'orgnode-open':''}" id="orgnode-${pos.id}" style="position:absolute;left:${pos.x||0}px;top:${pos.y||0}px;" onclick="${(orgEditMode&&canEdit())?`openPositionModal('${pos.id}')`:(occupant?`navigate('personDetail',{id:'${occupant.id}'})`:'')}">
+    ${(orgEditMode&&canEdit())?`<div class="org-move-handle" title="Drag to reposition" onmousedown="startOrgNodeMove(event,'${pos.id}')">✥</div>`:''}
     ${(orgEditMode&&canEdit())?`<div class="org-drag-handle" title="Drag onto another seat to change who this reports to" onmousedown="startDragConnect(event,'${pos.id}')">⠿</div>`:''}
-    ${(orgEditMode&&canEdit()&&siblings.length>1)?`<div class="org-reorder-controls">
-      <span class="miniBtn" title="Move left" ${siblingIdx===0?'style="opacity:.25;pointer-events:none;"':''} onclick="event.stopPropagation();moveSeatHorizontally('${pos.id}','left')">←</span>
-      <span class="miniBtn" title="Move right" ${siblingIdx===siblings.length-1?'style="opacity:.25;pointer-events:none;"':''} onclick="event.stopPropagation();moveSeatHorizontally('${pos.id}','right')">→</span>
-    </div>`:''}
     ${avatarHtml(occupant, 40, 14)}
     <div class="orgnode-name">${occupant?occupant.name:(pos.status==='Outsourced'?(pos.outsourcedCompany||'Outsourced'):'Open Seat')}</div>
     <div class="orgnode-title">${pos.title}</div>
@@ -3992,19 +4012,46 @@ function orgNode(pos){
       </div>`:''}
   </div>`;
 }
-function moveSeatHorizontally(posId, direction){
+let orgNodeMoveState = null;
+function startOrgNodeMove(e, posId){
   if(!canEdit()) return;
+  e.preventDefault(); e.stopPropagation();
+  const el = document.getElementById('orgnode-'+posId);
+  if(!el) return;
   const pos = byId(state.positions, posId);
-  const parentId = getEffectiveParentPositionId(pos);
-  const siblings = state.positions.filter(p=>getEffectiveParentPositionId(p)===parentId);
-  const idx = siblings.indexOf(pos);
-  const swapIdx = direction==='left' ? idx-1 : idx+1;
-  if(swapIdx<0 || swapIdx>=siblings.length) return;
-  const swapWith = siblings[swapIdx];
-  const i1 = state.positions.indexOf(pos);
-  const i2 = state.positions.indexOf(swapWith);
-  [state.positions[i1], state.positions[i2]] = [state.positions[i2], state.positions[i1]];
-  saveState(); render();
+  orgNodeMoveState = {
+    posId, el,
+    startMouseX: e.clientX, startMouseY: e.clientY,
+    startX: pos.x||0, startY: pos.y||0
+  };
+  document.addEventListener('mousemove', onOrgNodeMove);
+  document.addEventListener('mouseup', onOrgNodeMoveEnd);
+}
+function onOrgNodeMove(e){
+  if(!orgNodeMoveState) return;
+  const canvas = document.getElementById('org-canvas');
+  const scaleMatch = canvas ? /scale\(([\d.]+)\)/.exec(canvas.style.transform||'') : null;
+  const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+  const dx = (e.clientX - orgNodeMoveState.startMouseX) / scale;
+  const dy = (e.clientY - orgNodeMoveState.startMouseY) / scale;
+  const newX = Math.max(0, orgNodeMoveState.startX + dx);
+  const newY = Math.max(0, orgNodeMoveState.startY + dy);
+  orgNodeMoveState.el.style.left = newX + 'px';
+  orgNodeMoveState.el.style.top = newY + 'px';
+  orgNodeMoveState.liveX = newX; orgNodeMoveState.liveY = newY;
+  drawOrgConnectors();
+}
+function onOrgNodeMoveEnd(){
+  if(!orgNodeMoveState) return;
+  const { posId, liveX, liveY, startX, startY } = orgNodeMoveState;
+  const pos = byId(state.positions, posId);
+  pos.x = Math.round(liveX!=null?liveX:startX);
+  pos.y = Math.round(liveY!=null?liveY:startY);
+  saveState();
+  document.removeEventListener('mousemove', onOrgNodeMove);
+  document.removeEventListener('mouseup', onOrgNodeMoveEnd);
+  orgNodeMoveState = null;
+  render();
 }
 function showSeatKpis(positionId){
   const pos = byId(state.positions, positionId);
