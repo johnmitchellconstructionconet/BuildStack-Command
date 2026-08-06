@@ -4037,7 +4037,29 @@ function showSeatKpis(positionId){
     </div>`);
 }
 /* ---- Draws elbow connector lines between each seat and its parent seat ---- */
+/* Scales the whole org chart down (never up) so it fits the available width without
+   scrolling. Runs before the connector lines are drawn, so the lines are always measured
+   from the final, already-scaled positions — getBoundingClientRect() reflects transforms,
+   so the existing line math needs no changes to stay correct at any scale. */
+function fitOrgChartToWidth(){
+  const canvas = document.getElementById('org-canvas');
+  const wrap = document.getElementById('org-canvas-scroll');
+  if(!canvas || !wrap) return;
+  canvas.style.transform = 'none';
+  canvas.style.marginBottom = '';
+  wrap.style.height = '';
+  const naturalWidth = canvas.scrollWidth;
+  const naturalHeight = canvas.scrollHeight;
+  const availableWidth = wrap.clientWidth;
+  if(naturalWidth > availableWidth && naturalWidth > 0){
+    const scale = Math.max(availableWidth / naturalWidth, 0.4);
+    canvas.style.transform = `scale(${scale})`;
+    canvas.style.transformOrigin = 'top center';
+    wrap.style.height = (naturalHeight * scale) + 'px';
+  }
+}
 function drawOrgConnectors(){
+  fitOrgChartToWidth();
   const canvas = document.getElementById('org-canvas');
   const svg = document.getElementById('org-lines');
   if(!canvas || !svg) return;
