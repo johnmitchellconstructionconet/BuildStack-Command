@@ -321,6 +321,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bronze-tint);bor
 .quiz-opt.incorrect{border-color:var(--rust);background:var(--rust-tint);}
 
 .orgnode{position:relative;z-index:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:154px;text-align:center;cursor:pointer;box-shadow:var(--shadow-1);transition:box-shadow .18s, transform .18s;}
+.org-reorder-controls{position:absolute;top:6px;right:6px;display:flex;gap:2px;}
+.org-reorder-controls .miniBtn{width:20px;height:20px;font-size:12px;}
 .org-drag-handle{position:absolute;top:-9px;left:50%;transform:translateX(-50%);width:20px;height:20px;border-radius:50%;background:var(--bronze);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:grab;z-index:6;box-shadow:0 1px 4px rgba(0,0,0,0.35);}
 .org-drag-handle:active{cursor:grabbing;}
 .orgnode.drop-target{box-shadow:0 0 0 3px var(--jade);}
@@ -3967,8 +3969,14 @@ function orgNode(pos){
   const parentOccupant = parentPos && parentPos.personId ? byId(state.people, parentPos.personId) : null;
   const parentRole = pos.parentRoleId ? byId(state.roles, pos.parentRoleId) : null;
   const role = byId(state.roles, pos.roleId);
+  const siblings = state.positions.filter(p=>getEffectiveParentPositionId(p)===effectiveParentId);
+  const siblingIdx = siblings.indexOf(pos);
   return `<div class="orgnode ${!occupant?'orgnode-open':''}" id="orgnode-${pos.id}" onclick="${(orgEditMode&&canEdit())?`openPositionModal('${pos.id}')`:(occupant?`navigate('personDetail',{id:'${occupant.id}'})`:'')}">
     ${(orgEditMode&&canEdit())?`<div class="org-drag-handle" title="Drag onto another seat to change who this reports to" onmousedown="startDragConnect(event,'${pos.id}')">⠿</div>`:''}
+    ${(orgEditMode&&canEdit()&&siblings.length>1)?`<div class="org-reorder-controls">
+      <span class="miniBtn" title="Move left" ${siblingIdx===0?'style="opacity:.25;pointer-events:none;"':''} onclick="event.stopPropagation();moveSeatHorizontally('${pos.id}','left')">←</span>
+      <span class="miniBtn" title="Move right" ${siblingIdx===siblings.length-1?'style="opacity:.25;pointer-events:none;"':''} onclick="event.stopPropagation();moveSeatHorizontally('${pos.id}','right')">→</span>
+    </div>`:''}
     ${avatarHtml(occupant, 40, 14)}
     <div class="orgnode-name">${occupant?occupant.name:(pos.status==='Outsourced'?(pos.outsourcedCompany||'Outsourced'):'Open Seat')}</div>
     <div class="orgnode-title">${pos.title}</div>
@@ -3983,6 +3991,20 @@ function orgNode(pos){
         <span class="btn danger sm" onclick="event.stopPropagation();deletePositionNode('${pos.id}')">Remove</span>
       </div>`:''}
   </div>`;
+}
+function moveSeatHorizontally(posId, direction){
+  if(!canEdit()) return;
+  const pos = byId(state.positions, posId);
+  const parentId = getEffectiveParentPositionId(pos);
+  const siblings = state.positions.filter(p=>getEffectiveParentPositionId(p)===parentId);
+  const idx = siblings.indexOf(pos);
+  const swapIdx = direction==='left' ? idx-1 : idx+1;
+  if(swapIdx<0 || swapIdx>=siblings.length) return;
+  const swapWith = siblings[swapIdx];
+  const i1 = state.positions.indexOf(pos);
+  const i2 = state.positions.indexOf(swapWith);
+  [state.positions[i1], state.positions[i2]] = [state.positions[i2], state.positions[i1]];
+  saveState(); render();
 }
 function showSeatKpis(positionId){
   const pos = byId(state.positions, positionId);
