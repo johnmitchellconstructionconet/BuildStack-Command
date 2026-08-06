@@ -2679,6 +2679,38 @@ function pendingOnboardingTasksFor(personId){
   });
   return pending;
 }
+/* Curated from memory, not a live source — wording should be spot-checked against
+   an actual ESV text (e.g. biblegateway.com) if precision matters. Kept to a short,
+   well-known list consistent with Crossway's ESV quotation permissions; the required
+   copyright notice is included wherever this is displayed. */
+const DAILY_VERSES = [
+  {ref:'John 3:16', text:'For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life.'},
+  {ref:'Philippians 4:13', text:'I can do all things through him who strengthens me.'},
+  {ref:'Jeremiah 29:11', text:'For I know the plans I have for you, declares the LORD, plans for welfare and not for evil, to give you a future and a hope.'},
+  {ref:'Proverbs 3:5-6', text:'Trust in the LORD with all your heart, and do not lean on your own understanding. In all your ways acknowledge him, and he will make straight your paths.'},
+  {ref:'Romans 8:28', text:'And we know that for those who love God all things work together for good, for those who are called according to his purpose.'},
+  {ref:'Psalm 23:1', text:'The LORD is my shepherd; I shall not want.'},
+  {ref:'Isaiah 41:10', text:'Fear not, for I am with you; be not dismayed, for I am your God; I will strengthen you, I will help you, I will uphold you with my righteous right hand.'},
+  {ref:'Joshua 1:9', text:'Have I not commanded you? Be strong and courageous. Do not be frightened, and do not be dismayed, for the LORD your God is with you wherever you go.'},
+  {ref:'Matthew 6:33', text:'But seek first the kingdom of God and his righteousness, and all these things will be added to you.'},
+  {ref:'Psalm 46:1', text:'God is our refuge and strength, a very present help in trouble.'},
+  {ref:'Romans 12:2', text:'Do not be conformed to this world, but be transformed by the renewal of your mind, that by testing you may discern what is the will of God, what is good and acceptable and perfect.'},
+  {ref:'2 Corinthians 5:17', text:'Therefore, if anyone is in Christ, he is a new creation. The old has passed away; behold, the new has come.'},
+  {ref:'Galatians 2:20', text:'I have been crucified with Christ. It is no longer I who live, but Christ who lives in me. And the life I now live in the flesh I live by faith in the Son of God, who loved me and gave himself for me.'},
+  {ref:'Psalm 119:105', text:'Your word is a lamp to my feet and a light to my path.'},
+  {ref:'Isaiah 40:31', text:'But they who wait for the LORD shall renew their strength; they shall mount up with wings like eagles; they shall run and not be weary; they shall walk and not faint.'},
+  {ref:'Proverbs 16:3', text:'Commit your work to the LORD, and your plans will be established.'},
+  {ref:'Colossians 3:23', text:'Whatever you do, work heartily, as for the Lord and not for men.'},
+  {ref:'Philippians 4:6-7', text:'Do not be anxious about anything, but in everything by prayer and supplication with thanksgiving let your requests be made known to God. And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.'},
+  {ref:'Psalm 37:4', text:'Delight yourself in the LORD, and he will give you the desires of your heart.'},
+  {ref:'Matthew 11:28', text:'Come to me, all who labor and are heavy laden, and I will give you rest.'}
+];
+function todaysVerse(){
+  const now = new Date();
+  const start = new Date(now.getFullYear(),0,0);
+  const dayOfYear = Math.floor((now-start)/86400000);
+  return DAILY_VERSES[dayOfYear % DAILY_VERSES.length];
+}
 function renderEmployeeDashboard(){
   const u = currentUser();
   const mine = myAssignments(u.id);
@@ -2730,6 +2762,13 @@ function renderEmployeeDashboard(){
       </div>
     </div>
     ${renderTeamAtAGlance(u)}
+    ${(()=>{ const v = todaysVerse(); return `
+    <div class="section-title">Verse of the Day</div>
+    <div class="card mb-3">
+      <div style="font-family:'Fraunces',serif;font-style:italic;font-size:14.5px;line-height:1.6;color:var(--ink);">"${v.text}"</div>
+      <div class="small mt-2" style="font-weight:600;color:var(--bronze-dark);">${v.ref} <span style="font-weight:400;color:var(--slate-light);">· ESV</span></div>
+      <div class="small mt-1" style="color:var(--slate-light);font-size:10px;">Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), copyright © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.</div>
+    </div>`; })()}
     ${(()=>{
       const today = new Date().toISOString().slice(0,10);
       const upcoming = [...state.companyStory.events].filter(e=>e.date>=today).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
