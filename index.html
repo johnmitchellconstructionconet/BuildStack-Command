@@ -10327,6 +10327,8 @@ function deleteTemplateCategory(name){
   state.templateCategories = state.templateCategories.filter(c=>c!==name);
   saveState(); toast('Deleted'); refreshCategoryManageModal();
 }
+let templateBulkMode = false;
+let templateBulkSelection = new Set();
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
   const activeTab = currentParams.tab || 'all';
@@ -10342,14 +10344,30 @@ function renderTemplates(){
     <div class="page-head">
       <div><div class="page-eyebrow">Resources</div><div class="page-title">Company Templates</div><div class="page-desc">Standard forms and documents your team reuses on every job — contracts, checklists, kickoff forms.</div></div>
       <div class="flex gap-2">
-        ${canEdit()?`<button class="btn secondary" onclick="manageTemplateCategoriesModal()">Manage Categories</button>`:''}
-        ${canEdit()?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
+        ${canEdit() && !templateBulkMode?`<button class="btn secondary" onclick="manageTemplateCategoriesModal()">Manage Categories</button>`:''}
+        ${canEdit() && !templateBulkMode?`<button class="btn secondary" onclick="startTemplateBulkTag()">🏷 Bulk Tag by Role</button>`:''}
+        ${canEdit() && !templateBulkMode?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
+        ${templateBulkMode?`<button class="btn secondary" onclick="exitTemplateBulkTag()">Cancel</button>`:''}
       </div>
     </div>
-    ${state.templates.length? `<div class="tabs">
-      <div class="tab ${activeTab==='all'?'active':''}" onclick="navigate('templates',{tab:'all'})">All</div>
-      ${contractCategories.length?`<div class="tab ${activeTab==='contracts'?'active':''}" onclick="navigate('templates',{tab:'contracts'})">Contracts</div>`:''}
-      ${rolesInUse.map(r=>`<div class="tab ${activeTab===r.id?'active':''}" onclick="navigate('templates',{tab:'${r.id}'})">${r.title}</div>`).join('')}
+    ${templateBulkMode? `<div class="card mt-2" style="background:var(--bronze-tint);position:sticky;top:0;z-index:5;">
+      ${!state.roles.length? `<div class="small">You don\u2019t have any roles set up yet — create roles first under <a onclick="navigate('roles')" style="text-decoration:underline;cursor:pointer;">Roles</a>, then come back here to tag templates against them.</div>` : `
+      <div class="flex gap-2" style="align-items:center;flex-wrap:wrap;">
+        <strong>${templateBulkSelection.size} selected</strong>
+        <select id="tpl-bulk-role" style="max-width:220px;">${state.roles.map(r=>`<option value="${r.id}">${r.title}</option>`).join('')}</select>
+        <button class="btn bronze sm" ${templateBulkSelection.size?'':'disabled style="opacity:.5;"'} onclick="applyTemplateBulkTag()">Tag Selected</button>
+        <span class="small" style="color:var(--slate-light);">Click any card below to select or deselect it. Tagging adds this role — it doesn\u2019t remove any roles already on a template.</span>
+      </div>`}
+    </div>`:''}
+    ${state.templates.length? `<div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
+      <div class="tabs" style="margin:0;">
+        <div class="tab ${activeTab==='all'?'active':''}" onclick="navigate('templates',{tab:'all'})">All</div>
+        ${contractCategories.length?`<div class="tab ${activeTab==='contracts'?'active':''}" onclick="navigate('templates',{tab:'contracts'})">Contracts</div>`:''}
+      </div>
+      ${rolesInUse.length? `<select id="tpl-role-dropdown" onchange="navigate('templates',{tab:this.value})" style="max-width:260px;margin:0;">
+        <option value="all" ${(activeTab==='all'||activeTab==='contracts')?'selected':''}>Filter by role...</option>
+        ${rolesInUse.map(r=>`<option value="${r.id}" ${activeTab===r.id?'selected':''}>${r.title}</option>`).join('')}
+      </select>`:''}
     </div>`:''}
     ${!state.templates.length? `<div class="empty"><h3>No templates yet</h3><p>Add your first one — a change order form, a punch list, anything the team reaches for on every job.</p></div>` :
       !cats.length? `<div class="empty mt-2"><h3>Nothing here yet</h3><p>No templates match this tab.</p></div>` :
@@ -10359,26 +10377,59 @@ function renderTemplates(){
           ${state.templates.filter(t=>t.category===cat && matchesFilters(t)).map(t=>{
             const pendingSuggestion = state.templateReplacementRequests.find(r=>r.templateId===t.id && r.status==='pending');
             const roles = (t.roleIds||[]).map(rid=>byId(state.roles,rid)).filter(Boolean);
-            return `<div class="card tpl-card">
+            const selected = templateBulkSelection.has(t.id);
+            return `<div class="card tpl-card" ${templateBulkMode?`onclick="toggleTemplateBulkSelect('${t.id}')" style="cursor:pointer;border-color:${selected?'var(--bronze)':'var(--line-soft)'};background:${selected?'var(--bronze-tint)':'var(--panel)'};"`:''}>
               <div class="flex" style="justify-content:space-between;align-items:flex-start;">
                 <strong>${t.title}</strong>
+                ${templateBulkMode?`<div class="ob-task-check ${selected?'done':''}">${selected?'✓':''}</div>`:''}
               </div>
               ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
               ${roles.length?`<div class="flex gap-1 mt-2" style="flex-wrap:wrap;">${roles.map(r=>`<span class="pill gray">${r.title}</span>`).join('')}</div>`:''}
               <div class="small mt-2" style="color:var(--slate-light);">Added ${fmtDate(t.uploadedAt)} by ${byId(state.people,t.uploadedBy)?.name||'—'}</div>
               ${pendingSuggestion? `<div class="mt-2"><span class="pill amber">Replacement suggested by ${byId(state.people,pendingSuggestion.requestedBy)?.name||'someone'} — awaiting review</span></div>`:''}
-              <div class="tpl-card-actions flex gap-2" style="flex-wrap:wrap;">
+              ${!templateBulkMode?`<div class="tpl-card-actions flex gap-2" style="flex-wrap:wrap;">
                 ${t.fileKey || t.url
                   ? `<button class="btn secondary sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
                   : `<button class="btn secondary sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
                 ${canEdit()?`<button class="btn secondary sm" onclick="openTemplateModal('${t.id}')">✎ Edit</button><button class="btn secondary sm" onclick="replaceTemplateFileModal('${t.id}')">🔁 Replace File</button><button class="btn secondary sm" onclick="removeTemplate('${t.id}')">Remove</button>`
                   : (pendingSuggestion && pendingSuggestion.requestedBy===currentUser().id ? `<button class="btn secondary sm" onclick="withdrawTemplateReplacementRequest('${pendingSuggestion.id}')">Withdraw Suggestion</button>` : `<button class="btn secondary sm" onclick="suggestTemplateReplacementModal('${t.id}')">🔁 Suggest Replacement</button>`)}
-              </div>
+              </div>`:''}
             </div>`;
           }).join('')}
         </div>
       `).join('')}
   `;
+}
+function startTemplateBulkTag(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  templateBulkMode = true; templateBulkSelection = new Set();
+  render();
+}
+function exitTemplateBulkTag(){
+  templateBulkMode = false; templateBulkSelection = new Set();
+  render();
+}
+function toggleTemplateBulkSelect(templateId){
+  if(templateBulkSelection.has(templateId)) templateBulkSelection.delete(templateId);
+  else templateBulkSelection.add(templateId);
+  render();
+}
+function applyTemplateBulkTag(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const roleId = document.getElementById('tpl-bulk-role').value;
+  if(!roleId || !templateBulkSelection.size) return;
+  let tagged = 0;
+  templateBulkSelection.forEach(id=>{
+    const t = byId(state.templates, id);
+    if(!t) return;
+    if(!t.roleIds) t.roleIds = [];
+    if(!t.roleIds.includes(roleId)){ t.roleIds.push(roleId); tagged++; }
+  });
+  saveState();
+  const role = byId(state.roles, roleId);
+  toast(`Tagged ${tagged} template${tagged!==1?'s':''} to ${role.title}`);
+  templateBulkSelection = new Set();
+  render();
 }
 function openTemplateModal(templateId){
   if(!canEdit()){ toast('Admins only'); return; }
