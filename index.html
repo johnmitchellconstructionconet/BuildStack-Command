@@ -145,6 +145,8 @@ a{color:inherit;text-decoration:none;}
 @media(max-width:1000px){.grid.cols-4{grid-template-columns:repeat(2,1fr);}.grid.cols-3{grid-template-columns:repeat(2,1fr);}}
 
 .card{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:22px;box-shadow:var(--shadow-soft);transition:box-shadow .2s, transform .2s, border-color .2s;}
+.tpl-card{display:flex;flex-direction:column;}
+.tpl-card .tpl-card-actions{margin-top:auto;padding-top:14px;}
 .card.hover:hover{box-shadow:var(--shadow-2);border-color:var(--line);cursor:pointer;transform:translateY(-2px);}
 .stat-card{padding:20px 22px;}
 .stat-card .stat-label{font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:.07em;font-weight:500;}
@@ -10202,6 +10204,38 @@ function setAiProvider(provider){
   state.companySettings.aiProvider = provider;
   saveState(); toast('AI provider set to '+(provider==='claude'?'Claude':'ChatGPT'));
 }
+async function pushPublicBranding(){
+  if(!supabaseClient) return;
+  try{
+    const { error } = await supabaseClient
+      .from('public_branding')
+      .upsert({
+        id: 'main',
+        logo_image: state.companySettings.logoImage || null,
+        logo_scale: state.companySettings.logoScale || 1,
+        brand_color: state.companySettings.brandColor || null,
+        nav_color: state.companySettings.navColor || null,
+        updated_at: new Date().toISOString()
+      });
+    if(error) console.error('Public branding push failed:', error.message);
+  }catch(e){ console.error('Public branding push failed:', e); }
+}
+async function pullPublicBranding(){
+  if(!supabaseClient) return false;
+  try{
+    const { data, error } = await supabaseClient
+      .from('public_branding')
+      .select('logo_image, logo_scale, brand_color, nav_color')
+      .eq('id', 'main')
+      .maybeSingle();
+    if(error || !data) return false;
+    state.companySettings.logoImage = data.logo_image || null;
+    state.companySettings.logoScale = data.logo_scale || 1;
+    if(data.brand_color) state.companySettings.brandColor = data.brand_color;
+    if(data.nav_color) state.companySettings.navColor = data.nav_color;
+    return true;
+  }catch(e){ return false; }
+}
 async function saveBranding(){
   const fileInput = document.getElementById('cs-logo-file');
   const hexInput = document.getElementById('cs-brand-color-hex').value.trim();
@@ -10215,6 +10249,7 @@ async function saveBranding(){
   }
   saveState();
   applyBranding();
+  pushPublicBranding();
   toast('Branding saved'); render();
 }
 function saveCompanySettings(){
@@ -10294,12 +10329,15 @@ function deleteTemplateCategory(name){
 }
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
-  const filterCat = currentParams.cat || 'all';
-  const filterRole = currentParams.role || 'all';
-  const cats = state.templateCategories.filter(c=>state.templates.some(t=>t.category===c));
+  const activeTab = currentParams.tab || 'all';
   const rolesInUse = state.roles.filter(r=>state.templates.some(t=>(t.roleIds||[]).includes(r.id)));
-  const matchesFilters = t => (filterCat==='all'||t.category===filterCat) && (filterRole==='all'||(t.roleIds||[]).includes(filterRole));
-  const visibleCats = cats.filter(c=>state.templates.some(t=>t.category===c && matchesFilters(t)));
+  const contractCategories = state.templateCategories.filter(c=>/contract/i.test(c));
+  const matchesFilters = t => {
+    if(activeTab==='all') return true;
+    if(activeTab==='contracts') return contractCategories.includes(t.category);
+    return (t.roleIds||[]).includes(activeTab);
+  };
+  const cats = state.templateCategories.filter(c=>state.templates.some(t=>t.category===c && matchesFilters(t)));
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Resources</div><div class="page-title">Company Templates</div><div class="page-desc">Standard forms and documents your team reuses on every job — contracts, checklists, kickoff forms.</div></div>
@@ -10308,34 +10346,28 @@ function renderTemplates(){
         ${canEdit()?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
       </div>
     </div>
-    ${state.templates.length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-      <span class="btn ${filterCat==='all'?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'all',role:'${filterRole}'})">All (${state.templates.length})</span>
-      ${cats.map(c=>{
-        const n = state.templates.filter(t=>t.category===c).length;
-        return `<span class="btn ${filterCat===c?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'${escAttr(c)}',role:'${filterRole}'})">${c} (${n})</span>`;
-      }).join('')}
-    </div>` : ''}
-    ${rolesInUse.length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-      <span class="small" style="color:var(--slate-light);padding:6px 0;">Role:</span>
-      <span class="btn ${filterRole==='all'?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'${filterCat}',role:'all'})">All</span>
-      ${rolesInUse.map(r=>`<span class="btn ${filterRole===r.id?'bronze':'secondary'} sm" onclick="navigate('templates',{cat:'${filterCat}',role:'${r.id}'})">${r.title}</span>`).join('')}
+    ${state.templates.length? `<div class="tabs">
+      <div class="tab ${activeTab==='all'?'active':''}" onclick="navigate('templates',{tab:'all'})">All</div>
+      ${contractCategories.length?`<div class="tab ${activeTab==='contracts'?'active':''}" onclick="navigate('templates',{tab:'contracts'})">Contracts</div>`:''}
+      ${rolesInUse.map(r=>`<div class="tab ${activeTab===r.id?'active':''}" onclick="navigate('templates',{tab:'${r.id}'})">${r.title}</div>`).join('')}
     </div>`:''}
     ${!state.templates.length? `<div class="empty"><h3>No templates yet</h3><p>Add your first one — a change order form, a punch list, anything the team reaches for on every job.</p></div>` :
-      visibleCats.map(cat=>`
+      !cats.length? `<div class="empty mt-2"><h3>Nothing here yet</h3><p>No templates match this tab.</p></div>` :
+      cats.map(cat=>`
         <div class="section-title">${cat}</div>
         <div class="grid cols-3">
           ${state.templates.filter(t=>t.category===cat && matchesFilters(t)).map(t=>{
             const pendingSuggestion = state.templateReplacementRequests.find(r=>r.templateId===t.id && r.status==='pending');
             const roles = (t.roleIds||[]).map(rid=>byId(state.roles,rid)).filter(Boolean);
-            return `<div class="card">
+            return `<div class="card tpl-card">
               <div class="flex" style="justify-content:space-between;align-items:flex-start;">
                 <strong>${t.title}</strong>
               </div>
-              <div class="small mt-1">${t.description||''}</div>
+              ${t.description?`<div class="small mt-1">${t.description}</div>`:''}
               ${roles.length?`<div class="flex gap-1 mt-2" style="flex-wrap:wrap;">${roles.map(r=>`<span class="pill gray">${r.title}</span>`).join('')}</div>`:''}
               <div class="small mt-2" style="color:var(--slate-light);">Added ${fmtDate(t.uploadedAt)} by ${byId(state.people,t.uploadedBy)?.name||'—'}</div>
               ${pendingSuggestion? `<div class="mt-2"><span class="pill amber">Replacement suggested by ${byId(state.people,pendingSuggestion.requestedBy)?.name||'someone'} — awaiting review</span></div>`:''}
-              <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
+              <div class="tpl-card-actions flex gap-2" style="flex-wrap:wrap;">
                 ${t.fileKey || t.url
                   ? `<button class="btn secondary sm" onclick="viewTemplate('${t.id}')">👁 View</button><button class="btn secondary sm" onclick="downloadTemplate('${t.id}')">⬇ Download</button>`
                   : `<button class="btn secondary sm" onclick="downloadFormatModal('${t.id}')">⬇ Download As...</button>`}
@@ -10751,15 +10783,14 @@ async function initApp(){
       if(pulled==='error') pulled = await pullStateFromSupabase();
       if(pulled==='error'){ renderAuthScreen(); return; }
       if(pulled==='empty') await pushInitialStateToSupabase();
-      applyBranding();
       const person = state.people.find(p=>p.email && p.email.toLowerCase()===email.toLowerCase());
       if(person && person.status!=='offboarded'){
         login(person.id);
         return;
       }
     } else {
-      const pulled = await pullStateFromSupabase();
-      if(pulled==='loaded') applyBranding();
+      const gotBranding = await pullPublicBranding();
+      if(gotBranding) applyBranding();
     }
   } catch(e){ console.error('Session check failed:', e); }
   renderAuthScreen();
