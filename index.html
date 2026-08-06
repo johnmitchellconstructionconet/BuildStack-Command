@@ -1102,7 +1102,9 @@ function migrateState(parsed){
       }
       return parsed;
 }
+let lastLocalChangeAt = 0;
 function saveState(){
+  lastLocalChangeAt = Date.now();
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }catch(e){
@@ -1497,6 +1499,7 @@ async function supabaseSignOut(){
 let lastSyncedAt = null;
 let backgroundSyncInterval = null;
 function isSafeToBackgroundSync(){
+  if(Date.now() - lastLocalChangeAt < 5000) return false;
   if(document.querySelector('.modal-backdrop')) return false;
   const active = document.activeElement;
   if(active){
