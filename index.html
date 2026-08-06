@@ -3961,7 +3961,7 @@ function renderOrgChart(){
     </div>
     ${!levels.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
     <div id="org-canvas-scroll" style="overflow-x:auto;padding-bottom:8px;">
-    <div id="org-canvas" style="position:relative;width:max-content;min-width:100%;${freeform?'height:1400px;':''}">
+    <div id="org-canvas" style="position:relative;width:max-content;min-width:100%;${freeform?`height:1400px;min-width:1600px;background-image:linear-gradient(to right, var(--line-soft) 1px, transparent 1px), linear-gradient(to bottom, var(--line-soft) 1px, transparent 1px);background-size:${ORG_GRID_SIZE}px ${ORG_GRID_SIZE}px;`:''}">
       <svg id="org-lines" style="position:absolute;top:0;left:0;pointer-events:none;z-index:0;"></svg>
       ${freeform? state.positions.map(p=>orgNode(p,true)).join('') : levels.map(level=>renderOrgLevel(level)).join('')}
     </div>
@@ -3978,7 +3978,7 @@ function orgNode(pos, freeform){
   const role = byId(state.roles, pos.roleId);
   const siblings = state.positions.filter(p=>getEffectiveParentPositionId(p)===effectiveParentId);
   const siblingIdx = siblings.indexOf(pos);
-  const coords = freeform ? (state.orgChartLayout[pos.id] || {x:20, y:20}) : null;
+  const coords = freeform ? (state.orgChartLayout[pos.id] || defaultGridPosition(state.positions.indexOf(pos))) : null;
   const posStyle = freeform ? `position:absolute;left:${coords.x}px;top:${coords.y}px;z-index:2;` : '';
   return `<div class="orgnode ${!occupant?'orgnode-open':''}" id="orgnode-${pos.id}" style="${posStyle}" onclick="${(orgEditMode&&canEdit()&&!freeform)?`openPositionModal('${pos.id}')`:(occupant&&!freeform?`navigate('personDetail',{id:'${occupant.id}'})`:'')}">
     ${freeform && orgEditMode && canEdit() ? `<div class="org-move-handle" title="Drag to reposition" onmousedown="startOrgNodeMove(event,'${pos.id}')">✥</div>` : ''}
@@ -4020,6 +4020,14 @@ function moveSeatHorizontally(posId, direction){
 /* Captures wherever every seat currently sits on screen (from the auto-tree layout) and
    freezes those as starting coordinates, so switching into freeform mode never causes an
    unexpected jump — it picks up exactly where the auto layout left it. */
+const ORG_GRID_SIZE = 24;
+function snapToGrid(val){ return Math.round(val / ORG_GRID_SIZE) * ORG_GRID_SIZE; }
+function defaultGridPosition(index){
+  const cols = 5;
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  return { x: 20 + col * 220, y: 20 + row * 170 };
+}
 function enableFreeformOrgLayout(){
   if(!canEdit()) return;
   const canvas = document.getElementById('org-canvas');
@@ -4028,13 +4036,13 @@ function enableFreeformOrgLayout(){
   const scaleMatch = /scale\(([\d.]+)\)/.exec(canvas.style.transform||'');
   const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
   const layout = {};
-  state.positions.forEach(pos=>{
+  state.positions.forEach((pos,i)=>{
     const el = document.getElementById('orgnode-'+pos.id);
-    if(!el){ layout[pos.id] = {x:20, y:20}; return; }
+    if(!el){ layout[pos.id] = defaultGridPosition(i); return; }
     const r = el.getBoundingClientRect();
     layout[pos.id] = {
-      x: Math.round((r.left - canvasRect.left) / scale),
-      y: Math.round((r.top - canvasRect.top) / scale)
+      x: snapToGrid((r.left - canvasRect.left) / scale),
+      y: snapToGrid((r.top - canvasRect.top) / scale)
     };
   });
   state.orgChartLayout = layout;
@@ -4054,7 +4062,7 @@ function startOrgNodeMove(e, posId){
   const el = document.getElementById('orgnode-'+posId);
   const canvas = document.getElementById('org-canvas');
   if(!el || !canvas) return;
-  const coords = state.orgChartLayout[posId] || {x:20, y:20};
+  const coords = state.orgChartLayout[posId] || defaultGridPosition(state.positions.findIndex(p=>p.id===posId));
   orgNodeMoveState = {
     posId, el,
     startMouseX: e.clientX, startMouseY: e.clientY,
@@ -4070,8 +4078,8 @@ function onOrgNodeMove(e){
   const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
   const dx = (e.clientX - orgNodeMoveState.startMouseX) / scale;
   const dy = (e.clientY - orgNodeMoveState.startMouseY) / scale;
-  const newX = Math.max(0, orgNodeMoveState.startX + dx);
-  const newY = Math.max(0, orgNodeMoveState.startY + dy);
+  const newX = snapToGrid(Math.max(0, orgNodeMoveState.startX + dx));
+  const newY = snapToGrid(Math.max(0, orgNodeMoveState.startY + dy));
   orgNodeMoveState.el.style.left = newX + 'px';
   orgNodeMoveState.el.style.top = newY + 'px';
   orgNodeMoveState.liveX = newX; orgNodeMoveState.liveY = newY;
