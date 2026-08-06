@@ -4300,19 +4300,21 @@ function openPositionModal(positionId, prefillParentId){
           </div>
 
           <label class="mt-2">Who sits here?</label>
-          <select id="m-pos-person" onchange="document.getElementById('m-pos-open-fields').style.display=this.value?'none':'block';document.getElementById('m-pos-multiseat-note').innerHTML=this.value?buildMultiSeatNote(this.value):'';">
+          <select id="m-pos-person" onchange="const v=this.value; document.getElementById('m-pos-open-fields').style.display=(v===''?'block':'none'); document.getElementById('m-pos-outsourced-wrap').style.display=(v==='__outsourced__'?'block':'none'); document.getElementById('m-pos-multiseat-note').innerHTML=(v&&v!=='__outsourced__')?buildMultiSeatNote(v):'';">
             <option value="">— seat is open / unfilled —</option>
+            <option value="__outsourced__" ${pos?.status==='Outsourced'?'selected':''}>— outsourced to another company —</option>
             ${state.people.map(p=>`<option value="${p.id}" ${pos?.personId===p.id?'selected':''}>${p.name}</option>`).join('')}
           </select>
           <div id="m-pos-multiseat-note" class="small mt-1" style="color:var(--bronze-dark);">${pos?.personId?buildMultiSeatNote(pos.personId,pos.id):''}</div>
 
-          <div id="m-pos-open-fields" style="display:${pos && !pos.personId ? 'block':'none'};" class="mt-2">
+          <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2">
+            <label>Company name</label>
+            <input type="text" id="m-pos-outsourced-company" value="${escAttr(pos?.outsourcedCompany)}" placeholder="e.g. Acme Drafting Services">
+          </div>
+
+          <div id="m-pos-open-fields" style="display:${pos && !pos.personId && pos.status!=='Outsourced' ? 'block':(!pos?'block':'none')};" class="mt-2">
             <label>Seat status</label>
-            <select id="m-pos-status" onchange="document.getElementById('m-pos-outsourced-wrap').style.display=this.value==='Outsourced'?'block':'none';">${['Open','Hiring','Planned','Future','Outsourced'].map(s=>`<option value="${s}" ${pos?.status===s?'selected':''}>${s}</option>`).join('')}</select>
-            <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2">
-              <label>Company name</label>
-              <input type="text" id="m-pos-outsourced-company" value="${escAttr(pos?.outsourcedCompany)}" placeholder="e.g. Acme Drafting Services">
-            </div>
+            <select id="m-pos-status">${['Open','Hiring','Planned','Future'].map(s=>`<option value="${s}" ${pos?.status===s?'selected':''}>${s}</option>`).join('')}</select>
           </div>
         </div>
         <div class="modal-foot">
@@ -4333,7 +4335,9 @@ function savePositionModal(existingId){
   if(!canEdit()) return;
   const title = document.getElementById('m-pos-title').value.trim();
   if(!title){ toast('Seat title is required'); return; }
-  const personId = document.getElementById('m-pos-person').value || null;
+  const whoSitsHere = document.getElementById('m-pos-person').value;
+  const isOutsourced = whoSitsHere === '__outsourced__';
+  const personId = (whoSitsHere && !isOutsourced) ? whoSitsHere : null;
   const reportsType = document.querySelector('input[name="m-pos-reportstype"]:checked')?.value || 'seat';
   const departmentId = document.getElementById('m-pos-dept').value;
 
@@ -4355,7 +4359,7 @@ function savePositionModal(existingId){
     }
   }
 
-  const seatStatus = personId ? null : document.getElementById('m-pos-status').value;
+  const seatStatus = personId ? null : (isOutsourced ? 'Outsourced' : document.getElementById('m-pos-status').value);
   const data = {
     title,
     departmentId,
@@ -4365,7 +4369,7 @@ function savePositionModal(existingId){
     parentRoleId: reportsType==='role' ? (document.getElementById('m-pos-parent-role').value || null) : null,
     personId,
     status: seatStatus,
-    outsourcedCompany: seatStatus==='Outsourced' ? document.getElementById('m-pos-outsourced-company').value.trim() : null
+    outsourcedCompany: isOutsourced ? document.getElementById('m-pos-outsourced-company').value.trim() : null
   };
   let id = existingId;
   if(id){ Object.assign(byId(state.positions, id), data); }
@@ -10917,4 +10921,3 @@ initApp();
 </script>
 </body>
 </html>
-  
