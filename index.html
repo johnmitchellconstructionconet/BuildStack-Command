@@ -1713,9 +1713,10 @@ function renderExternalToolsSection(){
       ${canEdit()?`<span class="btn secondary sm" onclick="manageExternalToolsModal()">Manage</span>`:''}
     </div>
     ${!tools.length? `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">No tools linked yet.${canEdit()?' Click Manage to add BuilderTrend, Gmail, or anything else your team uses daily.':''}</div>` : `
-    <div class="flex gap-2 mt-1 mb-2" style="flex-wrap:wrap;">
-      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:8px;padding:10px 16px;text-decoration:none;color:var(--ink);">
-        <span style="font-size:16px;">${t.icon||'🔗'}</span><strong style="font-size:13.5px;">${escHtml(t.name)}</strong>
+    <div class="flex gap-3 mt-1 mb-2" style="flex-wrap:wrap;">
+      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:12px;padding:16px 22px;text-decoration:none;color:var(--ink);min-width:160px;">
+        <span style="font-size:24px;width:40px;height:40px;border-radius:10px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${t.icon||'🔗'}</span>
+        <strong style="font-size:15px;">${escHtml(t.name)}</strong>
       </a>`).join('')}
     </div>`}
   `;
@@ -3243,13 +3244,13 @@ function renderLibrary(){
       <div><div class="page-eyebrow">Knowledge Library</div><div class="page-title">${lib.name}</div><div class="page-desc">${lib.description}</div></div>
       ${canEdit() && libraryTab==='category'?`<button class="btn bronze" onclick="newSubjectModal()">+ New Subject</button>`:''}
     </div>
+    ${renderProcessSuggestionsWidget()}
     <div class="tabs">
       <div class="tab ${libraryTab==='category'?'active':''}" onclick="libraryTab='category';render();">By Category</div>
       <div class="tab ${libraryTab==='timeline'?'active':''}" onclick="libraryTab='timeline';render();">By Project Phase</div>
       <div class="tab ${libraryTab==='role'?'active':''}" onclick="libraryTab='role';render();">By Role</div>
-      <div class="tab ${libraryTab==='suggestions'?'active':''}" onclick="libraryTab='suggestions';render();">Suggestions</div>
     </div>
-    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : libraryTab==='suggestions'? renderProcessSuggestionsTab() : `
+    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : `
     <div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
       ${filtersActive?`<span class="btn secondary sm" onclick="navigate('library',{cat:'all',role:'all',phase:'all'})">✕ Clear filters</span>`:''}
       <select onchange="navigate('library',{cat:this.value,role:'${filterRole}',phase:'${filterPhase}'})" style="max-width:220px;margin:0;">
@@ -3277,43 +3278,63 @@ function renderLibrary(){
     <div class="grid cols-3 mt-2">
       ${subs.map(s=>{
         const topicCount = state.topics.filter(t=>t.subjectId===s.id).length;
-        return `<div class="card hover" onclick="navigate('librarySubject',{id:'${s.id}'})">
-          <div style="font-weight:700;font-size:14.5px;">${s.name}</div>
+        return `<div class="card hover" style="position:relative;" onclick="navigate('librarySubject',{id:'${s.id}'})">
+          ${canEdit()?`<div class="flex gap-1" style="position:absolute;top:12px;right:12px;">
+            <span class="miniBtn" onclick="event.stopPropagation();newSubjectModal('${s.id}')" title="Edit">✎</span>
+            <span class="miniBtn" onclick="event.stopPropagation();deleteSubject('${s.id}')" title="Delete" style="color:var(--rust);">✕</span>
+          </div>`:''}
+          <div style="font-weight:700;font-size:14.5px;padding-right:${canEdit()?'50px':'0'};">${s.name}</div>
           <div class="small mt-1">${topicCount} topic${topicCount!==1?'s':''}</div>
         </div>`;
       }).join('')}
     </div>`}`}
   `;
 }
-function renderProcessSuggestionsTab(){
+function renderProcessSuggestionsWidget(){
   const suggestions = [...state.processSuggestions].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-  const statusMeta = {open:{label:'Open',pill:'amber'}, planned:{label:'Planned',pill:'bronze'}, done:{label:'Done',pill:'jade'}, dismissed:{label:'Dismissed',pill:'gray'}};
+  const doneCount = suggestions.filter(s=>s.status==='done').length;
+  const statusMeta = {planned:{label:'Planned',pill:'bronze'}, dismissed:{label:'Dismissed',pill:'gray'}};
   return `
-    <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-      <div class="small" style="flex:1;">See a process that's missing, or one that needs updating? Flag it here — anyone can suggest, admins can turn a good one straight into a company goal.</div>
-      <button class="btn bronze sm" onclick="openProcessSuggestionModal()">+ Suggest a Process</button>
-    </div>
-    ${!suggestions.length? `<div class="empty mt-2"><h3>Nothing suggested yet</h3><p>If a process is missing or out of date, this is the spot to flag it.</p></div>` :
-    suggestions.map(s=>{
-      const author = byId(state.people, s.authorId);
-      const meta = statusMeta[s.status] || statusMeta.open;
-      return `<div class="cs-goal-card">
-        <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-          <strong>${escHtml(s.title)}</strong>
-          <span class="pill ${meta.pill}">${meta.label}</span>
+    <div class="cs-goal-card mt-2">
+      <div class="flex" style="justify-content:space-between;align-items:center;">
+        <strong>📋 Suggested Processes</strong>
+        <button class="btn secondary sm" onclick="openProcessSuggestionModal()">+ Suggest a Process</button>
+      </div>
+      <div class="small mt-1" style="color:var(--slate-light);">See a process that's missing, or one that needs updating? Flag it here — anyone can suggest, admins work through them below.</div>
+      ${suggestions.length? `<div class="cs-steps-wrap">
+        <div class="flex" style="align-items:center;margin-bottom:10px;">
+          <span class="cs-steps-label">Addressed</span>
+          <div class="cs-steps-progress-track"><div class="cs-steps-progress-fill" style="width:${suggestions.length?Math.round(doneCount/suggestions.length*100):0}%;"></div></div>
+          <span class="small" style="color:var(--bronze-dark);font-weight:600;">${doneCount}/${suggestions.length}</span>
         </div>
-        <div class="small mt-1">${escHtml(s.description)}</div>
-        <div class="small mt-2" style="color:var(--slate-light);">Suggested by ${author?author.name:'someone'} · ${fmtDate(s.createdAt.slice(0,10))}</div>
-        ${canEdit()? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-          ${s.status!=='planned'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','planned')">Mark Planned</span>`:''}
-          ${s.status!=='done'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','done')">Mark Done</span>`:''}
-          ${s.status!=='dismissed'?`<span class="btn secondary sm" onclick="setProcessSuggestionStatus('${s.id}','dismissed')">Dismiss</span>`:''}
-          <span class="btn bronze sm" onclick="turnSuggestionIntoGoal('${s.id}')">→ Turn into Goal</span>
-          <span class="miniBtn" onclick="deleteProcessSuggestion('${s.id}')" title="Delete" style="color:var(--rust);margin-left:auto;">✕</span>
-        </div>` : (s.authorId===currentUser().id?`<span class="miniBtn mt-2" onclick="deleteProcessSuggestion('${s.id}')" title="Delete" style="color:var(--rust);">✕</span>`:'')}
-      </div>`;
-    }).join('')}
+        ${suggestions.map(s=>{
+          const author = byId(state.people, s.authorId);
+          const extraStatus = statusMeta[s.status];
+          const canRemove = canEdit() || s.authorId===currentUser().id;
+          return `<div class="cs-step-row" style="align-items:flex-start;">
+            <div class="cs-step-check ${s.status==='done'?'done':''}" ${canEdit()?`onclick="toggleProcessSuggestionDone('${s.id}')" style="cursor:pointer;"`:''} title="${canEdit()?'Click to mark addressed':'Only admins can check these off'}">${s.status==='done'?'✓':''}</div>
+            <div style="flex:1;">
+              <div class="cs-step-text ${s.status==='done'?'done':''}" style="font-weight:600;">${escHtml(s.title)}${extraStatus?` <span class="pill ${extraStatus.pill}" style="margin-left:4px;">${extraStatus.label}</span>`:''}</div>
+              ${s.description?`<div class="small mt-1">${escHtml(s.description)}</div>`:''}
+              <div class="small mt-1" style="color:var(--slate-light);">${author?author.name:'someone'} · ${fmtDate(s.createdAt.slice(0,10))}</div>
+              ${canEdit()? `<div class="flex gap-2 mt-1" style="flex-wrap:wrap;">
+                ${s.status!=='planned'?`<span class="small" style="cursor:pointer;text-decoration:underline;" onclick="setProcessSuggestionStatus('${s.id}','planned')">Mark Planned</span>`:''}
+                <span class="small" style="cursor:pointer;text-decoration:underline;" onclick="turnSuggestionIntoGoal('${s.id}')">Turn into Goal</span>
+                ${s.status!=='dismissed'?`<span class="small" style="cursor:pointer;text-decoration:underline;" onclick="setProcessSuggestionStatus('${s.id}','dismissed')">Dismiss</span>`:''}
+              </div>`:''}
+            </div>
+            ${canRemove?`<span class="miniBtn" onclick="deleteProcessSuggestion('${s.id}')" title="Delete" style="color:var(--rust);">✕</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>` : `<div class="empty-inline mt-2">Nothing suggested yet.</div>`}
+    </div>
   `;
+}
+function toggleProcessSuggestionDone(id){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const s = byId(state.processSuggestions, id);
+  s.status = s.status==='done' ? 'open' : 'done';
+  saveState(); render();
 }
 function openProcessSuggestionModal(){
   openModal(`
@@ -7554,22 +7575,44 @@ function createLibrary(el){
   state.libraries.push({id, name, description:document.getElementById('m-lib-desc').value.trim()});
   saveState(); closeModal(el); toast('Library created'); navigate('library');
 }
-function newSubjectModal(){
+function newSubjectModal(subjectId){
+  if(!canEdit()) return;
+  const s = subjectId ? byId(state.subjects, subjectId) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
-        <div class="modal-head"><strong>New Subject</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
-        <div class="modal-body"><label>Subject name</label><input type="text" id="m-subj-name" placeholder="e.g. Quality Control"></div>
-        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="createSubject(this)">Create Subject</button></div>
+        <div class="modal-head"><strong>${s?'Edit Subject':'New Subject'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body"><label>Subject name</label><input type="text" id="m-subj-name" value="${escAttr(s?.name)}" placeholder="e.g. Quality Control"></div>
+        <div class="modal-foot">
+          ${s?`<button class="btn danger" style="margin-right:auto;" onclick="deleteSubject('${s.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="createSubject(this,'${subjectId||''}')">${s?'Save':'Create Subject'}</button>
+        </div>
       </div>
     </div>`);
 }
-function createSubject(el){
+function createSubject(el, subjectId){
+  if(!canEdit()){ toast('Admins only'); return; }
   const name = document.getElementById('m-subj-name').value.trim();
   if(!name){ toast('Name required'); return; }
-  const id='s'+Date.now();
-  state.subjects.push({id, libraryId: state.libraries[0].id, name});
-  saveState(); closeModal(el); toast('Subject created'); navigate('library');
+  if(subjectId){
+    byId(state.subjects, subjectId).name = name;
+    saveState(); closeModal(el); toast('Saved'); render();
+  } else {
+    const id='s'+Date.now();
+    state.subjects.push({id, libraryId: state.libraries[0].id, name});
+    saveState(); closeModal(el); toast('Subject created'); navigate('library');
+  }
+}
+function deleteSubject(subjectId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const s = byId(state.subjects, subjectId);
+  const topicCount = state.topics.filter(t=>t.subjectId===subjectId).length;
+  confirmAction(`Delete "${s.name}"?${topicCount?` ${topicCount} topic${topicCount!==1?'s':''} inside it will be deleted too — this can\u2019t be undone.`:' This can\u2019t be undone.'}`, ()=>{
+    state.topics = state.topics.filter(t=>t.subjectId!==subjectId);
+    state.subjects = state.subjects.filter(x=>x.id!==subjectId);
+    saveState(); toast('Deleted'); render();
+  });
 }
 function newTopicModal(subjectId){
   openModal(`
@@ -10466,6 +10509,13 @@ function renderCompanySettings(){
         <input type="text" id="cs-nav-color-hex" value="${cs.navColor||'#15171C'}" style="width:110px;" oninput="document.getElementById('cs-nav-color').value=this.value;previewNavColor(this.value);">
       </div>
       <button class="btn bronze mt-2" onclick="saveBranding()">Save Branding</button>
+    </div>
+
+    <div class="section-title">Dashboard Tools</div>
+    <div class="card">
+      <div class="small" style="margin-bottom:10px;">These links show up in the "Your Tools" row at the top of everyone's dashboard automatically — BuilderTrend, Gmail, anything your team should have one click away, every single day. This is one shared list for the whole company, not something set per person.</div>
+      ${state.externalTools.length? `<div class="small" style="margin-bottom:10px;">Currently linked: ${state.externalTools.map(t=>escHtml(t.name)).join(', ')}</div>` : `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">Nothing linked yet.</div>`}
+      <button class="btn secondary" onclick="manageExternalToolsModal()">Manage Dashboard Tools</button>
     </div>
 
     <div class="section-title">Company</div>
