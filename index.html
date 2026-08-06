@@ -3978,7 +3978,7 @@ function renderOrgChart(){
       </div>`:''}
     </div>
     ${!state.positions.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
-    <div id="org-canvas-scroll" style="overflow:auto;padding-bottom:8px;max-height:75vh;border:1px solid var(--line-soft);border-radius:12px;">
+    <div id="org-canvas-scroll" style="overflow:auto;padding-bottom:8px;max-height:calc(100vh - 220px);border:1px solid var(--line-soft);border-radius:12px;width:100vw;max-width:100vw;margin-left:calc(-50vw + 50%);">
     <div id="org-canvas" style="position:relative;width:${maxX}px;height:${maxY}px;min-width:100%;">
       <svg id="org-lines" style="position:absolute;top:0;left:0;pointer-events:none;z-index:0;"></svg>
       ${state.positions.map(orgNode).join('')}
@@ -10917,3 +10917,4 @@ initApp();
 </script>
 </body>
 </html>
+  
