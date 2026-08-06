@@ -10332,17 +10332,19 @@ let templateBulkSelection = new Set();
 function renderTemplates(){
   const gate = featureGate('templates','Company Templates'); if(gate) return gate;
   const activeTab = currentParams.tab || 'all';
+  const activeCat = currentParams.cat || 'all';
   const rolesInUse = state.roles;
   const matchesFilters = t => {
-    if(activeTab==='all') return true;
-    return (t.roleIds||[]).includes(activeTab);
+    if(activeTab!=='all' && !(t.roleIds||[]).includes(activeTab)) return false;
+    if(activeCat!=='all' && t.category!==activeCat) return false;
+    return true;
   };
   const cats = state.templateCategories.filter(c=>state.templates.some(t=>t.category===c && matchesFilters(t)));
   return `
     <div class="page-head">
       <div><div class="page-eyebrow">Resources</div><div class="page-title">Company Templates</div><div class="page-desc">Standard forms and documents your team reuses on every job — contracts, checklists, kickoff forms.</div></div>
       <div class="flex gap-2">
-        ${canEdit() && !templateBulkMode?`<button class="btn secondary" onclick="manageTemplateCategoriesModal()">Manage Categories</button>`:''}
+        ${isAdminWorkMode() && !templateBulkMode?`<button class="btn secondary" onclick="manageTemplateCategoriesModal()">Manage Categories</button>`:''}
         ${canEdit() && !templateBulkMode?`<button class="btn secondary" onclick="startTemplateBulkTag()">🏷 Bulk Tag by Role</button>`:''}
         ${canEdit() && !templateBulkMode?`<button class="btn bronze" onclick="openTemplateModal()">+ Add Template</button>`:''}
         ${templateBulkMode?`<button class="btn secondary" onclick="exitTemplateBulkTag()">Cancel</button>`:''}
@@ -10357,15 +10359,19 @@ function renderTemplates(){
         <span class="small" style="color:var(--slate-light);">Click any card below to select or deselect it. Tagging adds this role — it doesn\u2019t remove any roles already on a template.</span>
       </div>`}
     </div>`:''}
-    ${state.templates.length && rolesInUse.length? `<div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
-      ${activeTab!=='all'?`<span class="btn secondary sm" onclick="navigate('templates',{tab:'all'})">✕ Clear filter</span>`:''}
-      <select id="tpl-role-dropdown" onchange="navigate('templates',{tab:this.value})" style="max-width:260px;margin:0;">
+    ${state.templates.length? `<div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
+      ${(activeTab!=='all'||activeCat!=='all')?`<span class="btn secondary sm" onclick="navigate('templates',{tab:'all',cat:'all'})">✕ Clear filters</span>`:''}
+      <select id="tpl-cat-dropdown" onchange="navigate('templates',{tab:'${activeTab}',cat:this.value})" style="max-width:260px;margin:0;">
+        <option value="all" ${activeCat==='all'?'selected':''}>Filter by category...</option>
+        ${state.templateCategories.map(c=>`<option value="${escAttr(c)}" ${activeCat===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      ${rolesInUse.length? `<select id="tpl-role-dropdown" onchange="navigate('templates',{tab:this.value,cat:'${escAttr(activeCat)}'})" style="max-width:260px;margin:0;">
         <option value="all" ${activeTab==='all'?'selected':''}>Filter by role...</option>
         ${rolesInUse.map(r=>`<option value="${r.id}" ${activeTab===r.id?'selected':''}>${r.title}</option>`).join('')}
-      </select>
+      </select>`:''}
     </div>`:''}
     ${!state.templates.length? `<div class="empty"><h3>No templates yet</h3><p>Add your first one — a change order form, a punch list, anything the team reaches for on every job.</p></div>` :
-      !cats.length? `<div class="empty mt-2"><h3>Nothing here yet</h3><p>No templates match this tab.</p></div>` :
+      !cats.length? `<div class="empty mt-2"><h3>Nothing matches these filters</h3></div>` :
       cats.map(cat=>`
         <div class="section-title">${cat}</div>
         <div class="grid cols-3">
