@@ -4306,25 +4306,24 @@ function openPositionModal(positionId, prefillParentId){
           </div>
 
           <label class="mt-2">Who sits here?</label>
-          <select id="m-pos-person" onchange="const v=this.value; document.getElementById('m-pos-open-fields').style.display=(v===''?'block':'none'); document.getElementById('m-pos-outsourced-wrap').style.display=(v==='__outsourced__'?'block':'none'); document.getElementById('m-pos-multiseat-note').innerHTML=(v&&v!=='__outsourced__')?buildMultiSeatNote(v):'';">
-            <option value="">— seat is open / unfilled —</option>
-            <option value="__outsourced__" ${pos?.status==='Outsourced'?'selected':''}>— outsourced to another company —</option>
-            ${state.people.map(p=>`<option value="${p.id}" ${pos?.personId===p.id?'selected':''}>${p.name}</option>`).join('')}
-          </select>
-          <div id="m-pos-multiseat-note" class="small mt-1" style="color:var(--bronze-dark);">${pos?.personId?buildMultiSeatNote(pos.personId,pos.id):''}</div>
-
-          <label class="mt-2">Also sitting in this seat <span class="small" style="font-weight:400;">(optional — for job-sharing or more than one person doing this exact job)</span></label>
-          <select id="m-pos-additional-people" multiple style="min-height:90px;">
-            ${state.people.filter(p=>p.id!==pos?.personId).map(p=>`<option value="${p.id}" ${(pos?.additionalPersonIds||[]).includes(p.id)?'selected':''}>${p.name}</option>`).join('')}
-          </select>
-          <div class="small mt-1" style="color:var(--slate-light);">Ctrl/Cmd-click to select more than one.</div>
-
-          <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2">
+          <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-pos-is-outsourced" style="width:auto;margin:0;" ${pos?.status==='Outsourced'?'checked':''} onchange="document.getElementById('m-pos-outsourced-wrap').style.display=this.checked?'block':'none'; document.getElementById('m-pos-people-checklist').style.display=this.checked?'none':'block'; document.getElementById('m-pos-open-fields').style.display=(this.checked||document.querySelectorAll('.m-pos-person-check:checked').length)?'none':'block';">
+            This seat is outsourced to another company
+          </label>
+          <div id="m-pos-outsourced-wrap" style="display:${pos?.status==='Outsourced'?'block':'none'};" class="mt-2 mb-2">
             <label>Company name</label>
             <input type="text" id="m-pos-outsourced-company" value="${escAttr(pos?.outsourcedCompany)}" placeholder="e.g. Acme Drafting Services">
           </div>
 
-          <div id="m-pos-open-fields" style="display:${pos && !pos.personId && pos.status!=='Outsourced' ? 'block':(!pos?'block':'none')};" class="mt-2">
+          <div id="m-pos-people-checklist" style="display:${pos?.status==='Outsourced'?'none':'block'};max-height:220px;overflow-y:auto;border:1px solid var(--line-soft);border-radius:8px;padding:10px 12px;margin-top:6px;">
+            ${state.people.map(p=>`<label class="flex gap-2" style="align-items:center;font-weight:500;margin-bottom:6px;">
+              <input type="checkbox" class="m-pos-person-check" value="${p.id}" style="width:auto;margin:0;" ${(pos?.personId===p.id || (pos?.additionalPersonIds||[]).includes(p.id))?'checked':''} onchange="document.getElementById('m-pos-open-fields').style.display=(document.getElementById('m-pos-is-outsourced').checked||document.querySelectorAll('.m-pos-person-check:checked').length)?'none':'block';">
+              ${p.name}
+            </label>`).join('') || `<div class="small">No employees yet.</div>`}
+          </div>
+          <div class="small mt-1" style="color:var(--slate-light);">Check nobody for an open seat, one person for a normal seat, or more than one if this role is job-shared.</div>
+
+          <div id="m-pos-open-fields" style="display:${pos && (pos.personId || pos.status==='Outsourced') ? 'none':'block'};" class="mt-2">
             <label>Seat status</label>
             <select id="m-pos-status">${['Open','Hiring','Planned','Future'].map(s=>`<option value="${s}" ${pos?.status===s?'selected':''}>${s}</option>`).join('')}</select>
           </div>
@@ -4337,19 +4336,13 @@ function openPositionModal(positionId, prefillParentId){
       </div>
     </div>`);
 }
-function buildMultiSeatNote(personId, excludePosId){
-  const seats = personPositions(personId).filter(p=>p.id!==excludePosId);
-  if(!seats.length) return '';
-  const name = byId(state.people, personId)?.name;
-  return `${name} already holds: ${seats.map(s=>s.title).join(', ')}. This will be an additional seat, not a replacement.`;
-}
 function savePositionModal(existingId){
   if(!canEdit()) return;
   const title = document.getElementById('m-pos-title').value.trim();
   if(!title){ toast('Seat title is required'); return; }
-  const whoSitsHere = document.getElementById('m-pos-person').value;
-  const isOutsourced = whoSitsHere === '__outsourced__';
-  const personId = (whoSitsHere && !isOutsourced) ? whoSitsHere : null;
+  const isOutsourced = document.getElementById('m-pos-is-outsourced').checked;
+  const checkedPeople = isOutsourced ? [] : Array.from(document.querySelectorAll('.m-pos-person-check:checked')).map(el=>el.value);
+  const personId = checkedPeople[0] || null;
   const reportsType = document.querySelector('input[name="m-pos-reportstype"]:checked')?.value || 'seat';
   const departmentId = document.getElementById('m-pos-dept').value;
 
@@ -4371,7 +4364,7 @@ function savePositionModal(existingId){
     }
   }
 
-  const additionalPersonIds = Array.from(document.getElementById('m-pos-additional-people').selectedOptions).map(o=>o.value);
+  const additionalPersonIds = checkedPeople.slice(1);
   const seatStatus = personId ? null : (isOutsourced ? 'Outsourced' : document.getElementById('m-pos-status').value);
   const data = {
     title,
