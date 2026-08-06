@@ -896,6 +896,7 @@ function migrateState(parsed){
       if(!parsed.contracts) parsed.contracts = [];
       if(!parsed.personFiles) parsed.personFiles = [];
       if(!parsed.externalTools) parsed.externalTools = [];
+      parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
       if(parsed.companyStory.tradePartnersCount==null) parsed.companyStory.tradePartnersCount = 0;
@@ -1705,32 +1706,78 @@ window.addEventListener('resize', ()=>{ if(currentView==='orgchart') drawOrgConn
 /* Everyone sees this — the whole point is a single landing spot for BuilderTrend, Gmail,
    whatever else the team lives in day to day. Only admins can add/edit/remove/reorder. */
 function renderExternalToolsSection(){
-  const tools = [...state.externalTools].sort((a,b)=>(a.order||0)-(b.order||0));
+  const myId = currentUser().id;
+  const tools = state.externalTools.filter(t=>t.personId===null || t.personId===myId).sort((a,b)=>(a.order||0)-(b.order||0));
   if(!tools.length && !canEdit()) return '';
   return `
     <div class="flex" style="justify-content:space-between;align-items:center;margin:18px 0 10px;">
       <div class="small" style="font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:0.4px;font-size:11px;">Your Tools</div>
-      ${canEdit()?`<span class="btn secondary sm" onclick="manageExternalToolsModal()">Manage</span>`:''}
+      <div class="flex gap-2">
+        <span class="btn secondary sm" onclick="addMyToolModal()">+ Add My Own</span>
+        ${canEdit()?`<span class="btn secondary sm" onclick="manageExternalToolsModal()">Manage Company Tools</span>`:''}
+      </div>
     </div>
-    ${!tools.length? `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">No tools linked yet.${canEdit()?' Click Manage to add BuilderTrend, Gmail, or anything else your team uses daily.':''}</div>` : `
+    ${!tools.length? `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">No tools linked yet. Click "+ Add My Own" to add something just for you, ${canEdit()?'or "Manage Company Tools" to set up what everyone sees.':'or ask an admin to add something company-wide.'}</div>` : `
     <div class="flex gap-3 mt-1 mb-2" style="flex-wrap:wrap;">
-      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:12px;padding:16px 18px;text-decoration:none;color:var(--ink);width:190px;box-sizing:border-box;">
-        <span style="width:40px;height:40px;border-radius:10px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">${t.logoUrl?`<img src="${escAttr(t.logoUrl)}" style="width:100%;height:100%;object-fit:contain;">`:`<span style="font-size:24px;">${t.icon||'🔗'}</span>`}</span>
-        <strong style="font-size:15px;min-width:0;flex:1;line-height:1.3;">${escHtml(t.name)}</strong>
-      </a>`).join('')}
+      ${tools.map(t=>`<div class="card hover" style="position:relative;display:flex;align-items:center;gap:12px;padding:16px 18px;width:190px;box-sizing:border-box;">
+        ${t.personId===myId?`<span class="miniBtn" onclick="event.preventDefault();removeMyTool('${t.id}')" title="Remove (only you see this one)" style="position:absolute;top:6px;right:6px;color:var(--rust);">✕</span>`:''}
+        <a href="${escAttr(t.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink);flex:1;min-width:0;">
+          <span style="width:40px;height:40px;border-radius:10px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">${t.logoUrl?`<img src="${escAttr(t.logoUrl)}" style="width:100%;height:100%;object-fit:contain;">`:`<span style="font-size:24px;">${t.icon||'🔗'}</span>`}</span>
+          <strong style="font-size:15px;min-width:0;flex:1;line-height:1.3;">${escHtml(t.name)}</strong>
+        </a>
+      </div>`).join('')}
     </div>`}
   `;
+}
+function addMyToolModal(){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Add a Tool Just for You</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small mt-1" style="margin-bottom:10px;">Only you will see this on your dashboard — it won't show up for anyone else, and nothing here affects the company-wide tools.</div>
+          <label>Name</label><input type="text" id="m-mytool-name" placeholder="e.g. My Personal CRM">
+          <label>Link</label><input type="text" id="m-mytool-url" placeholder="https://...">
+          <label>Logo <span class="small" style="font-weight:400;">(optional)</span></label>
+          <input type="file" id="m-mytool-logo" accept="image/*">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveMyTool(this)">Add</button></div>
+      </div>
+    </div>`);
+}
+async function saveMyTool(el){
+  const name = document.getElementById('m-mytool-name').value.trim();
+  const url = document.getElementById('m-mytool-url').value.trim();
+  if(!name || !url){ toast('Name and link are both required'); return; }
+  let logoUrl = null;
+  const fileInput = document.getElementById('m-mytool-logo');
+  if(fileInput.files[0]){
+    try{ logoUrl = await uploadPhotoToStorage(fileInput.files[0], 'tool-logos'); }
+    catch(e){ toast('Logo upload failed: '+(e.message||'unknown error')); }
+  }
+  state.externalTools.push({
+    id: 'tool'+Date.now(), personId: currentUser().id, name,
+    url: /^https?:\/\//i.test(url) ? url : 'https://'+url,
+    logoUrl, order: state.externalTools.length
+  });
+  saveState(); closeModal(el); toast('Added'); render();
+}
+function removeMyTool(toolId){
+  const t = byId(state.externalTools, toolId);
+  if(!t || t.personId!==currentUser().id) return;
+  state.externalTools = state.externalTools.filter(x=>x.id!==toolId);
+  saveState(); render();
 }
 function manageExternalToolsModal(){
   if(!canEdit()) return;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
-        <div class="modal-head"><strong>Manage Your Tools</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-head"><strong>Manage Company Tools</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
-          <div class="small mt-1" style="margin-bottom:10px;">These show up on everyone's dashboard as quick links — BuilderTrend, Gmail, anything your team opens every day.</div>
+          <div class="small mt-1" style="margin-bottom:10px;">These show up on everyone's dashboard as quick links — BuilderTrend, Gmail, anything your team opens every day. Anyone can also add their own private tools that only they see, from the "+ Add My Own" button — those live separately and won't show up here.</div>
           <div id="m-tools-list">
-            ${[...state.externalTools].sort((a,b)=>(a.order||0)-(b.order||0)).map(t=>externalToolRow(t)).join('')}
+            ${state.externalTools.filter(t=>t.personId===null).sort((a,b)=>(a.order||0)-(b.order||0)).map(t=>externalToolRow(t)).join('')}
           </div>
           <button class="btn secondary sm mt-2" onclick="addExternalToolRow()">+ Add Tool</button>
         </div>
@@ -1759,7 +1806,7 @@ function addExternalToolRow(){
 async function saveExternalTools(el){
   if(!canEdit()){ toast('Admins only'); return; }
   const rows = Array.from(document.querySelectorAll('#m-tools-list [data-tool-id]'));
-  const tools = [];
+  const companyTools = [];
   for(let i=0; i<rows.length; i++){
     const row = rows[i];
     const name = row.querySelector('.m-tool-name').value.trim();
@@ -1771,9 +1818,10 @@ async function saveExternalTools(el){
       try{ logoUrl = await uploadPhotoToStorage(fileInput.files[0], 'tool-logos'); }
       catch(e){ toast('Logo upload failed for '+name+': '+(e.message||'unknown error')); }
     }
-    tools.push({ id: row.dataset.toolId, name, url: /^https?:\/\//i.test(url) ? url : 'https://'+url, logoUrl, order: i });
+    companyTools.push({ id: row.dataset.toolId, personId: null, name, url: /^https?:\/\//i.test(url) ? url : 'https://'+url, logoUrl, order: i });
   }
-  state.externalTools = tools;
+  const personalTools = state.externalTools.filter(t=>t.personId!==null);
+  state.externalTools = [...companyTools, ...personalTools];
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function renderDashboard(){
@@ -10551,8 +10599,8 @@ function renderCompanySettings(){
 
     <div class="section-title">Dashboard Tools</div>
     <div class="card">
-      <div class="small" style="margin-bottom:10px;">These links show up in the "Your Tools" row at the top of everyone's dashboard automatically — BuilderTrend, Gmail, anything your team should have one click away, every single day. This is one shared list for the whole company, not something set per person.</div>
-      ${state.externalTools.length? `<div class="small" style="margin-bottom:10px;">Currently linked: ${state.externalTools.map(t=>escHtml(t.name)).join(', ')}</div>` : `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">Nothing linked yet.</div>`}
+      <div class="small" style="margin-bottom:10px;">These links show up in the "Your Tools" row at the top of everyone's dashboard automatically — BuilderTrend, Gmail, anything your team should have one click away, every single day. This is the shared company-wide list everyone sees, including new hires from day one. Anyone can also add their own private tools that only they see, from the dashboard itself — those don't show up or get managed here.</div>
+      ${state.externalTools.filter(t=>t.personId===null).length? `<div class="small" style="margin-bottom:10px;">Currently linked: ${state.externalTools.filter(t=>t.personId===null).map(t=>escHtml(t.name)).join(', ')}</div>` : `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">Nothing linked yet.</div>`}
       <button class="btn secondary" onclick="manageExternalToolsModal()">Manage Dashboard Tools</button>
     </div>
 
