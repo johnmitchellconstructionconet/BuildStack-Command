@@ -3892,6 +3892,11 @@ function signPolicy(policyId){
 
 /* ================= PEOPLE / ORG ================= */
 let showFormerEmployees = false;
+let peopleCardBioExpanded = {};
+function togglePeopleCardBio(personId){
+  peopleCardBioExpanded[personId] = !peopleCardBioExpanded[personId];
+  render();
+}
 function renderPeople(){
   const gate = featureGate('people','People Directory'); if(gate) return gate;
   const visiblePeople = state.people.filter(p=>canSeePersonByLocation(p.id) && p.status!=='offboarded');
@@ -3903,6 +3908,7 @@ function renderPeople(){
       ${visiblePeople.map(p=>{
         const mine = myAssignments(p.id);
         const pct = mine.length? Math.round(mine.filter(a=>a.status==='completed').length/mine.length*100) : null;
+        const bioExpanded = peopleCardBioExpanded[p.id];
         return `
         <div class="card people-card ${!p.isPlaceholder?'hover':''}" style="padding:0;overflow:hidden;" onclick="${p.isPlaceholder?`openPersonModal('${p.id}')`:`navigate('personDetail',{id:'${p.id}'})`}">
           ${canEdit()?`<span class="people-card-edit" onclick="event.stopPropagation();openPersonModal('${p.id}')">Edit</span>`:''}
@@ -3918,6 +3924,10 @@ function renderPeople(){
               <div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Started</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${fmtDate(p.startDate)}</div></div>
               ${canSeeCompletionOf(p.id)? `<div style="text-align:center;flex:1;"><div class="small" style="color:var(--slate-light);">Training</div><div style="font-weight:600;font-size:12.5px;margin-top:2px;">${pct!==null?pct+'%':'—'}</div></div>`:''}
             </div>` : ''}
+            ${(!p.isPlaceholder && p.bio)? `
+            <div class="small mt-2" style="color:var(--bronze-dark);cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation();togglePeopleCardBio('${p.id}')">${bioExpanded?'▾ Hide bio':'▸ Read bio'}</div>
+            ${bioExpanded? `<div class="small mt-1" style="text-align:left;color:var(--slate);">${escHtml(p.bio)}</div>`:''}
+            ` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -3932,6 +3942,11 @@ function renderPeople(){
       </table></div>` : ''}
     ` : ''}
   `;
+}
+let personDetailExpanded = {};
+function togglePersonDetailSection(key){
+  personDetailExpanded[key] = !personDetailExpanded[key];
+  render();
 }
 function renderPersonDetail(){
   const p = byId(state.people, currentParams.id);
@@ -4042,10 +4057,11 @@ function renderPersonDetail(){
     ${renderTimeOffSection(p.id, canApprove(currentUser().id,'timeOff'))}
     ${canSeeReviewsOf(p.id) ? renderReviewsSection(p.id, canEdit()) : ''}
     ${(canEdit() || isOwnProfile) ? renderPersonDocumentsSection(p.id) : ''}
-    <div class="section-title">Roles<span class="count">${seats.filter(s=>s.roleId).length}</span>
-      ${canEdit()?`<span class="btn bronze sm" style="margin-left:auto;" onclick="assignRoleModal('${p.id}')">+ Assign a Role</span>`:''}
+    <div class="section-title" style="cursor:pointer;" onclick="togglePersonDetailSection('${p.id}-roles')">
+      <span class="chev" style="display:inline-block;transition:transform .15s;transform:rotate(${personDetailExpanded[p.id+'-roles']?'0':'-90'}deg);margin-right:4px;">▾</span>Roles<span class="count">${seats.filter(s=>s.roleId).length}</span>
+      ${canEdit()?`<span class="btn bronze sm" style="margin-left:auto;" onclick="event.stopPropagation();assignRoleModal('${p.id}')">+ Assign a Role</span>`:''}
     </div>
-    ${seats.filter(s=>s.roleId).length? `<div class="tbl-card"><table>
+    ${personDetailExpanded[p.id+'-roles']? (seats.filter(s=>s.roleId).length? `<div class="tbl-card"><table>
       <tr><th>Role</th><th>Via seat</th><th></th></tr>
       ${seats.filter(s=>s.roleId).map(s=>{
         const role = byId(state.roles, s.roleId);
@@ -4055,17 +4071,18 @@ function renderPersonDetail(){
           <td>${canEdit()?`<span class="btn secondary sm" onclick="unassignRole('${s.id}')">Unassign</span>`:''}</td>
         </tr>`;
       }).join('')}
-    </table></div>` : `<div class="empty-inline">No roles assigned yet.${canEdit()?' Click "+ Assign a Role" above to give them one.':''}</div>`}
-    <div class="section-title">Seats on the org chart<span class="count">${seats.length}</span></div>
-    ${seats.length? `<div class="tbl-card"><table>
+    </table></div>` : `<div class="empty-inline">No roles assigned yet.${canEdit()?' Click "+ Assign a Role" above to give them one.':''}</div>`) : ''}
+    <div class="section-title" style="cursor:pointer;" onclick="togglePersonDetailSection('${p.id}-seats')">
+      <span class="chev" style="display:inline-block;transition:transform .15s;transform:rotate(${personDetailExpanded[p.id+'-seats']?'0':'-90'}deg);margin-right:4px;">▾</span>Seats on the org chart<span class="count">${seats.length}</span>
+    </div>
+    ${personDetailExpanded[p.id+'-seats']? (seats.length? `<div class="tbl-card"><table>
       <tr><th>Seat</th><th>Department</th><th>Reports to</th></tr>
       ${seats.map(s=>{
         const parentPos = byId(state.positions, s.parentPositionId);
         const parentOccupant = parentPos && parentPos.personId ? byId(state.people, parentPos.personId) : null;
         return `<tr class="row-click" onclick="navigate('orgchart')"><td><strong>${s.title}</strong></td><td>${byId(state.departments,s.departmentId)?.name||'—'}</td><td>${parentOccupant?parentOccupant.name:(parentPos?parentPos.title:'—')}</td></tr>`;
       }).join('')}
-    </table></div>` : `<div class="empty"><h3>No seat yet</h3><p>${canEdit()?`Add them to the <a onclick="navigate('orgchart')" style="text-decoration:underline;cursor:pointer;">Org Chart</a> to give them a title, department, and reporting line.`:'This person hasn\u2019t been placed on the org chart yet.'}</p></div>`}
-    ${roles.length? `<div class="section-title">Role purpose</div>${roles.map(role=>`<div class="card mt-2"><strong>${role.title}</strong><div class="small mt-1">${role.purpose}</div></div>`).join('')}`:''}
+    </table></div>` : `<div class="empty"><h3>No seat yet</h3><p>${canEdit()?`Add them to the <a onclick="navigate('orgchart')" style="text-decoration:underline;cursor:pointer;">Org Chart</a> to give them a title, department, and reporting line.`:'This person hasn\u2019t been placed on the org chart yet.'}</p></div>`) : ''}
     ${canSeeCompletionOf(p.id)? `
     <div class="section-title">Assignments<span class="count">${mine.length}</span></div>
     <div class="tbl-card"><table>
@@ -4624,7 +4641,7 @@ function syncPersonPrimaryFields(personId){
   if(!p) return;
   const seats = personPositions(personId);
   if(!seats.length) return;
-  const primary = seats[0];
+  const primary = (p.primarySeatId && seats.find(s=>s.id===p.primarySeatId)) || seats[0];
   p.title = primary.title;
   p.departmentId = primary.departmentId;
   p.roleId = primary.roleId;
@@ -4684,6 +4701,12 @@ function openPersonModal(personId){
           <label>Name</label><input type="text" id="m-p-name" value="${escAttr(p?.name)}" placeholder="Full name">
           <label>Email <span class="small" style="font-weight:400;">(required for them to create a login)</span></label><input type="email" id="m-p-email" value="${escAttr(p?.email)}" placeholder="name@company.com">
           <div class="small mt-1" style="margin-bottom:12px;">Job title, department, and reporting line are set from the Org Chart — assign this person a seat there once they're created.</div>
+          ${p && personPositions(p.id).length>1? `
+          <label>Which role should show publicly? <span class="small" style="font-weight:400;">(they hold more than one — pick which one appears on their card and profile)</span></label>
+          <select id="m-p-primary-seat">
+            ${personPositions(p.id).map(s=>`<option value="${s.id}" ${(p.primarySeatId?p.primarySeatId===s.id:personPositions(p.id)[0].id===s.id)?'selected':''}>${s.title}</option>`).join('')}
+          </select>
+          ` : ''}
           <div class="field-row">
             <div><label>Employment type</label><select id="m-p-empl">${['Full-time','Part-time','Contractor'].map(s=>`<option ${p?.employmentType===s?'selected':''}>${s}</option>`).join('')}</select></div>
             <div><label>Start date</label><input type="date" id="m-p-start" value="${p?.startDate||''}"></div>
@@ -4917,6 +4940,7 @@ async function savePersonModal(existingId){
   const approvalPermissions = APPROVAL_PERMISSIONS.filter(perm=>document.getElementById('m-p-approve-'+perm.key).checked).map(perm=>perm.key);
   const allowanceVal = document.getElementById('m-p-allowance').value.trim();
   const allowanceUnlimited = document.getElementById('m-p-allowance-unlimited').checked;
+  const primarySeatEl = document.getElementById('m-p-primary-seat');
   const data = {
     name, email,
     employmentType: document.getElementById('m-p-empl').value,
@@ -4927,12 +4951,13 @@ async function savePersonModal(existingId){
     accessLevel: document.getElementById('m-p-access').value,
     hiddenFeatures, approvalPermissions
   };
+  if(primarySeatEl) data.primarySeatId = primarySeatEl.value;
   if(photoInput.files[0]){
     try{ data.photo = await uploadPhotoToStorage(photoInput.files[0], 'profile-photos'); }
     catch(e){ toast('Upload failed (' + (e.message||e.error||'unknown error') + ') — saving the rest of the changes anyway.'); console.error('Storage upload error:', e); }
   }
   let id = existingId;
-  if(id){ Object.assign(byId(state.people, id), data); }
+  if(id){ Object.assign(byId(state.people, id), data); if(primarySeatEl) syncPersonPrimaryFields(id); }
   else { id='u'+Date.now(); data.id=id; data.title='Unassigned'; data.departmentId=null; data.roleId=null; data.managerId=null; state.people.push(data); }
   saveState();
   document.querySelector('.modal-backdrop')?.remove();
