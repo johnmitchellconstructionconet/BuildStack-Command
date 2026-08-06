@@ -1714,9 +1714,9 @@ function renderExternalToolsSection(){
     </div>
     ${!tools.length? `<div class="small" style="color:var(--slate-light);margin-bottom:10px;">No tools linked yet.${canEdit()?' Click Manage to add BuilderTrend, Gmail, or anything else your team uses daily.':''}</div>` : `
     <div class="flex gap-3 mt-1 mb-2" style="flex-wrap:wrap;">
-      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:12px;padding:16px 22px;text-decoration:none;color:var(--ink);min-width:160px;">
-        <span style="font-size:24px;width:40px;height:40px;border-radius:10px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${t.icon||'🔗'}</span>
-        <strong style="font-size:15px;">${escHtml(t.name)}</strong>
+      ${tools.map(t=>`<a href="${escAttr(t.url)}" target="_blank" rel="noopener" class="card hover" style="display:flex;align-items:center;gap:12px;padding:16px 18px;text-decoration:none;color:var(--ink);width:190px;box-sizing:border-box;">
+        <span style="width:40px;height:40px;border-radius:10px;background:var(--bronze-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">${t.logoUrl?`<img src="${escAttr(t.logoUrl)}" style="width:100%;height:100%;object-fit:contain;">`:`<span style="font-size:24px;">${t.icon||'🔗'}</span>`}</span>
+        <strong style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(t.name)}</strong>
       </a>`).join('')}
     </div>`}
   `;
@@ -1740,26 +1740,39 @@ function manageExternalToolsModal(){
 }
 function externalToolRow(t){
   const id = t?.id || 'tool'+Date.now()+Math.random().toString(36).slice(2);
-  return `<div class="flex gap-2 mt-2" data-tool-id="${id}" style="align-items:center;">
-    <input type="text" class="m-tool-icon" value="${escAttr(t?.icon||'🔗')}" style="width:48px;text-align:center;flex-shrink:0;" placeholder="🔗">
-    <input type="text" class="m-tool-name" value="${escAttr(t?.name)}" placeholder="e.g. BuilderTrend" style="flex:1;">
-    <input type="text" class="m-tool-url" value="${escAttr(t?.url)}" placeholder="https://..." style="flex:2;">
-    <span class="miniBtn" onclick="this.closest('[data-tool-id]').remove()" title="Remove">✕</span>
+  return `<div class="card mt-2" data-tool-id="${id}" style="padding:12px 14px;">
+    <div class="flex gap-2" style="align-items:center;">
+      ${t?.logoUrl?`<img src="${escAttr(t.logoUrl)}" class="m-tool-logo-preview" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--bronze-tint);flex-shrink:0;">`:`<span class="m-tool-logo-preview" style="width:32px;height:32px;border-radius:6px;background:var(--bronze-tint);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;">${t?.icon||'🔗'}</span>`}
+      <input type="text" class="m-tool-name" value="${escAttr(t?.name)}" placeholder="e.g. BuilderTrend" style="flex:1;">
+      <input type="text" class="m-tool-url" value="${escAttr(t?.url)}" placeholder="https://..." style="flex:2;">
+      <span class="miniBtn" onclick="this.closest('[data-tool-id]').remove()" title="Remove">✕</span>
+    </div>
+    <div class="flex gap-2 mt-2" style="align-items:center;">
+      <label class="small" style="font-weight:400;margin:0;width:auto;">Logo <span style="color:var(--slate-light);">(optional — falls back to a link icon if you skip this)</span></label>
+      <input type="file" class="m-tool-logo-file" accept="image/*" style="flex:1;" data-existing-logo="${escAttr(t?.logoUrl||'')}">
+    </div>
   </div>`;
 }
 function addExternalToolRow(){
   document.getElementById('m-tools-list').insertAdjacentHTML('beforeend', externalToolRow(null));
 }
-function saveExternalTools(el){
+async function saveExternalTools(el){
   if(!canEdit()){ toast('Admins only'); return; }
   const rows = Array.from(document.querySelectorAll('#m-tools-list [data-tool-id]'));
-  const tools = rows.map((row,i)=>{
+  const tools = [];
+  for(let i=0; i<rows.length; i++){
+    const row = rows[i];
     const name = row.querySelector('.m-tool-name').value.trim();
     const url = row.querySelector('.m-tool-url').value.trim();
-    const icon = row.querySelector('.m-tool-icon').value.trim();
-    if(!name || !url) return null;
-    return { id: row.dataset.toolId, name, url: /^https?:\/\//i.test(url) ? url : 'https://'+url, icon: icon||'🔗', order: i };
-  }).filter(Boolean);
+    if(!name || !url) continue;
+    const fileInput = row.querySelector('.m-tool-logo-file');
+    let logoUrl = fileInput.dataset.existingLogo || null;
+    if(fileInput.files[0]){
+      try{ logoUrl = await uploadPhotoToStorage(fileInput.files[0], 'tool-logos'); }
+      catch(e){ toast('Logo upload failed for '+name+': '+(e.message||'unknown error')); }
+    }
+    tools.push({ id: row.dataset.toolId, name, url: /^https?:\/\//i.test(url) ? url : 'https://'+url, logoUrl, order: i });
+  }
   state.externalTools = tools;
   saveState(); closeModal(el); toast('Saved'); render();
 }
