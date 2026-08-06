@@ -3978,7 +3978,7 @@ function renderOrgChart(){
       </div>`:''}
     </div>
     ${!state.positions.length? `<div class="empty"><h3>No seats yet</h3><p>Add the first seat — usually yours — then build down from there.</p></div>`:''}
-    <div id="org-canvas-scroll" style="overflow-x:auto;padding-bottom:8px;">
+    <div id="org-canvas-scroll" style="overflow:auto;padding-bottom:8px;max-height:75vh;border:1px solid var(--line-soft);border-radius:12px;">
     <div id="org-canvas" style="position:relative;width:${maxX}px;height:${maxY}px;min-width:100%;">
       <svg id="org-lines" style="position:absolute;top:0;left:0;pointer-events:none;z-index:0;"></svg>
       ${state.positions.map(orgNode).join('')}
@@ -4029,11 +4029,8 @@ function startOrgNodeMove(e, posId){
 }
 function onOrgNodeMove(e){
   if(!orgNodeMoveState) return;
-  const canvas = document.getElementById('org-canvas');
-  const scaleMatch = canvas ? /scale\(([\d.]+)\)/.exec(canvas.style.transform||'') : null;
-  const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
-  const dx = (e.clientX - orgNodeMoveState.startMouseX) / scale;
-  const dy = (e.clientY - orgNodeMoveState.startMouseY) / scale;
+  const dx = e.clientX - orgNodeMoveState.startMouseX;
+  const dy = e.clientY - orgNodeMoveState.startMouseY;
   const newX = Math.max(0, orgNodeMoveState.startX + dx);
   const newY = Math.max(0, orgNodeMoveState.startY + dy);
   orgNodeMoveState.el.style.left = newX + 'px';
@@ -4088,25 +4085,7 @@ function showSeatKpis(positionId){
    scrolling. Runs before the connector lines are drawn, so the lines are always measured
    from the final, already-scaled positions — getBoundingClientRect() reflects transforms,
    so the existing line math needs no changes to stay correct at any scale. */
-function fitOrgChartToWidth(){
-  const canvas = document.getElementById('org-canvas');
-  const wrap = document.getElementById('org-canvas-scroll');
-  if(!canvas || !wrap) return;
-  canvas.style.transform = 'none';
-  canvas.style.marginBottom = '';
-  wrap.style.height = '';
-  const naturalWidth = canvas.scrollWidth;
-  const naturalHeight = canvas.scrollHeight;
-  const availableWidth = wrap.clientWidth;
-  if(naturalWidth > availableWidth && naturalWidth > 0){
-    const scale = Math.max(availableWidth / naturalWidth, 0.4);
-    canvas.style.transform = `scale(${scale})`;
-    canvas.style.transformOrigin = 'top center';
-    wrap.style.height = (naturalHeight * scale) + 'px';
-  }
-}
 function drawOrgConnectors(){
-  fitOrgChartToWidth();
   const canvas = document.getElementById('org-canvas');
   const svg = document.getElementById('org-lines');
   if(!canvas || !svg) return;
