@@ -1215,10 +1215,28 @@ function createNotification(type, message, opts){
 }
 function notificationsFor(personId){
   return state.notifications.filter(n=>
-    (n.targetAudience==='admins' && isPersonAdmin(personId)) ||
+    !(n.clearedBy||[]).includes(personId) &&
+    ((n.targetAudience==='admins' && isPersonAdmin(personId)) ||
     (n.targetPermission && canApprove(personId, n.targetPermission)) ||
-    n.targetPersonId===personId
+    n.targetPersonId===personId)
   );
+}
+function clearNotification(notifId, personId){
+  const n = byId(state.notifications, notifId);
+  if(!n) return;
+  n.clearedBy = n.clearedBy || [];
+  if(!n.clearedBy.includes(personId)) n.clearedBy.push(personId);
+  saveState();
+}
+function clearAllNotifications(){
+  const uid = currentUser().id;
+  notificationsFor(uid).forEach(n=>{
+    n.clearedBy = n.clearedBy || [];
+    if(!n.clearedBy.includes(uid)) n.clearedBy.push(uid);
+  });
+  saveState();
+  document.getElementById('notif-panel')?.remove();
+  refreshNotifBadge();
 }
 function unreadNotificationsFor(personId){
   return notificationsFor(personId).filter(n=>!(n.readBy||[]).includes(personId));
@@ -1236,6 +1254,13 @@ function refreshNotifBadge(){
   const count = unreadNotificationsFor(currentUser().id).length;
   badge.classList.toggle('hidden', count===0);
 }
+function clearOneNotification(notifId){
+  clearNotification(notifId, currentUser().id);
+  refreshNotifBadge();
+  document.getElementById('notif-panel')?.remove();
+  document.removeEventListener('click', closeNotifPanelOnOutsideClick);
+  toggleNotificationPanel();
+}
 function toggleNotificationPanel(){
   const existing = document.getElementById('notif-panel');
   if(existing){ existing.remove(); return; }
@@ -1245,11 +1270,17 @@ function toggleNotificationPanel(){
   panel.id = 'notif-panel';
   panel.className = 'notif-panel';
   panel.innerHTML = `
-    <div class="notif-panel-head">Notifications</div>
+    <div class="notif-panel-head flex" style="justify-content:space-between;align-items:center;">
+      <span>Notifications</span>
+      ${notifs.length?`<span class="small" style="cursor:pointer;text-decoration:underline;font-weight:400;" onclick="clearAllNotifications()">Clear all</span>`:''}
+    </div>
     ${notifs.length? notifs.map(n=>`
-      <div class="notif-item ${(n.readBy||[]).includes(uid)?'':'unread'}" onclick="openNotification('${n.id}')">
-        <div>${escHtml(n.message)}</div>
-        <div class="small" style="color:var(--slate-light);margin-top:3px;">${new Date(n.createdAt).toLocaleString()}</div>
+      <div class="notif-item ${(n.readBy||[]).includes(uid)?'':'unread'}" style="position:relative;padding-right:28px;">
+        <div onclick="openNotification('${n.id}')" style="cursor:pointer;">
+          <div>${escHtml(n.message)}</div>
+          <div class="small" style="color:var(--slate-light);margin-top:3px;">${new Date(n.createdAt).toLocaleString()}</div>
+        </div>
+        <span class="miniBtn" onclick="event.stopPropagation();clearOneNotification('${n.id}')" title="Clear" style="position:absolute;top:8px;right:8px;">✕</span>
       </div>
     `).join('') : `<div class="notif-empty">Nothing yet.</div>`}
   `;
