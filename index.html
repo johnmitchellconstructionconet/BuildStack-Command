@@ -7136,16 +7136,34 @@ function onGlobalSearch(q){
   clearTimeout(window._searchTimer);
   window._searchTimer = setTimeout(()=> navigate('searchResults',{q}), 350);
 }
+function stripHtmlToText(html){
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  return (div.textContent || div.innerText || '').replace(/\s+/g,' ').trim();
+}
+function searchSnippet(plainText, q){
+  const idx = plainText.toLowerCase().indexOf(q);
+  if(idx===-1) return '';
+  const start = Math.max(0, idx-50);
+  const end = Math.min(plainText.length, idx+q.length+70);
+  return (start>0?'…':'') + plainText.slice(start,end) + (end<plainText.length?'…':'');
+}
 function renderSearchResults(){
   const q = (currentParams.q||'').toLowerCase();
-  const topics = state.topics.filter(t=>t.name.toLowerCase().includes(q));
+  const topicMatches = state.topics.map(t=>{
+    const titleMatch = t.name.toLowerCase().includes(q);
+    const plainBody = stripHtmlToText(t.docHtml);
+    const bodyMatch = !titleMatch && plainBody.toLowerCase().includes(q);
+    if(!titleMatch && !bodyMatch) return null;
+    return { topic: t, snippet: bodyMatch ? searchSnippet(plainBody, q) : null };
+  }).filter(Boolean);
   const policies = state.policies.filter(p=>p.title.toLowerCase().includes(q));
   const roles = state.roles.filter(r=>r.title.toLowerCase().includes(q));
   const people = state.people.filter(p=>p.name.toLowerCase().includes(q));
-  const total = topics.length+policies.length+roles.length+people.length;
+  const total = topicMatches.length+policies.length+roles.length+people.length;
   return `
     <div class="page-head"><div><div class="page-eyebrow">Search</div><div class="page-title">Results for "${currentParams.q}"</div><div class="page-desc">${total} result${total!==1?'s':''}</div></div></div>
-    ${topics.length? `<div class="section-title">Training / Processes</div><div class="tbl-card"><table>${topics.map(t=>`<tr class="row-click" onclick="navigate('topicDetail',{id:'${t.id}'})"><td>${t.name}</td></tr>`).join('')}</table></div>`:''}
+    ${topicMatches.length? `<div class="section-title">Training / Processes</div><div class="tbl-card"><table>${topicMatches.map(m=>`<tr class="row-click" onclick="navigate('topicDetail',{id:'${m.topic.id}'})"><td><strong>${m.topic.name}</strong>${m.snippet?`<div class="small mt-1" style="color:var(--slate-light);">${escHtml(m.snippet)}</div>`:''}</td></tr>`).join('')}</table></div>`:''}
     ${policies.length? `<div class="section-title">Policies</div><div class="tbl-card"><table>${policies.map(p=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${p.id}'})"><td>${p.title}</td></tr>`).join('')}</table></div>`:''}
     ${roles.length? `<div class="section-title">Roles</div><div class="tbl-card"><table>${roles.map(r=>`<tr class="row-click" onclick="navigate('roleDetail',{id:'${r.id}'})"><td>${r.title}</td></tr>`).join('')}</table></div>`:''}
     ${people.length? `<div class="section-title">People</div><div class="tbl-card"><table>${people.map(p=>`<tr class="row-click" onclick="navigate('personDetail',{id:'${p.id}'})"><td>${p.name}</td></tr>`).join('')}</table></div>`:''}
