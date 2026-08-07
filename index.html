@@ -4183,8 +4183,8 @@ function renderPersonDetail(){
       <tr><th>Policy</th><th>Version</th><th>Date</th></tr>
       ${acks.map(a=>`<tr><td>${byId(state.policies,a.policyId)?.title}</td><td>v${a.version}</td><td>${fmtDate(a.date)}</td></tr>`).join('')}
     </table></div>
-    ${canSeePersonFiles()? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderPersonFilesSection(p.id)}</div>` : ''}
-    ${canSeeDisciplinary()? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderDisciplinarySection(p.id)}</div>` : ''}
+    ${canSeePersonFiles(p.id)? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderPersonFilesSection(p.id)}</div>` : ''}
+    ${canSeeDisciplinary(p.id)? `<div style="border-top:1px solid var(--line);margin-top:34px;padding-top:6px;">${renderDisciplinarySection(p.id)}</div>` : ''}
   `;
 }
 
@@ -4786,6 +4786,15 @@ function openPersonModal(personId){
             ${personPositions(p.id).map(s=>`<option value="${s.id}" ${(p.primarySeatId?p.primarySeatId===s.id:personPositions(p.id)[0].id===s.id)?'selected':''}>${s.title}</option>`).join('')}
           </select>
           ` : ''}
+          ${(p && currentUser().accessLevel==='owner')? `
+          <label class="mt-2">Who can see this person's disciplinary record and files? <span class="small" style="font-weight:400;">(Owner-only setting — you always see everything regardless)</span></label>
+          <div class="small mt-1" style="color:var(--slate-light);margin-bottom:6px;">By default, every admin can see this. Check specific admins below to limit it to only them — useful if this person is themselves an admin and you don\u2019t want their write-ups visible to other admins.</div>
+          <div class="flex gap-2" style="flex-wrap:wrap;">
+            ${state.people.filter(person=>person.accessLevel==='admin' && person.id!==p.id).map(admin=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
+              <input type="checkbox" class="m-p-restrict-admin" value="${admin.id}" style="width:auto;margin:0;" ${(p.restrictedRecordsTo||[]).includes(admin.id)?'checked':''}> ${admin.name}
+            </label>`).join('') || `<div class="small">No other admins yet.</div>`}
+          </div>
+          ` : ''}
           <div class="field-row">
             <div><label>Employment type</label><select id="m-p-empl">${['Full-time','Part-time','Contractor'].map(s=>`<option ${p?.employmentType===s?'selected':''}>${s}</option>`).join('')}</select></div>
             <div><label>Start date</label><input type="date" id="m-p-start" value="${p?.startDate||''}"></div>
@@ -5031,6 +5040,8 @@ async function savePersonModal(existingId){
     hiddenFeatures, approvalPermissions
   };
   if(primarySeatEl) data.primarySeatId = primarySeatEl.value;
+  const restrictEls = document.querySelectorAll('.m-p-restrict-admin');
+  if(restrictEls.length){ data.restrictedRecordsTo = Array.from(restrictEls).filter(el=>el.checked).map(el=>el.value); }
   if(photoInput.files[0]){
     try{ data.photo = await uploadPhotoToStorage(photoInput.files[0], 'profile-photos'); }
     catch(e){ toast('Upload failed (' + (e.message||e.error||'unknown error') + ') — saving the rest of the changes anyway.'); console.error('Storage upload error:', e); }
@@ -5192,9 +5203,11 @@ function openRoleModal(roleId){
           <label>Key responsibilities <span class="small" style="font-weight:400;">(type one, press Enter)</span></label>
           <div class="chip-list" id="m-role-resp-list">${(r?.responsibilities||[]).map(x=>chipHtml(x)).join('')}</div>
           <input type="text" id="m-role-resp-input" placeholder="Type a responsibility, press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();addChipItem('m-role-resp-list',this);}">
-          <label>KPIs <span class="small" style="font-weight:400;">(type one, press Enter — visible only to whoever holds this role, plus admins)</span></label>
+          <span class="small" style="cursor:pointer;text-decoration:underline;" onclick="openBulkChipImportModal('m-role-resp-list','Responsibilities')">📋 Bulk add from a list</span>
+          <label class="mt-2">KPIs <span class="small" style="font-weight:400;">(type one, press Enter — visible only to whoever holds this role, plus admins)</span></label>
           <div class="chip-list" id="m-role-kpis-list">${(r?.kpis||[]).map(x=>chipHtml(x)).join('')}</div>
           <input type="text" id="m-role-kpis-input" placeholder="Type a KPI, press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();addChipItem('m-role-kpis-list',this);}">
+          <span class="small" style="cursor:pointer;text-decoration:underline;" onclick="openBulkChipImportModal('m-role-kpis-list','KPIs')">📋 Bulk add from a list</span>
           <label class="mt-2">Required training <span class="small" style="font-weight:400;">(check any that auto-assign to anyone in this role)</span></label>
           <div class="checklist-box">${state.topics.map(t=>`<label class="checklist-row"><input type="checkbox" value="${t.id}" class="m-role-reqtopic-cb" ${(r?.requiredTopics||[]).includes(t.id)?'checked':''}> ${t.name}</label>`).join('') || '<div class="small" style="color:var(--slate-light);">No topics in the library yet.</div>'}</div>
           <label class="mt-2">Required policies</label>
@@ -5203,6 +5216,32 @@ function openRoleModal(roleId){
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveRole('${roleId||''}',this)">Save</button></div>
       </div>
     </div>`);
+}
+function openBulkChipImportModal(listId, label){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Bulk Add ${label}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small mb-2">Paste a list — one ${label.toLowerCase().replace(/s$/,'')} per line, or one per row if you're pasting from a single spreadsheet column.</div>
+          <textarea id="m-bulkchip-paste" style="min-height:160px;" placeholder="One per line..."></textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="runBulkChipImport('${listId}',this)">Add All</button></div>
+      </div>
+    </div>`);
+}
+function runBulkChipImport(listId, el){
+  const text = document.getElementById('m-bulkchip-paste').value;
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Paste at least one line first'); return; }
+  const list = document.getElementById(listId);
+  const existing = new Set(getChipValues(listId));
+  let added = 0;
+  lines.forEach(line=>{
+    if(!existing.has(line)){ list.insertAdjacentHTML('beforeend', chipHtml(line)); existing.add(line); added++; }
+  });
+  closeModal(el);
+  toast(`Added ${added} item${added!==1?'s':''}${lines.length-added?`, skipped ${lines.length-added} duplicate${lines.length-added!==1?'s':''}`:''}`);
 }
 function chipHtml(value){
   return `<div class="chip-item" data-value="${escAttr(value)}"><span>${value}</span><span class="chip-remove" onclick="this.parentElement.remove()">✕</span></div>`;
@@ -6171,13 +6210,24 @@ function renderOffboardingBanner(personId){
 
 /* ================= EMPLOYEE FILES ================= */
 /* Admin-only, same posture as disciplinary actions — DISC assessments and similar sensitive
-   HR documents aren't things an employee should browse on their own profile without context. */
-function canSeePersonFiles(){ return canEdit() && !viewAsPersonId; }
+   HR documents aren't things an employee should browse on their own profile without context.
+   The Owner always sees everything; other admins can be individually excluded per employee via
+   restrictedRecordsTo, so one admin's write-up isn't automatically visible to every other admin. */
+function canSeeSensitiveRecordsOf(targetPersonId){
+  const viewer = currentUser();
+  if(!viewer || viewAsPersonId) return false;
+  if(viewer.accessLevel==='owner') return true;
+  if(viewer.accessLevel!=='admin') return false;
+  const target = byId(state.people, targetPersonId);
+  const restrictedTo = target?.restrictedRecordsTo || [];
+  return !restrictedTo.length || restrictedTo.includes(viewer.id);
+}
+function canSeePersonFiles(targetPersonId){ return canSeeSensitiveRecordsOf(targetPersonId); }
 function personFilesFor(personId){
   return state.personFiles.filter(f=>f.personId===personId).sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt));
 }
 function renderPersonFilesSection(personId){
-  if(!canSeePersonFiles()) return '';
+  if(!canSeePersonFiles(personId)) return '';
   const files = personFilesFor(personId);
   return `
     <div class="section-title" style="margin-top:30px;">📁 Employee Files<span class="count">${files.length}</span>
@@ -6240,9 +6290,10 @@ function deletePersonFile(fileId){
 }
 /* ================= DISCIPLINARY ACTIONS ================= */
 /* Deliberately admin-only — not shown to the employee themselves, including through View As.
-   That's a real policy choice, not a default to take for granted; flip canSeeDisciplinary if
-   you want employees to see their own record instead. */
-function canSeeDisciplinary(){ return canEdit() && !viewAsPersonId; }
+   That's a real policy choice, not a default to take for granted. Beyond that, the Owner always
+   sees everything; other admins can be individually excluded per employee via restrictedRecordsTo,
+   so one admin's write-up isn't automatically visible to every other admin. */
+function canSeeDisciplinary(targetPersonId){ return canSeeSensitiveRecordsOf(targetPersonId); }
 const DISCIPLINARY_TYPES = {
   verbal_warning: {label:'Verbal Warning', color:'amber'},
   written_warning: {label:'Written Warning', color:'rust'},
@@ -6254,7 +6305,7 @@ function disciplinaryActionsFor(personId){
   return state.disciplinaryActions.filter(a=>a.personId===personId).sort((a,b)=> new Date(b.date)-new Date(a.date));
 }
 function renderDisciplinarySection(personId){
-  if(!canSeeDisciplinary()) return '';
+  if(!canSeeDisciplinary(personId)) return '';
   const actions = disciplinaryActionsFor(personId);
   return `
     <div class="section-title" style="margin-top:30px;">⚠ Disciplinary Actions<span class="count">${actions.length}</span>
@@ -8357,13 +8408,13 @@ function openTagEditor(topicId){
             ${state.roles.length? `<optgroup label="Roles — also links this SOP as a Reference for that role">
               ${state.roles.map(r=>`<option value="${escAttr(r.title)}">${r.title}</option>`).join('')}
             </optgroup>`:''}
-            ${plainTags.length? `<optgroup label="Existing tags">
+            ${plainTags.length? `<optgroup label="Categories">
               ${plainTags.map(tag=>`<option value="${escAttr(tag)}">${tag}</option>`).join('')}
             </optgroup>`:''}
-            <option value="__new__">+ Add a new tag</option>
+            <option value="__new__">+ Add a new category tag</option>
           </select>
           <div id="m-tag-new-wrap" style="display:none;">
-            <label>New tag</label>
+            <label>New category tag</label>
             <input type="text" id="m-tag-input" placeholder="e.g. selections, safety, closeout" onkeydown="if(event.key==='Enter'){event.preventDefault();doAddTag('${topicId}',this.closest('.modal-backdrop'));}">
           </div>
         </div>
@@ -8497,13 +8548,22 @@ function renderTopicEditor(){
     </div>
     <div id="inline-recorder-slot"></div>
     <div class="editor-canvas" id="editor-canvas" contenteditable="true">${canvasHtml}</div>
-    <div class="mt-3 flex gap-2" style="align-items:center;flex-wrap:wrap;">
+    <div class="mt-3">
       <span class="btn secondary sm" onclick="openTagEditor('${t.id}')">🏷 Add tags</span>
-      ${(t.phaseIds||[]).map(pid=>{
-        const ph = byId(state.projectPhases, pid);
-        return ph? `<span class="pill jade">${ph.name} <span style="cursor:pointer;margin-left:4px;" onclick="removePhaseTagChip('${t.id}','${pid}')">✕</span></span>` : '';
-      }).join('')}
-      ${(t.tags||[]).map(tag=>`<span class="pill gray">${tag} <span style="cursor:pointer;margin-left:4px;" onclick="removeTag('${t.id}','${tag}')">✕</span></span>`).join('')}
+      ${(()=>{
+        const roleNames = new Set(state.roles.map(r=>r.title));
+        const roleTags = (t.tags||[]).filter(tag=>roleNames.has(tag));
+        const categoryTags = (t.tags||[]).filter(tag=>!roleNames.has(tag));
+        const phaseTags = t.phaseIds||[];
+        return `
+        ${roleTags.length? `<div class="mt-2"><span class="small" style="color:var(--slate-light);margin-right:6px;">Roles:</span>${roleTags.map(tag=>`<span class="pill bronze">${tag} <span style="cursor:pointer;margin-left:4px;" onclick="removeTag('${t.id}','${tag}')">✕</span></span>`).join(' ')}</div>`:''}
+        ${phaseTags.length? `<div class="mt-2"><span class="small" style="color:var(--slate-light);margin-right:6px;">Phases:</span>${phaseTags.map(pid=>{
+          const ph = byId(state.projectPhases, pid);
+          return ph? `<span class="pill jade">${ph.name} <span style="cursor:pointer;margin-left:4px;" onclick="removePhaseTagChip('${t.id}','${pid}')">✕</span></span>` : '';
+        }).join(' ')}</div>`:''}
+        ${categoryTags.length? `<div class="mt-2"><span class="small" style="color:var(--slate-light);margin-right:6px;">Categories:</span>${categoryTags.map(tag=>`<span class="pill gray">${tag} <span style="cursor:pointer;margin-left:4px;" onclick="removeTag('${t.id}','${tag}')">✕</span></span>`).join(' ')}</div>`:''}
+        `;
+      })()}
     </div>
     <div class="small mt-1" style="color:var(--slate-light);">Tag every project phase this actually applies to — most SOPs are one phase, some (like Change Orders) span most of the job.</div>
   `;
@@ -11377,6 +11437,29 @@ let quizBuilderState = null;
 function openQuizBuilder(topicId, quizId){
   navigate('quizBuilder', {topicId, quizId});
 }
+/* Generic CSV parser, reused by every bulk-import feature in the app. Handles quoted fields
+   with embedded commas/newlines/escaped quotes, since that's what Excel and Google Sheets
+   actually produce when a cell contains a comma. */
+function parseCSV(text){
+  const rows = []; let row = [], field = '', inQuotes = false;
+  for(let i=0; i<text.length; i++){
+    const c = text[i], next = text[i+1];
+    if(inQuotes){
+      if(c==='"' && next==='"'){ field+='"'; i++; }
+      else if(c==='"'){ inQuotes=false; }
+      else field += c;
+    } else {
+      if(c==='"'){ inQuotes=true; }
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n' || c==='\r'){
+        if(c==='\r' && next==='\n') i++;
+        row.push(field); rows.push(row); row=[]; field='';
+      } else field += c;
+    }
+  }
+  if(field!=='' || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(cell=>cell.trim()!==''));
+}
 function renderQuizBuilder(){
   const topicId = currentParams.topicId;
   const quizId = currentParams.quizId;
@@ -11404,7 +11487,68 @@ function renderQuizBuilder(){
     ${quizBuilderState.questions.map((q,qi)=>renderQuizBuilderQuestion(q,qi)).join('')}
     ${!quizBuilderState.questions.length? `<div class="empty-inline">No questions yet — add at least one below.</div>`:''}
     <button class="btn secondary mt-2" onclick="addQuizBuilderQuestion()">+ Add Question</button>
+    <button class="btn secondary mt-2" onclick="openQuizBulkImportModal()">📋 Bulk Import from Spreadsheet</button>
   `;
+}
+function openQuizBulkImportModal(){
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-head"><strong>Bulk Import Questions</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small" style="margin-bottom:10px;">Columns, in order: <strong>Question, Type (MC or TF), Option 1, Option 2, Option 3, Option 4, Correct Answer</strong> (the exact text of the right option — not a number). Leave unused option columns blank. For True/False, put True or False in Option 1 and the same in Correct Answer.</div>
+          <button class="btn secondary sm mb-2" onclick="downloadQuizImportTemplate()">⬇ Download a blank template (.csv)</button>
+          <label>Upload a .csv file</label>
+          <input type="file" id="m-quiz-import-file" accept=".csv" onchange="readQuizImportFile(this)">
+          <div class="small mt-1" style="margin-bottom:6px;">— or paste rows directly below —</div>
+          <textarea id="m-quiz-import-paste" style="min-height:140px;font-family:monospace;font-size:12.5px;" placeholder="Is the sky blue?,TF,True,,,,True"></textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="runQuizBulkImport(this)">Import</button></div>
+      </div>
+    </div>`);
+}
+function downloadQuizImportTemplate(){
+  const csv = 'Question,Type,Option 1,Option 2,Option 3,Option 4,Correct Answer\n"Is the sky blue?",TF,True,,,,True\n"What is 2+2?",MC,3,4,5,6,4\n';
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'quiz-question-template.csv';
+  a.click();
+}
+function readQuizImportFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('m-quiz-import-paste').value = e.target.result; };
+  reader.readAsText(file);
+}
+function runQuizBulkImport(el){
+  const text = document.getElementById('m-quiz-import-paste').value.trim();
+  if(!text){ toast('Upload a file or paste some rows first'); return; }
+  const rows = parseCSV(text);
+  const startIdx = /question/i.test(rows[0]?.[0]||'') ? 1 : 0;
+  let added = 0, skipped = 0;
+  for(let i=startIdx; i<rows.length; i++){
+    const r = rows[i];
+    const questionText = (r[0]||'').trim();
+    const typeRaw = (r[1]||'').trim().toUpperCase();
+    const options = [r[2],r[3],r[4],r[5]].map(o=>(o||'').trim()).filter(Boolean);
+    const correctAnswer = (r[6]||'').trim();
+    if(!questionText || !correctAnswer){ skipped++; continue; }
+    const type = typeRaw==='TF' ? 'tf' : 'mc';
+    const finalOptions = type==='tf' ? ['True','False'] : options;
+    if(type==='mc' && finalOptions.length<2){ skipped++; continue; }
+    const correctIdx = finalOptions.findIndex(o=>o.toLowerCase()===correctAnswer.toLowerCase());
+    if(correctIdx===-1){ skipped++; continue; }
+    quizBuilderState.questions.push({
+      id:'qq'+Date.now()+Math.random().toString(36).slice(2),
+      type, text:questionText, options:finalOptions, correct:correctIdx
+    });
+    added++;
+  }
+  closeModal(el);
+  toast(`Imported ${added} question${added!==1?'s':''}${skipped?`, skipped ${skipped} (missing or unmatched data)`:''}`);
+  render();
 }
 function renderQuizBuilderQuestion(q, qi){
   return `
