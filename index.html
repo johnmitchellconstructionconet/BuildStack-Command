@@ -2896,6 +2896,10 @@ function renderTeamAtAGlance(u){
 function pendingOnboardingTasksFor(personId){
   const pending = [];
   (state.individualTasks||[]).filter(t=>t.personId===personId && !t.internal && !taskIsDone(personId,t)).forEach(t=>pending.push(t));
+  state.policies.forEach(p=>{
+    const t = {id:'policytask_'+p.id, type:'policy', refId:p.id, title:'Read and sign: '+p.title};
+    if(!taskIsDone(personId,t)) pending.push(t);
+  });
   enrollmentFor(personId).forEach(enr=>{
     const path = byId(state.onboardingPaths, enr.pathId);
     if(!path) return;
@@ -9032,10 +9036,28 @@ function renderTaskRow(personId, t, locked){
 function renderMyOnboarding(personId){
   const enrollments = enrollmentFor(personId);
   const indivHtml = renderIndividualTasksSection(personId, false);
+  const policyTasks = state.policies.map(p=>({id:'policytask_'+p.id, type:'policy', refId:p.id, title:'Read and sign: '+p.title}));
+  const policiesDone = policyTasks.filter(t=>taskIsDone(personId,t)).length;
+  const policiesSection = policyTasks.length? `
+    <div class="card mt-3">
+      <div class="flex" style="justify-content:space-between;align-items:flex-end;">
+        <div><strong style="font-size:15px;">Company Policies</strong><div class="small mt-1">Every current company policy — this list always reflects what's currently in effect, including anything added after you started.</div></div>
+        <div class="small">${policiesDone}/${policyTasks.length} signed</div>
+      </div>
+      <div class="progress-track mt-2"><div class="progress-fill" style="width:${policyTasks.length?Math.round(policiesDone/policyTasks.length*100):0}%;"></div></div>
+    </div>
+    <div class="ob-section">
+      <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <strong>Sign every policy</strong>
+        ${policiesDone===policyTasks.length? `<span class="pill jade">Complete</span>` : `<span class="pill amber">In progress</span>`}
+      </div>
+      ${policyTasks.map(t=>renderTaskRow(personId,t,false)).join('')}
+    </div>
+  ` : '';
   if(!enrollments.length){
-    return indivHtml + `<div class="empty"><h3>No active onboarding path</h3><p>${canEdit()?'Enroll yourself or a teammate from Manage Paths, or add individual tasks above.':'Nothing assigned yet — check back once your manager sets one up.'}</p></div>`;
+    return indivHtml + policiesSection + `<div class="empty"><h3>No active onboarding path</h3><p>${canEdit()?'Enroll yourself or a teammate from Manage Paths, or add individual tasks above.':'Nothing assigned yet — check back once your manager sets one up.'}</p></div>`;
   }
-  return indivHtml + enrollments.map(enr=>{
+  return indivHtml + policiesSection + enrollments.map(enr=>{
     const path = byId(state.onboardingPaths, enr.pathId);
     if(!path) return '';
     const visibleSections = path.sections.filter(s=>!s.internal || canEdit());
