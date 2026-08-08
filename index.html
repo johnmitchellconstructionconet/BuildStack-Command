@@ -939,8 +939,11 @@ function migrateState(parsed){
       if(!parsed.trainings) parsed.trainings = [];
       if(!parsed.contracts) parsed.contracts = [];
       if(!parsed.personFiles) parsed.personFiles = [];
-      if(!parsed.policies.some(p=>p.title==='Dress Code Policy')){
-        parsed.policies.push({id:'p'+Date.now(), title:'Dress Code Policy', category:'General', version:'1.0', effectiveDate: new Date().toISOString().slice(0,10), status:'Published', body:'[Starter template — edit this to match your actual expectations before treating it as final.]<br><br>Job site / field roles: closed-toe work boots, long pants, and any PPE required for the task at hand. No loose jewelry or clothing that could pose a safety hazard around tools or equipment.<br><br>Office / client-facing roles: business casual. Company-branded polos or button-downs are encouraged for site visits and client meetings.<br><br>Company apparel: when representing the company at a client site, wear company-branded apparel when available.'});
+      if(!parsed.dressCodePolicySeeded){
+        if(!parsed.policies.some(p=>p.title==='Dress Code Policy')){
+          parsed.policies.push({id:'p'+Date.now(), title:'Dress Code Policy', category:'General', version:'1.0', effectiveDate: new Date().toISOString().slice(0,10), status:'Published', body:'[Starter template — edit this to match your actual expectations before treating it as final.]<br><br>Job site / field roles: closed-toe work boots, long pants, and any PPE required for the task at hand. No loose jewelry or clothing that could pose a safety hazard around tools or equipment.<br><br>Office / client-facing roles: business casual. Company-branded polos or button-downs are encouraged for site visits and client meetings.<br><br>Company apparel: when representing the company at a client site, wear company-branded apparel when available.'});
+        }
+        parsed.dressCodePolicySeeded = true;
       }
       if(!parsed.externalTools) parsed.externalTools = [];
       parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
