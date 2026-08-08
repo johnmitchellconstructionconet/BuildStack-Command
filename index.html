@@ -3929,6 +3929,9 @@ function renderPolicyDetail(){
       ${canEdit()?`<div class="flex gap-2"><button class="btn secondary" onclick="openPolicyModal('${p.id}')">Edit</button><button class="btn secondary" onclick="deletePolicy('${p.id}')">Delete</button></div>`:''}
     </div>
     <div class="card">${p.body}</div>
+    ${(p.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      ${p.attachments.map(a=>`<a href="${escAttr(a.url)}" target="_blank" rel="noopener" class="btn secondary sm">📎 ${escHtml(a.name)}</a>`).join('')}
+    </div>`:''}
     <div class="section-title">Acknowledgment</div>
     ${ack ? `<div class="card"><span class="pill jade">Signed by ${ack.signatureName} on ${fmtDate(ack.date)}</span></div>` :
     `<div class="card">
@@ -3956,6 +3959,14 @@ function openPolicyModal(policyId){
           </div>
           <label>Policy text</label><textarea id="m-pol-body" style="min-height:160px;">${p?.body||''}</textarea>
           ${p?`<div class="small mt-1">Editing the text without changing the version number won't require anyone to re-sign. Bump the version if this is a material change and you want people to re-acknowledge it.</div>`:''}
+          <label class="mt-2">Attachments <span class="small" style="font-weight:400;">(PDFs, photos — anything that supports the policy text)</span></label>
+          <div id="m-pol-existing-attachments">
+            ${(p?.attachments||[]).map((a,i)=>`<div class="flex gap-2 mt-1" data-existing-att-idx="${i}" style="align-items:center;">
+              <span class="small" style="flex:1;">📎 ${escHtml(a.name)}</span>
+              <span class="miniBtn" onclick="this.closest('[data-existing-att-idx]').remove()" title="Remove">✕</span>
+            </div>`).join('')}
+          </div>
+          <input type="file" id="m-pol-newfiles" multiple accept=".pdf,image/*">
           <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter policies by role)</span></label>
           <div class="flex gap-2" style="flex-wrap:wrap;">
             ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
@@ -3967,11 +3978,21 @@ function openPolicyModal(policyId){
       </div>
     </div>`);
 }
-function savePolicyForm(policyId, el){
+async function savePolicyForm(policyId, el){
   if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-pol-title').value.trim();
   if(!title){ toast('Title is required'); return; }
   const oldVersion = policyId ? byId(state.policies, policyId).version : null;
+  const p = policyId ? byId(state.policies, policyId) : null;
+  const survivingIdx = Array.from(document.querySelectorAll('#m-pol-existing-attachments [data-existing-att-idx]')).map(el=>parseInt(el.dataset.existingAttIdx));
+  const attachments = (p?.attachments||[]).filter((a,i)=>survivingIdx.includes(i));
+  const newFiles = document.getElementById('m-pol-newfiles').files;
+  for(let i=0; i<newFiles.length; i++){
+    try{
+      const url = await uploadPhotoToStorage(newFiles[i], 'policy-attachments');
+      attachments.push({url, name: newFiles[i].name});
+    }catch(e){ toast('Upload failed for '+newFiles[i].name+': '+(e.message||'unknown error')); }
+  }
   const data = {
     title,
     category: document.getElementById('m-pol-cat').value.trim() || 'General',
@@ -3979,6 +4000,7 @@ function savePolicyForm(policyId, el){
     effectiveDate: document.getElementById('m-pol-effective').value,
     status: document.getElementById('m-pol-status').value,
     body: document.getElementById('m-pol-body').value.trim(),
+    attachments,
     tags: Array.from(document.querySelectorAll('.m-pol-role:checked')).map(el=>el.value)
   };
   let policy;
@@ -8164,16 +8186,24 @@ function insertAttachmentPrompt(){
         <div class="modal-head"><strong>Insert Attachment</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
           <label>Link label</label><input type="text" id="m-att-label" placeholder="e.g. Warranty Claim Form">
-          <label>File or link URL</label><input type="text" id="m-att-url" placeholder="https://...">
+          <label>Upload a file (PDF, photo, etc.)</label><input type="file" id="m-att-file">
+          <div class="small mt-1" style="margin-bottom:6px;">— or —</div>
+          <label>Link to something already online</label><input type="text" id="m-att-url" placeholder="https://...">
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="doInsertAttachment(this)">Insert</button></div>
       </div>
     </div>`);
 }
-function doInsertAttachment(el){
+async function doInsertAttachment(el){
   const label = document.getElementById('m-att-label').value.trim();
-  const url = document.getElementById('m-att-url').value.trim();
-  if(!label || !url){ toast('Label and URL are both required'); return; }
+  const fileInput = document.getElementById('m-att-file');
+  let url = document.getElementById('m-att-url').value.trim();
+  if(!label){ toast('A link label is required'); return; }
+  if(!fileInput.files[0] && !url){ toast('Upload a file or paste a link'); return; }
+  if(fileInput.files[0]){
+    try{ url = await uploadPhotoToStorage(fileInput.files[0], 'sop-attachments'); }
+    catch(e){ toast('Upload failed: '+(e.message||'unknown error')); return; }
+  }
   closeModal(el);
   document.getElementById('editor-canvas').focus();
   document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" class="btn secondary sm" style="display:inline-flex;margin:6px 4px 6px 0;">📎 ${label}</a>&nbsp;`);
