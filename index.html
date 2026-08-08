@@ -3941,7 +3941,9 @@ function renderPolicyDetail(){
     </div>`}
   `;
 }
+let pendingPolicyAttachments = [];
 function openPolicyModal(policyId){
+  pendingPolicyAttachments = [];
   const p = policyId ? byId(state.policies, policyId) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
@@ -3966,7 +3968,8 @@ function openPolicyModal(policyId){
               <span class="miniBtn" onclick="this.closest('[data-existing-att-idx]').remove()" title="Remove">✕</span>
             </div>`).join('')}
           </div>
-          <input type="file" id="m-pol-newfiles" multiple accept=".pdf,image/*">
+          <input type="file" id="m-pol-newfiles" multiple accept=".pdf,image/*" onchange="accumulatePolicyFiles(this)">
+          <div id="m-pol-pending-files" class="mt-1"></div>
           <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter policies by role)</span></label>
           <div class="flex gap-2" style="flex-wrap:wrap;">
             ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
@@ -3978,6 +3981,23 @@ function openPolicyModal(policyId){
       </div>
     </div>`);
 }
+function accumulatePolicyFiles(input){
+  Array.from(input.files).forEach(f=>pendingPolicyAttachments.push(f));
+  input.value = ''; // clear so the SAME file can be re-picked later without confusion, now that it's safely queued
+  renderPendingPolicyFiles();
+}
+function renderPendingPolicyFiles(){
+  const el = document.getElementById('m-pol-pending-files');
+  if(!el) return;
+  el.innerHTML = pendingPolicyAttachments.map((f,i)=>`<div class="flex gap-2 mt-1" style="align-items:center;">
+    <span class="small" style="flex:1;">📎 ${escHtml(f.name)} <span style="color:var(--slate-light);">(will upload on Save)</span></span>
+    <span class="miniBtn" onclick="removePendingPolicyFile(${i})" title="Remove">✕</span>
+  </div>`).join('');
+}
+function removePendingPolicyFile(idx){
+  pendingPolicyAttachments.splice(idx,1);
+  renderPendingPolicyFiles();
+}
 async function savePolicyForm(policyId, el){
   if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-pol-title').value.trim();
@@ -3986,13 +4006,14 @@ async function savePolicyForm(policyId, el){
   const p = policyId ? byId(state.policies, policyId) : null;
   const survivingIdx = Array.from(document.querySelectorAll('#m-pol-existing-attachments [data-existing-att-idx]')).map(el=>parseInt(el.dataset.existingAttIdx));
   const attachments = (p?.attachments||[]).filter((a,i)=>survivingIdx.includes(i));
-  const newFiles = document.getElementById('m-pol-newfiles').files;
+  const newFiles = pendingPolicyAttachments;
   for(let i=0; i<newFiles.length; i++){
     try{
       const url = await uploadPhotoToStorage(newFiles[i], 'policy-attachments');
       attachments.push({url, name: newFiles[i].name});
     }catch(e){ toast('Upload failed for '+newFiles[i].name+': '+(e.message||'unknown error')); }
   }
+  pendingPolicyAttachments = [];
   const data = {
     title,
     category: document.getElementById('m-pol-cat').value.trim() || 'General',
