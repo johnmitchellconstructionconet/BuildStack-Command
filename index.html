@@ -3930,7 +3930,10 @@ function renderPolicyDetail(){
     </div>
     <div class="card">${p.body}</div>
     ${(p.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-      ${p.attachments.map(a=>`<a href="${escAttr(a.url)}" target="_blank" rel="noopener" class="btn secondary sm">📎 ${escHtml(a.name)}</a>`).join('')}
+      ${p.attachments.map(a=>((a.type||'').startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(a.name||''))
+        ? `<img src="${escAttr(a.url)}" style="max-width:280px;max-height:280px;border-radius:8px;cursor:pointer;background:var(--line-soft);object-fit:contain;" onclick="window.open('${escJs(a.url)}','_blank')" title="${escAttr(a.name)} — click to view full size">`
+        : `<a href="${escAttr(a.url)}" target="_blank" rel="noopener" class="btn secondary sm">📎 ${escHtml(a.name)}</a>`
+      ).join('')}
     </div>`:''}
     <div class="section-title">Acknowledgment</div>
     ${ack ? `<div class="card"><span class="pill jade">Signed by ${ack.signatureName} on ${fmtDate(ack.date)}</span></div>` :
@@ -4010,7 +4013,7 @@ async function savePolicyForm(policyId, el){
   for(let i=0; i<newFiles.length; i++){
     try{
       const url = await uploadPhotoToStorage(newFiles[i], 'policy-attachments');
-      attachments.push({url, name: newFiles[i].name});
+      attachments.push({url, name: newFiles[i].name, type: newFiles[i].type});
     }catch(e){ toast('Upload failed for '+newFiles[i].name+': '+(e.message||'unknown error')); }
   }
   pendingPolicyAttachments = [];
