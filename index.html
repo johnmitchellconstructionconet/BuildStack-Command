@@ -3174,8 +3174,15 @@ function renderTrainingCard(t, personId){
     </div>
   </div>`;
 }
+function isTrainerForTraining(personId, trainingId){
+  return state.trainingPathEnrollments.some(e=>{
+    if(e.personId!==personId || e.trainerId!==currentUser().id) return false;
+    const path = byId(state.trainingPaths, e.pathId);
+    return path && path.weeks.some(w=>w.tasks.some(t=>t.type==='training' && t.refId===trainingId));
+  });
+}
 function completeTraining(trainingId, personId){
-  if(personId!==currentUser().id && !canEdit()){ toast('You can only complete your own training'); return; }
+  if(personId!==currentUser().id && !canEdit() && !isTrainerForTraining(personId, trainingId)){ toast('You can only complete your own training'); return; }
   const t = byId(state.trainings, trainingId);
   if(t.requiresSignoff){
     openModal(`
@@ -9253,8 +9260,15 @@ function sectionQuizPassed(personId, quizId){
 function sectionIsDone(personId, section){
   return section.tasks.every(t=>taskIsDone(personId,t));
 }
+function isTrainerForTask(personId, taskId){
+  return state.trainingPathEnrollments.some(e=>{
+    if(e.personId!==personId || e.trainerId!==currentUser().id) return false;
+    const path = byId(state.trainingPaths, e.pathId);
+    return path && path.weeks.some(w=>w.tasks.some(t=>t.id===taskId));
+  });
+}
 function toggleCustomTask(personId, taskId){
-  if(personId!==currentUser().id && !canEdit()){ toast('You can only update your own tasks'); return; }
+  if(personId!==currentUser().id && !canEdit() && !isTrainerForTask(personId, taskId)){ toast('You can only update your own tasks'); return; }
   const existing = state.onboardingTaskCompletions.find(c=>c.personId===personId && c.taskId===taskId);
   if(existing){ state.onboardingTaskCompletions = state.onboardingTaskCompletions.filter(c=>c!==existing); }
   else { state.onboardingTaskCompletions.push({id:'otc'+Date.now(), personId, taskId, completedDate:new Date().toISOString().slice(0,10)}); }
@@ -9493,11 +9507,16 @@ function renderOnboarding(){
 }
 function renderTaskRow(personId, t, locked){
   const done = taskIsDone(personId,t);
-  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form';
+  const isAuto = t.type==='topic' || t.type==='policy' || t.type==='bio' || t.type==='photo' || t.type==='form' || t.type==='training';
   const checkClick = !isAuto ? `toggleCustomTask('${personId}','${t.id}')` : '';
   let titleClick = '';
   if(t.type==='topic') titleClick = `navigate('topicDetail',{id:'${t.refId}'})`;
   else if(t.type==='policy') titleClick = `navigate('policyDetail',{id:'${t.refId}'})`;
+  else if(t.type==='training'){
+    const training = byId(state.trainings, t.refId);
+    if(!done && training?.quizId) titleClick = `navigate('quizTake',{id:'${training.quizId}'})`;
+    else if(!done) titleClick = `completeTraining('${t.refId}','${personId}')`;
+  }
   else if(t.type==='video') titleClick = `previewVideo('${t.refId}')`;
   else if(t.type==='template') titleClick = `downloadTemplate('${t.refId}')`;
   else if(t.type==='bio') titleClick = `openMyBioModal('${personId}')`;
