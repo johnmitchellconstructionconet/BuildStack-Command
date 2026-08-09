@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BuildStack — Mitchell Construction &amp; Design</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Montserrat:wght@300;400;500;600&family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet">
 <style>
@@ -740,6 +741,7 @@ function seedData(){
     contracts: [],
     personFiles: [],
     externalTools: [],
+    calculators: [],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -946,6 +948,7 @@ function migrateState(parsed){
         parsed.dressCodePolicySeeded = true;
       }
       if(!parsed.externalTools) parsed.externalTools = [];
+      if(!parsed.calculators) parsed.calculators = [];
       parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
@@ -1640,7 +1643,12 @@ function login(personId){
   applyBranding();
   refreshSidebarChrome();
   restoreNavCollapseState();
-  navigate('dashboard');
+  const qrAssetId = new URLSearchParams(window.location.search).get('qrAsset');
+  if(qrAssetId && byId(state.companyAssets, qrAssetId)){
+    navigate('assetDetail', {id: qrAssetId});
+  } else {
+    navigate('dashboard');
+  }
   showLoginNotificationPopup();
   lastSyncedAt = new Date();
   startBackgroundSync();
@@ -3398,14 +3406,16 @@ function renderLibrary(){
     <div class="page-head">
       <div><div class="page-eyebrow">Knowledge Library</div><div class="page-title">${lib.name}</div><div class="page-desc">${lib.description}</div></div>
       ${canEdit() && libraryTab==='category'?`<button class="btn bronze" onclick="newSubjectModal()">+ New Subject</button>`:''}
+      ${canEdit() && libraryTab==='calculators'?`<button class="btn bronze" onclick="openCalculatorModal()">+ Add Calculator</button>`:''}
     </div>
     ${renderProcessSuggestionsWidget()}
     <div class="tabs">
       <div class="tab ${libraryTab==='category'?'active':''}" onclick="libraryTab='category';render();">By Category</div>
       <div class="tab ${libraryTab==='timeline'?'active':''}" onclick="libraryTab='timeline';render();">By Project Phase</div>
       <div class="tab ${libraryTab==='role'?'active':''}" onclick="libraryTab='role';render();">By Role</div>
+      <div class="tab ${libraryTab==='calculators'?'active':''}" onclick="libraryTab='calculators';render();">Calculators</div>
     </div>
-    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : `
+    ${libraryTab==='timeline'? renderPhaseTimeline() : libraryTab==='role'? renderRoleTimeline() : libraryTab==='calculators'? renderCalculatorsTab() : `
     <div class="flex gap-2 mt-2" style="align-items:center;flex-wrap:wrap;">
       ${filtersActive?`<span class="btn secondary sm" onclick="navigate('library',{cat:'all',role:'all',phase:'all'})">✕ Clear filters</span>`:''}
       <select onchange="navigate('library',{cat:this.value,role:'${filterRole}',phase:'${filterPhase}'})" style="max-width:220px;margin:0;">
@@ -3603,6 +3613,81 @@ function renderRoleTimeline(){
         <div class="small mt-1">${byId(state.subjects,t.subjectId)?.name||''}</div>
       </div>`).join('')}</div>` : ''}
   `;
+}
+/* ================= CALCULATORS ================= */
+/* Rendered via a sandboxed iframe (sandbox="allow-scripts", no allow-same-origin) so a
+   calculator's own HTML/CSS/JS runs fully isolated — it can't read or interfere with the rest
+   of the app, and the app's own styles can't leak in and break the calculator's layout either. */
+let calculatorExpanded = {};
+function toggleCalculatorExpand(calcId){
+  calculatorExpanded[calcId] = !calculatorExpanded[calcId];
+  render();
+}
+function renderCalculatorsTab(){
+  const calcs = state.calculators;
+  return `
+    <div class="small mt-1" style="margin-bottom:10px;">Quick-math tools for markups and estimates — the same calculators from your internal site, just living here now.</div>
+    ${!calcs.length? `<div class="empty mt-2"><h3>No calculators yet</h3><p>${canEdit()?'Click "+ Add Calculator" above and paste in the HTML from your existing tool.':'Nothing added yet — check back once an admin sets these up.'}</p></div>` : `
+    <div class="mt-2">
+      ${calcs.map(c=>{
+        const open = !!calculatorExpanded[c.id];
+        return `<div class="card mt-2" style="padding:0;overflow:hidden;">
+          <div class="flex" style="justify-content:space-between;align-items:center;cursor:pointer;padding:16px 18px;" onclick="toggleCalculatorExpand('${c.id}')">
+            <div>
+              <strong>🧮 ${escHtml(c.name)}</strong>
+              ${c.description?`<div class="small mt-1">${escHtml(c.description)}</div>`:''}
+            </div>
+            <div class="flex gap-2" style="align-items:center;">
+              ${canEdit()?`<span class="miniBtn" onclick="event.stopPropagation();openCalculatorModal('${c.id}')" title="Edit">✎</span>`:''}
+              <span class="chev" style="display:inline-block;transition:transform .15s;transform:rotate(${open?'0':'-90'}deg);">▾</span>
+            </div>
+          </div>
+          ${open?`<iframe sandbox="allow-scripts" srcdoc="${escAttr(c.html)}" style="width:100%;height:60vh;border:none;display:block;border-top:1px solid var(--line-soft);"></iframe>`:''}
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
+}
+function openCalculatorModal(calcId){
+  if(!canEdit()) return;
+  const c = calcId ? byId(state.calculators, calcId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-head"><strong>${c?'Edit Calculator':'Add Calculator'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Name</label><input type="text" id="m-calc-name" value="${escAttr(c?.name)}" placeholder="e.g. Change Order Markup">
+          <label>Description <span class="small" style="font-weight:400;">(optional)</span></label>
+          <input type="text" id="m-calc-description" value="${escAttr(c?.description)}" placeholder="What does this help with?">
+          <label class="mt-2">HTML code</label>
+          <textarea id="m-calc-html" style="min-height:220px;font-family:monospace;font-size:12.5px;" placeholder="Paste the full HTML for your calculator here...">${c?escHtml(c.html):''}</textarea>
+          <div class="small mt-1" style="color:var(--slate-light);">Paste the whole thing — HTML, any &lt;style&gt;, any &lt;script&gt;. It runs in its own isolated sandbox, so it won't conflict with the rest of the app.</div>
+        </div>
+        <div class="modal-foot">
+          ${c?`<button class="btn danger" style="margin-right:auto;" onclick="deleteCalculator('${c.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveCalculator('${calcId||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function saveCalculator(calcId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const name = document.getElementById('m-calc-name').value.trim();
+  const html = document.getElementById('m-calc-html').value;
+  if(!name){ toast('Name is required'); return; }
+  if(!html.trim()){ toast('Paste the calculator\u2019s HTML code first'); return; }
+  const data = { name, description: document.getElementById('m-calc-description').value.trim(), html };
+  if(calcId){ Object.assign(byId(state.calculators, calcId), data); }
+  else { data.id = 'calc'+Date.now(); data.addedBy = currentUser().id; data.addedAt = new Date().toISOString().slice(0,10); state.calculators.push(data); }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteCalculator(calcId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Delete this calculator? This cannot be undone.', ()=>{
+    state.calculators = state.calculators.filter(c=>c.id!==calcId);
+    saveState(); toast('Deleted'); render();
+  });
 }
 function openPhaseModal(phaseId){
   const ph = phaseId ? byId(state.projectPhases, phaseId) : null;
@@ -5648,8 +5733,9 @@ function renderCompanyAssets(){
     <div class="grid cols-3 mt-2">
       ${assets.map(a=>{
         const due = assetMaintenanceDue(a);
-        return `<div class="card hover" onclick="navigate('assetDetail',{id:'${a.id}'})">
-          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+        return `<div class="card hover" onclick="navigate('assetDetail',{id:'${a.id}'})" style="position:relative;">
+          <span class="miniBtn" onclick="event.stopPropagation();showAssetQrCode('${a.id}')" title="QR Code" style="position:absolute;top:12px;right:12px;">📱</span>
+          <div class="flex" style="justify-content:space-between;align-items:flex-start;padding-right:26px;">
             <strong>${a.name}</strong>
             ${due?`<span class="pill rust">Service due</span>`:''}
           </div>
@@ -5823,6 +5909,7 @@ async function saveAsset(assetId, el){
   }
   if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
   else { data.id = 'asset'+Date.now(); data.status = 'available'; data.assignedTo = null; data.locationId = null; data.addedDate = new Date().toISOString().slice(0,10); state.companyAssets.push(data); }
+  if(category==='Vehicle') pushPublicVehicleInfo(assetId || data.id);
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function renderAssetDetail(){
@@ -5837,11 +5924,14 @@ function renderAssetDetail(){
     <div class="crumbs"><a onclick="navigate('companyAssets')">Company Equipment</a><span class="sep">/</span>${a.name}</div>
     <div class="page-head">
       <div><div class="page-title">${a.name}</div><div class="page-desc">${assetSubtitle(a)}</div></div>
-      ${canEdit()?`<div class="flex gap-2">
-        <button class="btn secondary" onclick="openAssetModal('${a.id}')">Edit</button>
-        ${a.status!=='retired'?`<button class="btn secondary" onclick="retireAsset('${a.id}')">Retire</button>`:''}
-        <button class="btn danger" onclick="deleteAsset('${a.id}')">Delete</button>
-      </div>`:''}
+      <div class="flex gap-2">
+        <button class="btn secondary" onclick="showAssetQrCode('${a.id}')">📱 QR Code</button>
+        ${canEdit()?`<div class="flex gap-2">
+          <button class="btn secondary" onclick="openAssetModal('${a.id}')">Edit</button>
+          ${a.status!=='retired'?`<button class="btn secondary" onclick="retireAsset('${a.id}')">Retire</button>`:''}
+          <button class="btn danger" onclick="deleteAsset('${a.id}')">Delete</button>
+        </div>`:''}
+      </div>
     </div>
     <div class="card">
       <div class="flex" style="justify-content:space-between;align-items:center;">
@@ -6019,6 +6109,41 @@ async function confirmCheckIn(assetId, el){
   a.assignedTo = null; a.status = 'available';
   saveState(); closeModal(el); toast('Checked in'); render();
 }
+function showAssetQrCode(assetId, mode){
+  const a = byId(state.companyAssets, assetId);
+  if(!a) return;
+  const isVehicle = a.category==='Vehicle';
+  const showPublic = isVehicle && mode!=='admin';
+  const url = showPublic
+    ? `${window.location.origin}${window.location.pathname}?vehicleInfo=${assetId}`
+    : `${window.location.origin}${window.location.pathname}?qrAsset=${assetId}`;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head"><strong>QR Code — ${escHtml(a.name)}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body" style="text-align:center;">
+          <div class="small mb-2">${showPublic
+            ? 'Print this and put it inside the vehicle — glovebox, visor, wherever makes sense. Anyone who scans it sees insurance and maintenance info immediately, with no login required — useful in an accident or a roadside stop.'
+            : 'Print this and stick it on the equipment. Scanning it opens this item\u2019s page — an admin can assign it to someone from there.'}</div>
+          <div id="qr-code-target" style="display:flex;justify-content:center;margin:10px 0;"></div>
+          <div class="small" style="color:var(--slate-light);word-break:break-all;">${escHtml(url)}</div>
+          ${isVehicle?`<div class="small mt-2" style="cursor:pointer;text-decoration:underline;" onclick="closeModal(this);showAssetQrCode('${assetId}','${showPublic?'admin':'public'}')">${showPublic?'Need the admin check-out QR instead?':'Back to the public insurance/maintenance QR'}</div>`:''}
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Close</button><button class="btn bronze" onclick="printAssetQr()">Print</button></div>
+      </div>
+    </div>`);
+  const target = document.getElementById('qr-code-target');
+  if(target && window.QRCode) new QRCode(target, {text:url, width:200, height:200});
+  else if(target) target.innerHTML = `<div class="small" style="color:var(--rust);">QR library failed to load — check your internet connection and try again.</div>`;
+}
+function printAssetQr(){
+  const container = document.getElementById('qr-code-target');
+  if(!container) return;
+  const win = window.open('', '_blank');
+  win.document.write(`<html><body style="text-align:center;padding:40px;font-family:sans-serif;">${container.innerHTML}</body></html>`);
+  win.document.close();
+  win.print();
+}
 function retireAsset(assetId){
   if(!canEdit()){ toast('Admins only'); return; }
   const a = byId(state.companyAssets, assetId);
@@ -6095,6 +6220,7 @@ function logMaintenance(assetId, el){
   a.nextMaintenanceDate = document.getElementById('m-maint-nextdate').value || null;
   const nextUsage = document.getElementById('m-maint-nextusage').value.trim();
   a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
+  if(a.category==='Vehicle') pushPublicVehicleInfo(assetId);
   saveState(); closeModal(el); toast('Logged'); render();
 }
 function deleteMaintenanceLogEntry(entryId, assetId){
@@ -11126,6 +11252,38 @@ function setAiProvider(provider){
   state.companySettings.aiProvider = provider;
   saveState(); toast('AI provider set to '+(provider==='claude'?'Claude':'ChatGPT'));
 }
+async function pushPublicVehicleInfo(assetId){
+  if(!supabaseClient) return;
+  const a = byId(state.companyAssets, assetId);
+  if(!a || a.category!=='Vehicle') return;
+  const lastService = state.maintenanceLog.filter(m=>m.assetId===assetId).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];
+  try{
+    const { error } = await supabaseClient
+      .from('public_vehicle_info')
+      .upsert({
+        id: assetId,
+        name: a.name || null,
+        make: a.make || null,
+        model: a.model || null,
+        year: a.year || null,
+        vin: a.vin || null,
+        license_plate: a.licensePlate || null,
+        color: a.color || null,
+        registration_expiry: a.registrationExpiry || null,
+        insurance_policy: a.insurancePolicy || null,
+        insurance_expiry: a.insuranceExpiry || null,
+        next_maintenance_date: a.nextMaintenanceDate || null,
+        next_maintenance_usage: a.nextMaintenanceUsage || null,
+        current_usage: a.currentUsage || null,
+        usage_label: a.usageLabel || null,
+        special_requirements: a.specialRequirements || null,
+        last_service_date: lastService?.date || null,
+        last_service_type: lastService?.serviceType || null,
+        updated_at: new Date().toISOString()
+      });
+    if(error) console.error('Public vehicle info push failed:', error.message);
+  }catch(e){ console.error('Public vehicle info push failed:', e); }
+}
 async function pushPublicBranding(){
   if(!supabaseClient) return;
   try{
@@ -11785,7 +11943,61 @@ function deleteQuiz(quizId){
 }
 
 /* ================= INIT ================= */
+async function renderPublicVehiclePage(assetId){
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.add('hidden');
+  const container = document.createElement('div');
+  container.id = 'public-vehicle-page';
+  container.style.cssText = 'max-width:480px;margin:40px auto;padding:0 20px;font-family:Inter,sans-serif;';
+  container.innerHTML = '<div style="text-align:center;padding:60px 0;color:#8A8F98;">Loading vehicle info…</div>';
+  document.body.appendChild(container);
+  if(!supabaseClient){
+    container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#B4462F;">Can\u2019t reach the server right now. Check your connection and try scanning again.</div>';
+    return;
+  }
+  try{
+    const { data, error } = await supabaseClient.from('public_vehicle_info').select('*').eq('id', assetId).maybeSingle();
+    if(error || !data){
+      container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#5B6472;">No info found for this vehicle.</div>';
+      return;
+    }
+    const today = new Date().toISOString().slice(0,10);
+    const insuranceExpired = data.insurance_expiry && data.insurance_expiry <= today;
+    const regExpired = data.registration_expiry && data.registration_expiry <= today;
+    const fmt = (d) => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) : '—';
+    container.innerHTML = `
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#8A8F98;">Vehicle Info</div>
+        <div style="font-size:26px;font-weight:700;color:#0F1216;margin-top:4px;">${[data.year,data.make,data.model].filter(Boolean).join(' ') || data.name}</div>
+        ${data.license_plate?`<div style="color:#5B6472;margin-top:2px;">Plate: ${data.license_plate}</div>`:''}
+      </div>
+      <div style="background:#fff;border:1px solid #E5E2DE;border-radius:11px;padding:20px;margin-bottom:14px;">
+        <div style="font-weight:700;margin-bottom:10px;">Insurance</div>
+        <div style="color:#5B6472;font-size:13px;">Policy #</div><div style="margin-bottom:8px;">${data.insurance_policy || '—'}</div>
+        <div style="color:#5B6472;font-size:13px;">Expires</div><div style="font-weight:${insuranceExpired?'700':'400'};color:${insuranceExpired?'#B4462F':'#0F1216'};">${fmt(data.insurance_expiry)}${insuranceExpired?' — EXPIRED':''}</div>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E2DE;border-radius:11px;padding:20px;margin-bottom:14px;">
+        <div style="font-weight:700;margin-bottom:10px;">Registration</div>
+        <div style="color:#5B6472;font-size:13px;">Expires</div><div style="font-weight:${regExpired?'700':'400'};color:${regExpired?'#B4462F':'#0F1216'};">${fmt(data.registration_expiry)}${regExpired?' — EXPIRED':''}</div>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E2DE;border-radius:11px;padding:20px;margin-bottom:14px;">
+        <div style="font-weight:700;margin-bottom:10px;">Maintenance</div>
+        <div style="color:#5B6472;font-size:13px;">Last service</div><div style="margin-bottom:8px;">${data.last_service_type?data.last_service_type+' — '+fmt(data.last_service_date):'No service logged yet'}</div>
+        <div style="color:#5B6472;font-size:13px;">Next due</div><div>${data.next_maintenance_date?fmt(data.next_maintenance_date):'—'}${data.next_maintenance_usage?` / ${data.next_maintenance_usage.toLocaleString()} ${data.usage_label||''}`:''}</div>
+      </div>
+      ${data.special_requirements?`<div style="background:#F7EFD9;border-radius:11px;padding:16px 20px;margin-bottom:14px;"><div style="font-weight:700;margin-bottom:4px;">⚠ Special Requirements</div><div style="font-size:14px;">${data.special_requirements}</div></div>`:''}
+      ${data.vin?`<div style="text-align:center;color:#8A8F98;font-size:12px;margin-top:20px;">VIN: ${data.vin}</div>`:''}
+    `;
+  }catch(e){
+    container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#B4462F;">Something went wrong loading this page.</div>';
+  }
+}
 async function initApp(){
+  const publicVehicleId = new URLSearchParams(window.location.search).get('vehicleInfo');
+  if(publicVehicleId){
+    await renderPublicVehiclePage(publicVehicleId);
+    return;
+  }
   if(!supabaseClient){
     if(state.currentUserId && byId(state.people,state.currentUserId)) login(state.currentUserId);
     else renderAuthScreen();
