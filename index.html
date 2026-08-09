@@ -3217,9 +3217,13 @@ function renderTrainingPathsTab(){
             ${expanded? `<div class="mt-2" style="border-top:1px solid var(--line-soft);padding-top:10px;">
               ${enrolled.length? enrolled.map(e=>{
                 const person = byId(state.people, e.personId);
+                const trainer = e.trainerId ? byId(state.people, e.trainerId) : null;
                 return `<div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:6px;">
-                  <span class="small">${person?person.name:'Unknown'} <span style="color:var(--slate-light);">since ${fmtDate(e.startDate)}</span></span>
-                  <span class="miniBtn" onclick="unenrollFromTrainingPath('${e.id}')" title="Remove">✕</span>
+                  <span class="small">${person?person.name:'Unknown'} <span style="color:var(--slate-light);">since ${fmtDate(e.startDate)}${trainer?' · trainer: '+trainer.name:''}</span></span>
+                  <div class="flex gap-1">
+                    <span class="miniBtn" onclick="openChangeTrainerModal('${e.id}')" title="Set trainer">👤</span>
+                    <span class="miniBtn" onclick="unenrollFromTrainingPath('${e.id}')" title="Remove">✕</span>
+                  </div>
                 </div>`;
               }).join('') : `<div class="small" style="color:var(--slate-light);margin-bottom:8px;">Nobody enrolled yet.</div>`}
               <button class="btn secondary sm mt-1" onclick="openEnrollInPathModal('${tp.id}')">+ Enroll Someone</button>
@@ -3230,8 +3234,53 @@ function renderTrainingPathsTab(){
     `;
   }
   const myEnrollments = state.trainingPathEnrollments.filter(e=>e.personId===currentUser().id);
-  if(!myEnrollments.length) return `<div class="empty"><h3>No training path assigned</h3><p>If your role has a structured training plan, it\u2019ll show up here automatically once you\u2019re assigned that role.</p></div>`;
-  return myEnrollments.map(enr=>renderTrainingPathProgress(enr)).join('');
+  const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===currentUser().id);
+  if(!myEnrollments.length && !trainingFor.length) return `<div class="empty"><h3>No training path assigned</h3><p>If your role has a structured training plan, it\u2019ll show up here automatically once you\u2019re assigned that role. If you\u2019re training someone else, it\u2019ll show up here once an admin assigns you to them.</p></div>`;
+  return `
+    ${myEnrollments.length? `<div class="section-title" style="margin-top:0;">Your Training Path</div>${myEnrollments.map(enr=>renderTrainingPathProgress(enr)).join('')}`:''}
+    ${trainingFor.length? `<div class="section-title">People You're Training</div>${trainingFor.map(enr=>renderTrainerOutline(enr)).join('')}`:''}
+  `;
+}
+function renderTrainerOutline(enrollment){
+  const path = byId(state.trainingPaths, enrollment.pathId);
+  const trainee = byId(state.people, enrollment.personId);
+  if(!path || !trainee) return '';
+  const personId = enrollment.personId;
+  const startDate = new Date(enrollment.startDate+'T00:00:00');
+  const totalTasks = path.weeks.reduce((n,w)=>n+w.tasks.length,0);
+  const doneTasks = path.weeks.reduce((n,w)=>n+w.tasks.filter(t=>taskIsDone(personId,t)).length,0);
+  const expanded = trainerOutlineExpanded[enrollment.id]!==false;
+  return `
+    <div class="card mb-2">
+      <div class="flex" style="justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleTrainerOutline('${enrollment.id}')">
+        <div><strong style="font-size:15px;">${trainee.name}</strong><div class="small mt-1">${escHtml(path.name)}</div></div>
+        <div class="flex gap-2" style="align-items:center;">
+          <span class="small">${doneTasks}/${totalTasks} complete</span>
+          <span class="chev" style="display:inline-block;transition:transform .15s;transform:rotate(${expanded?'0':'-90'}deg);">▾</span>
+        </div>
+      </div>
+      <div class="progress-track mt-2"><div class="progress-fill" style="width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;"></div></div>
+    </div>
+    ${expanded? path.weeks.map(w=>{
+      const weekStart = new Date(startDate); weekStart.setDate(weekStart.getDate() + (w.weekNumber-1)*7);
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+      const weekDone = w.tasks.length && w.tasks.every(t=>taskIsDone(personId,t));
+      return `<div class="ob-section">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <strong>Week ${w.weekNumber}${w.title?': '+escHtml(w.title):''}</strong>
+          <span class="small" style="color:var(--slate-light);">${weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${weekEnd.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${weekDone?'<span class=\"pill jade\" style=\"margin-left:6px;\">Complete</span>':''}</span>
+        </div>
+        ${w.description?`<div class="small mt-1" style="margin-bottom:8px;">${escHtml(w.description)}</div>`:''}
+        ${w.tasks.length? w.tasks.map(t=>renderTaskRow(personId,t,false)).join('') : `<div class="empty-inline">Nothing assigned this week.</div>`}
+      </div>`;
+    }).join('') : ''}
+  `;
+}
+let trainerOutlineExpanded = {};
+function toggleTrainerOutline(enrollmentId){
+  const currentlyExpanded = trainerOutlineExpanded[enrollmentId]!==false;
+  trainerOutlineExpanded[enrollmentId] = !currentlyExpanded;
+  render();
 }
 let trainingPathEnrollmentsExpanded = {};
 function toggleTrainingPathEnrollmentsView(pathId){
@@ -3251,6 +3300,11 @@ function openEnrollInPathModal(pathId){
           <select id="m-enroll-person">${available.map(p=>`<option value="${p.id}">${p.name}</option>`).join('') || '<option value="">Everyone is already enrolled</option>'}</select>
           <label class="mt-2">Start date <span class="small" style="font-weight:400;">(week 1 counts from here)</span></label>
           <input type="date" id="m-enroll-startdate" value="${new Date().toISOString().slice(0,10)}">
+          <label class="mt-2">Trainer <span class="small" style="font-weight:400;">(optional — whoever's directly mentoring them through this)</span></label>
+          <select id="m-enroll-trainer">
+            <option value="">— no trainer assigned —</option>
+            ${state.people.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+          </select>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="confirmEnrollInPath('${pathId}',this)">Enroll</button></div>
       </div>
@@ -3260,10 +3314,34 @@ function confirmEnrollInPath(pathId, el){
   if(!isAdminWorkMode()){ toast('Switch to Admin mode to do this'); return; }
   const personId = document.getElementById('m-enroll-person').value;
   const startDate = document.getElementById('m-enroll-startdate').value;
+  const trainerId = document.getElementById('m-enroll-trainer').value || null;
   if(!personId){ toast('Pick a person first'); return; }
   if(state.trainingPathEnrollments.find(e=>e.personId===personId && e.pathId===pathId)){ toast('Already enrolled'); return; }
-  state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId, pathId, startDate: startDate || new Date().toISOString().slice(0,10)});
+  state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId, pathId, startDate: startDate || new Date().toISOString().slice(0,10), trainerId});
   saveState(); closeModal(el); toast('Enrolled'); render();
+}
+function openChangeTrainerModal(enrollmentId){
+  if(!isAdminWorkMode()){ toast('Switch to Admin mode to do this'); return; }
+  const enr = byId(state.trainingPathEnrollments, enrollmentId);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Set Trainer</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <select id="m-change-trainer">
+            <option value="">— no trainer assigned —</option>
+            ${state.people.filter(p=>p.id!==enr.personId).map(p=>`<option value="${p.id}" ${enr.trainerId===p.id?'selected':''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveChangeTrainer('${enrollmentId}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+function saveChangeTrainer(enrollmentId, el){
+  if(!isAdminWorkMode()){ toast('Switch to Admin mode to do this'); return; }
+  const enr = byId(state.trainingPathEnrollments, enrollmentId);
+  enr.trainerId = document.getElementById('m-change-trainer').value || null;
+  saveState(); closeModal(el); toast('Saved'); render();
 }
 function unenrollFromTrainingPath(enrollmentId){
   if(!isAdminWorkMode()){ toast('Switch to Admin mode to do this'); return; }
