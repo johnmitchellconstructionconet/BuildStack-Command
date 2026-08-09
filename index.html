@@ -5679,16 +5679,20 @@ function assetSubtitle(a){
 }
 function renderCompanyAssets(){
   const gate = featureGate('companyAssets','Company Equipment'); if(gate) return gate;
+  const restricted = !isAdminWorkMode();
   const cat = currentParams.cat || 'all';
-  const view = currentParams.view || 'items';
-  const assets = state.companyAssets.filter(a=>a.status!=='retired' && (cat==='all' || a.category===cat));
-  const overdue = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
-  const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
+  const view = restricted ? 'items' : (currentParams.view || 'items');
+  const myId = currentUser().id;
+  const assets = restricted
+    ? state.companyAssets.filter(a=>a.status!=='retired' && a.assignedTo===myId)
+    : state.companyAssets.filter(a=>a.status!=='retired' && (cat==='all' || a.category===cat));
+  const overdue = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a) && (!restricted || a.assignedTo===myId));
+  const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length && (!restricted || a.assignedTo===myId));
   const maintainableAssets = state.companyAssets.filter(a=>a.status!=='retired' && MAINTAINABLE_CATEGORIES.includes(a.category));
   return `
     <div class="page-head">
-      <div><div class="page-eyebrow">Organization</div><div class="page-title">Company Equipment</div><div class="page-desc">Tools, tech, vehicles, and equipment the company owns — who has it, where it lives when no one does, and what needs upkeep.</div></div>
-      ${canEdit() && view==='items'?`<button class="btn bronze" onclick="openAssetModal(null,'${cat}')">+ Add Equipment</button>`:''}
+      <div><div class="page-eyebrow">Organization</div><div class="page-title">Company Equipment</div><div class="page-desc">${restricted?'What\u2019s currently checked out to you.':'Tools, tech, vehicles, and equipment the company owns — who has it, where it lives when no one does, and what needs upkeep.'}</div></div>
+      ${isAdminWorkMode() && view==='items'?`<button class="btn bronze" onclick="openAssetModal(null,'${cat}')">+ Add Equipment</button>`:''}
     </div>
     ${overdue.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;">
       <strong>⚠ ${overdue.length} item${overdue.length!==1?'s':''} due for maintenance:</strong>
@@ -5698,10 +5702,10 @@ function renderCompanyAssets(){
       <strong>📋 ${complianceIssues.length} item${complianceIssues.length!==1?'s':''} with insurance or registration expiring:</strong>
       ${complianceIssues.map(a=>`<span class="pill amber" style="cursor:pointer;margin-left:6px;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
     </div>`:''}
-    <div class="flex gap-2 mt-2">
+    ${!restricted?`<div class="flex gap-2 mt-2">
       <span class="btn ${view==='items'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'${cat}'})">Equipment List</span>
       <span class="btn ${view==='maintenance'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'maintenance'})">Maintenance Overview</span>
-    </div>
+    </div>`:''}
     ${view==='maintenance' ? `
     <div class="tbl-card mt-2"><table>
       <tr><th>Item</th><th>Checked out to</th><th>Schedule</th><th>Last service</th><th>Currently due</th><th>Status</th></tr>
@@ -5722,14 +5726,14 @@ function renderCompanyAssets(){
       }).join('') : `<tr><td colspan="6"><div class="empty-inline">No vehicles or equipment with maintenance tracking yet — mark an item as Vehicle or Equipment category to track its schedule here.</div></td></tr>`}
     </table></div>
     ` : `
-    <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+    ${!restricted?`<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
       <span class="btn ${cat==='all'?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'all'})">All (${state.companyAssets.filter(a=>a.status!=='retired').length})</span>
       ${ASSET_CATEGORIES.map(c=>{
         const n = state.companyAssets.filter(a=>a.status!=='retired' && a.category===c).length;
         return `<span class="btn ${cat===c?'bronze':'secondary'} sm" onclick="navigate('companyAssets',{view:'items',cat:'${c}'})">${c} (${n})</span>`;
       }).join('')}
-    </div>
-    ${!assets.length? `<div class="empty mt-2"><h3>No equipment here yet</h3><p>Add the first item — a phone, a truck, a compressor, anything the company owns and hands out.</p></div>` : `
+    </div>`:''}
+    ${!assets.length? `<div class="empty mt-2"><h3>${restricted?'Nothing checked out to you right now':'No equipment here yet'}</h3><p>${restricted?'When something\u2019s assigned to you, it\u2019ll show up here.':'Add the first item — a phone, a truck, a compressor, anything the company owns and hands out.'}</p></div>` : `
     <div class="grid cols-3 mt-2">
       ${assets.map(a=>{
         const due = assetMaintenanceDue(a);
@@ -5757,6 +5761,7 @@ function generateAssetTag(){
 }
 function openAssetModal(assetId, defaultCat){
   if(!canEdit()){ toast('Admins only'); return; }
+  if(!assetId && !isAdminWorkMode()){ toast('Switch to Admin mode to add equipment'); return; }
   const a = assetId ? byId(state.companyAssets, assetId) : null;
   const cat = a?.category || (ASSET_CATEGORIES.includes(defaultCat) ? defaultCat : 'Tool');
   const autoTag = a ? a.assetTag : generateAssetTag();
