@@ -742,6 +742,8 @@ function seedData(){
     personFiles: [],
     externalTools: [],
     calculators: [],
+    trainingPaths: [],
+    trainingPathEnrollments: [],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -949,6 +951,8 @@ function migrateState(parsed){
       }
       if(!parsed.externalTools) parsed.externalTools = [];
       if(!parsed.calculators) parsed.calculators = [];
+      if(!parsed.trainingPaths) parsed.trainingPaths = [];
+      if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
       parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
@@ -3187,6 +3191,182 @@ function submitTrainingSignoff(trainingId, personId, el){
   state.trainingCompletions.push({id:'tc'+Date.now(), trainingId, personId, completedDate:new Date().toISOString().slice(0,10), signoffName:name});
   saveState(); closeModal(el); toast('Marked complete'); render();
 }
+/* ================= TRAINING PATHS ================= */
+/* Role-specific, week-paced training — deliberately separate from Onboarding Paths, which stay
+   a universal, role-agnostic checklist. A training path is "the first 12 weeks of being a
+   Project Manager," not "how everyone gets set up on day one." Reuses taskIsDone/renderTaskRow
+   so completion tracking is identical to everywhere else tasks show up in the app. */
+function renderTrainingPathsTab(){
+  if(isAdminWorkMode()){
+    return `
+      <div class="flex" style="justify-content:flex-end;margin-bottom:14px;">
+        <button class="btn bronze sm" onclick="openTrainingPathModal()">+ New Training Path</button>
+      </div>
+      ${!state.trainingPaths.length? `<div class="empty"><h3>No training paths yet</h3><p>Build a week-by-week plan for a specific role — the first 90 days of being a Project Manager, a Designer, anything with a real ramp-up.</p></div>` : `
+      <div class="grid cols-2">
+        ${state.trainingPaths.map(tp=>{
+          const role = byId(state.roles, tp.roleId);
+          const enrolledCount = state.trainingPathEnrollments.filter(e=>e.pathId===tp.id).length;
+          return `<div class="card">
+            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+              <div><strong>${escHtml(tp.name)}</strong><div class="small mt-1">${role?role.title:'No role linked'}</div></div>
+              <div class="flex gap-1"><span class="miniBtn" onclick="openTrainingPathModal('${tp.id}')" title="Edit">✎</span><span class="miniBtn" onclick="deleteTrainingPath('${tp.id}')" title="Delete" style="color:var(--rust);">✕</span></div>
+            </div>
+            <div class="small mt-2" style="color:var(--slate-light);">${tp.weeks.length} week${tp.weeks.length!==1?'s':''} · ${enrolledCount} enrolled</div>
+          </div>`;
+        }).join('')}
+      </div>`}
+    `;
+  }
+  const myEnrollments = state.trainingPathEnrollments.filter(e=>e.personId===currentUser().id);
+  if(!myEnrollments.length) return `<div class="empty"><h3>No training path assigned</h3><p>If your role has a structured training plan, it\u2019ll show up here automatically once you\u2019re assigned that role.</p></div>`;
+  return myEnrollments.map(enr=>renderTrainingPathProgress(enr)).join('');
+}
+function renderTrainingPathProgress(enrollment){
+  const path = byId(state.trainingPaths, enrollment.pathId);
+  if(!path) return '';
+  const personId = enrollment.personId;
+  const startDate = new Date(enrollment.startDate+'T00:00:00');
+  const totalTasks = path.weeks.reduce((n,w)=>n+w.tasks.length,0);
+  const doneTasks = path.weeks.reduce((n,w)=>n+w.tasks.filter(t=>taskIsDone(personId,t)).length,0);
+  return `
+    <div class="card mb-2">
+      <div class="flex" style="justify-content:space-between;align-items:center;">
+        <strong style="font-size:15px;">${escHtml(path.name)}</strong>
+        <span class="small">${doneTasks}/${totalTasks} complete</span>
+      </div>
+      <div class="progress-track mt-2"><div class="progress-fill" style="width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;"></div></div>
+    </div>
+    ${path.weeks.map(w=>{
+      const weekStart = new Date(startDate); weekStart.setDate(weekStart.getDate() + (w.weekNumber-1)*7);
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
+      const weekDone = w.tasks.length && w.tasks.every(t=>taskIsDone(personId,t));
+      return `<div class="ob-section">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <strong>Week ${w.weekNumber}${w.title?': '+escHtml(w.title):''}</strong>
+          <span class="small" style="color:var(--slate-light);">${weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${weekEnd.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${weekDone?'<span class=\"pill jade\" style=\"margin-left:6px;\">Complete</span>':''}</span>
+        </div>
+        ${w.tasks.length? w.tasks.map(t=>renderTaskRow(personId,t,false)).join('') : `<div class="empty-inline">Nothing assigned this week.</div>`}
+      </div>`;
+    }).join('')}
+  `;
+}
+function openTrainingPathModal(pathId){
+  if(!isAdminWorkMode()){ toast('Switch to Admin mode to edit this'); return; }
+  const tp = pathId ? byId(state.trainingPaths, pathId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:720px;">
+        <div class="modal-head"><strong>${tp?'Edit Training Path':'New Training Path'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Name</label><input type="text" id="m-tp-name" value="${escAttr(tp?.name)}" placeholder="e.g. First 12 Weeks — Project Manager">
+          <label>Role this is for</label>
+          <select id="m-tp-role"><option value="">— pick a role —</option>${state.roles.map(r=>`<option value="${r.id}" ${tp?.roleId===r.id?'selected':''}>${r.title}</option>`).join('')}</select>
+          <label class="mt-2">Weeks</label>
+          <div id="m-tp-weeks">${(tp?.weeks||[]).map(w=>trainingPathWeekRow(w)).join('')}</div>
+          <button class="btn secondary sm mt-2" onclick="addTrainingPathWeekRow()">+ Add Week</button>
+        </div>
+        <div class="modal-foot">
+          ${tp?`<button class="btn danger" style="margin-right:auto;" onclick="deleteTrainingPath('${tp.id}');closeModal(this)">Delete</button>`:''}
+          <button class="btn secondary" onclick="closeModal(this)">Cancel</button>
+          <button class="btn bronze" onclick="saveTrainingPath('${pathId||''}',this)">Save</button>
+        </div>
+      </div>
+    </div>`);
+}
+function trainingPathWeekRow(w){
+  const weekId = w?.id || 'wk'+Date.now()+Math.random().toString(36).slice(2);
+  return `<div class="card mt-2" data-week-id="${weekId}" style="padding:14px 16px;">
+    <div class="flex gap-2">
+      <span class="small" style="width:auto;font-weight:600;white-space:nowrap;">Week</span>
+      <input type="number" class="m-tp-week-number" value="${w?.weekNumber||''}" style="width:70px;" min="1">
+      <input type="text" class="m-tp-week-title" value="${escAttr(w?.title)}" placeholder="Title (optional) — e.g. Getting Oriented" style="flex:1;">
+      <span class="miniBtn" onclick="this.closest('[data-week-id]').remove()" title="Remove week">✕</span>
+    </div>
+    <div class="m-tp-week-tasks mt-2">${(w?.tasks||[]).map(t=>trainingPathTaskRow(t)).join('')}</div>
+    <button class="btn secondary sm mt-2" onclick="addTrainingPathTaskRow(this)">+ Add Item</button>
+  </div>`;
+}
+function trainingPathTaskRow(t){
+  const taskId = t?.id || 'tpt'+Date.now()+Math.random().toString(36).slice(2);
+  const type = t?.type || 'custom';
+  return `<div class="flex gap-2 mt-2" data-task-id="${taskId}" style="align-items:center;">
+    <select class="m-tpt-type" style="max-width:130px;" onchange="updateTrainingPathTaskRow(this)">
+      <option value="training" ${type==='training'?'selected':''}>Training</option>
+      <option value="topic" ${type==='topic'?'selected':''}>SOP / Process</option>
+      <option value="policy" ${type==='policy'?'selected':''}>Policy</option>
+      <option value="custom" ${type==='custom'?'selected':''}>Custom item</option>
+    </select>
+    <div class="m-tpt-ref-wrap" style="flex:1;">${trainingPathTaskRefField(type, t)}</div>
+    <span class="miniBtn" onclick="this.closest('[data-task-id]').remove()" title="Remove">✕</span>
+  </div>`;
+}
+function trainingPathTaskRefField(type, t){
+  if(type==='training') return `<select class="m-tpt-ref">${state.trainings.map(x=>`<option value="${x.id}" ${t?.refId===x.id?'selected':''}>${escHtml(x.title)}</option>`).join('') || '<option value="">No trainings yet</option>'}</select>`;
+  if(type==='topic') return `<select class="m-tpt-ref">${state.topics.map(x=>`<option value="${x.id}" ${t?.refId===x.id?'selected':''}>${escHtml(x.name)}</option>`).join('') || '<option value="">No SOPs yet</option>'}</select>`;
+  if(type==='policy') return `<select class="m-tpt-ref">${state.policies.map(x=>`<option value="${x.id}" ${t?.refId===x.id?'selected':''}>${escHtml(x.title)}</option>`).join('') || '<option value="">No policies yet</option>'}</select>`;
+  return `<input type="text" class="m-tpt-ref" value="${escAttr(t?.title)}" placeholder="What should they do this week?">`;
+}
+function updateTrainingPathTaskRow(selectEl){
+  const wrap = selectEl.closest('[data-task-id]').querySelector('.m-tpt-ref-wrap');
+  wrap.innerHTML = trainingPathTaskRefField(selectEl.value, null);
+}
+function addTrainingPathWeekRow(){
+  const nextNum = document.querySelectorAll('#m-tp-weeks [data-week-id]').length + 1;
+  document.getElementById('m-tp-weeks').insertAdjacentHTML('beforeend', trainingPathWeekRow({weekNumber:nextNum, tasks:[]}));
+}
+function addTrainingPathTaskRow(btn){
+  btn.previousElementSibling.insertAdjacentHTML('beforeend', trainingPathTaskRow(null));
+}
+function saveTrainingPath(pathId, el){
+  if(!isAdminWorkMode()){ toast('Switch to Admin mode to edit this'); return; }
+  const name = document.getElementById('m-tp-name').value.trim();
+  const roleId = document.getElementById('m-tp-role').value || null;
+  if(!name){ toast('Name is required'); return; }
+  const weeks = Array.from(document.querySelectorAll('#m-tp-weeks [data-week-id]')).map(weekEl=>{
+    const tasks = Array.from(weekEl.querySelectorAll('[data-task-id]')).map(taskEl=>{
+      const type = taskEl.querySelector('.m-tpt-type').value;
+      const refInput = taskEl.querySelector('.m-tpt-ref');
+      if(type==='custom'){
+        const text = refInput.value.trim();
+        if(!text) return null;
+        return { id: taskEl.dataset.taskId, type:'custom', refId:null, title:text };
+      }
+      const refId = refInput.value;
+      if(!refId) return null;
+      const title = type==='training' ? byId(state.trainings,refId)?.title : type==='topic' ? byId(state.topics,refId)?.name : byId(state.policies,refId)?.title;
+      return { id: taskEl.dataset.taskId, type, refId, title: title||'' };
+    }).filter(Boolean);
+    return {
+      id: weekEl.dataset.weekId,
+      weekNumber: parseInt(weekEl.querySelector('.m-tp-week-number').value) || 1,
+      title: weekEl.querySelector('.m-tp-week-title').value.trim(),
+      tasks
+    };
+  }).sort((a,b)=>a.weekNumber-b.weekNumber);
+  const data = { name, roleId, weeks };
+  if(pathId){ Object.assign(byId(state.trainingPaths, pathId), data); }
+  else {
+    data.id = 'tp'+Date.now();
+    state.trainingPaths.push(data);
+    if(roleId){
+      state.people.filter(p=>personPositions(p.id).some(s=>s.roleId===roleId) || p.roleId===roleId).forEach(p=>{
+        if(!state.trainingPathEnrollments.find(e=>e.personId===p.id && e.pathId===data.id)){
+          state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId:p.id, pathId:data.id, startDate:p.startDate||new Date().toISOString().slice(0,10)});
+        }
+      });
+    }
+  }
+  saveState(); closeModal(el); toast('Saved'); render();
+}
+function deleteTrainingPath(pathId){
+  if(!isAdminWorkMode()){ toast('Switch to Admin mode to edit this'); return; }
+  confirmAction('Delete this training path? Anyone currently enrolled will lose access to it. This cannot be undone.', ()=>{
+    state.trainingPaths = state.trainingPaths.filter(tp=>tp.id!==pathId);
+    state.trainingPathEnrollments = state.trainingPathEnrollments.filter(e=>e.pathId!==pathId);
+    saveState(); toast('Deleted'); render();
+  });
+}
 function renderManageTrainings(){
   const filterRole = currentParams.role || 'all';
   const matchesFilters = t => filterRole==='all' || (t.tags||[]).includes(byId(state.roles,filterRole)?.title);
@@ -3348,13 +3528,18 @@ function removeTrainingAssignment(assignmentId){
     saveState(); toast('Removed'); render();
   });
 }
+let trainingPageTab = 'trainings';
 function renderMyTraining(){
   const u = currentUser();
   const mine = myAssignments(u.id);
   const myTrainings = trainingsAssignedTo(u.id);
   return `
     <div class="page-head"><div><div class="page-eyebrow">Growth</div><div class="page-title">Training</div><div class="page-desc">${isAdminWorkMode()?'Build and assign trainings.':'Everything assigned to you.'}</div></div></div>
-    ${isAdminWorkMode() ? renderManageTrainings() : `
+    <div class="tabs">
+      <div class="tab ${trainingPageTab==='trainings'?'active':''}" onclick="trainingPageTab='trainings';render();">Trainings</div>
+      <div class="tab ${trainingPageTab==='paths'?'active':''}" onclick="trainingPageTab='paths';render();">Training Paths</div>
+    </div>
+    ${trainingPageTab==='paths'? renderTrainingPathsTab() : (isAdminWorkMode() ? renderManageTrainings() : `
       ${myTrainings.length? `<div class="section-title" style="margin-top:0;">Assigned Trainings</div>
       <div class="grid cols-2 mb-3">
         ${myTrainings.map(({training:t})=>renderTrainingCard(t, u.id)).join('')}
@@ -3373,7 +3558,7 @@ function renderMyTraining(){
           </tr>`).join('')}
       </table></div>` : ''}
       ${!myTrainings.length && !mine.length? `<div class="empty"><h3>Nothing assigned yet</h3><p>Check back once something's been assigned to you or your role.</p></div>`:''}
-    `}
+    `)}
   `;
 }
 function openAssignment(id){
@@ -4942,6 +5127,10 @@ function syncRoleAssignments(personId){
       const exists = state.assignments.find(a=>a.personId===personId && a.targetType==='policy' && a.targetId===policyId);
       if(!exists) state.assignments.push({id:'a'+Date.now()+Math.random().toString(36).slice(2), personId, targetType:'policy', targetId:policyId, assignedDate:today, dueDate:dueStr, status:'not_started'});
     });
+    const matchingPath = state.trainingPaths.find(tp=>tp.roleId===roleId);
+    if(matchingPath && !state.trainingPathEnrollments.find(e=>e.personId===personId && e.pathId===matchingPath.id)){
+      state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId, pathId:matchingPath.id, startDate: p.startDate || today});
+    }
   });
   saveState();
 }
@@ -8881,6 +9070,9 @@ function taskIsDone(personId, task){
   }
   if(task.type==='policy'){
     return !!state.acknowledgments.find(a=>a.personId===personId && a.policyId===task.refId);
+  }
+  if(task.type==='training'){
+    return trainingIsDone(personId, task.refId);
   }
   if(task.type==='bio'){
     return !!byId(state.people, personId)?.bio;
