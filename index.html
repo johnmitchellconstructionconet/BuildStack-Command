@@ -2993,7 +2993,7 @@ function renderEmployeeDashboard(){
     ${(()=>{
       const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===u.id);
       if(!trainingFor.length) return '';
-      return `<div class="card mt-2" style="background:var(--bronze-tint);cursor:pointer;" onclick="navigate('mytraining',{});trainingPageTab='paths';render();">
+      return `<div class="card mt-2" style="background:var(--bronze-tint);cursor:pointer;" onclick="trainingPageTab='paths';navigate('mytraining',{});">
         <strong>🎓 You're training ${trainingFor.length===1?byId(state.people,trainingFor[0].personId)?.name:trainingFor.length+' people'}</strong>${trainingFor.length>1?` — ${trainingFor.map(e=>byId(state.people,e.personId)?.name).filter(Boolean).join(', ')}`:''}
       </div>`;
     })()}
@@ -3245,9 +3245,34 @@ function renderTrainingPathsTab(){
   const myEnrollments = state.trainingPathEnrollments.filter(e=>e.personId===currentUser().id);
   const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===currentUser().id);
   if(!myEnrollments.length && !trainingFor.length) return `<div class="empty"><h3>No training path assigned</h3><p>If your role has a structured training plan, it\u2019ll show up here automatically once you\u2019re assigned that role. If you\u2019re training someone else, it\u2019ll show up here once an admin assigns you to them.</p></div>`;
+  const viewingEnrollmentId = currentParams.viewTrainee;
+  if(viewingEnrollmentId){
+    const enr = trainingFor.find(e=>e.id===viewingEnrollmentId);
+    if(!enr) return `<div class="empty"><h3>Not found</h3></div>`;
+    return `
+      <a onclick="trainingPageTab='paths';navigate('mytraining',{});" style="cursor:pointer;text-decoration:underline;display:inline-block;margin-bottom:14px;">← Back to your trainees</a>
+      ${renderTrainerOutline(enr)}
+    `;
+  }
   return `
     ${myEnrollments.length? `<div class="section-title" style="margin-top:0;">Your Training Path</div>${myEnrollments.map(enr=>renderTrainingPathProgress(enr)).join('')}`:''}
-    ${trainingFor.length? `<div class="section-title">People You're Training</div>${trainingFor.map(enr=>renderTrainerOutline(enr)).join('')}`:''}
+    ${trainingFor.length? `<div class="section-title">People You're Training</div>
+    <div class="tbl-card"><table>
+      <tr><th>Person</th><th>Path</th><th>Progress</th><th></th></tr>
+      ${trainingFor.map(enr=>{
+        const path = byId(state.trainingPaths, enr.pathId);
+        const trainee = byId(state.people, enr.personId);
+        if(!path || !trainee) return '';
+        const totalTasks = path.weeks.reduce((n,w)=>n+w.tasks.length,0);
+        const doneTasks = path.weeks.reduce((n,w)=>n+w.tasks.filter(t=>taskIsDone(enr.personId,t)).length,0);
+        return `<tr class="row-click" onclick="trainingPageTab='paths';navigate('mytraining',{viewTrainee:'${enr.id}'});">
+          <td><strong>${trainee.name}</strong></td>
+          <td>${escHtml(path.name)}</td>
+          <td>${doneTasks}/${totalTasks} complete</td>
+          <td><span class="btn secondary sm">View →</span></td>
+        </tr>`;
+      }).join('')}
+    </table></div>`:''}
   `;
 }
 function renderTrainerOutline(enrollment){
@@ -3258,19 +3283,15 @@ function renderTrainerOutline(enrollment){
   const startDate = new Date(enrollment.startDate+'T00:00:00');
   const totalTasks = path.weeks.reduce((n,w)=>n+w.tasks.length,0);
   const doneTasks = path.weeks.reduce((n,w)=>n+w.tasks.filter(t=>taskIsDone(personId,t)).length,0);
-  const expanded = trainerOutlineExpanded[enrollment.id]!==false;
   return `
     <div class="card mb-2">
-      <div class="flex" style="justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleTrainerOutline('${enrollment.id}')">
+      <div class="flex" style="justify-content:space-between;align-items:center;">
         <div><strong style="font-size:15px;">${trainee.name}</strong><div class="small mt-1">${escHtml(path.name)}</div></div>
-        <div class="flex gap-2" style="align-items:center;">
-          <span class="small">${doneTasks}/${totalTasks} complete</span>
-          <span class="chev" style="display:inline-block;transition:transform .15s;transform:rotate(${expanded?'0':'-90'}deg);">▾</span>
-        </div>
+        <span class="small">${doneTasks}/${totalTasks} complete</span>
       </div>
       <div class="progress-track mt-2"><div class="progress-fill" style="width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;"></div></div>
     </div>
-    ${expanded? path.weeks.map(w=>{
+    ${path.weeks.map(w=>{
       const weekStart = new Date(startDate); weekStart.setDate(weekStart.getDate() + (w.weekNumber-1)*7);
       const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate()+6);
       const weekDone = w.tasks.length && w.tasks.every(t=>taskIsDone(personId,t));
@@ -3282,14 +3303,8 @@ function renderTrainerOutline(enrollment){
         ${w.description?`<div class="small mt-1" style="margin-bottom:8px;">${escHtml(w.description)}</div>`:''}
         ${w.tasks.length? w.tasks.map(t=>renderTaskRow(personId,t,false)).join('') : `<div class="empty-inline">Nothing assigned this week.</div>`}
       </div>`;
-    }).join('') : ''}
+    }).join('')}
   `;
-}
-let trainerOutlineExpanded = {};
-function toggleTrainerOutline(enrollmentId){
-  const currentlyExpanded = trainerOutlineExpanded[enrollmentId]!==false;
-  trainerOutlineExpanded[enrollmentId] = !currentlyExpanded;
-  render();
 }
 let trainingPathEnrollmentsExpanded = {};
 function toggleTrainingPathEnrollmentsView(pathId){
