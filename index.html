@@ -236,6 +236,8 @@ tr:last-child td{border-bottom:none;}
 .ob-section{border:1px solid var(--line-soft);border-radius:var(--radius-m);padding:20px 22px;margin-bottom:14px;background:var(--panel);}
 .ob-section.locked{opacity:.55;}
 .ob-task{display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid var(--line-soft);}
+.ob-drag-handle{cursor:grab;color:var(--slate-light);font-size:13px;flex-shrink:0;user-select:none;}
+.ob-drag-handle:active{cursor:grabbing;}
 .ob-task:last-child{border-bottom:none;}
 .ob-task-check{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--line);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
 .ob-task-check.done{background:var(--jade);border-color:var(--jade);color:#fff;font-size:11px;}
@@ -2988,6 +2990,13 @@ function renderEmployeeDashboard(){
       </div>`; })()}
     </div>
     ${renderExternalToolsSection()}
+    ${(()=>{
+      const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===u.id);
+      if(!trainingFor.length) return '';
+      return `<div class="card mt-2" style="background:var(--bronze-tint);cursor:pointer;" onclick="navigate('mytraining',{});trainingPageTab='paths';render();">
+        <strong>🎓 You're training ${trainingFor.length===1?byId(state.people,trainingFor[0].personId)?.name:trainingFor.length+' people'}</strong>${trainingFor.length>1?` — ${trainingFor.map(e=>byId(state.people,e.personId)?.name).filter(Boolean).join(', ')}`:''}
+      </div>`;
+    })()}
     ${pendingOnboarding.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('onboarding')">
       <strong>📋 ${pendingOnboarding.length} onboarding task${pendingOnboarding.length!==1?'s':''} waiting on you</strong>${pendingForms.length?` — including ${pendingForms.length===1?'a form':pendingForms.length+' forms'} to fill out (${pendingForms.map(t=>t.title).join(', ')})`:''}
     </div>`:''}
@@ -3289,6 +3298,7 @@ function toggleTrainingPathEnrollmentsView(pathId){
 }
 function openEnrollInPathModal(pathId){
   if(!isAdminWorkMode()){ toast('Switch to Admin mode to do this'); return; }
+  const path = byId(state.trainingPaths, pathId);
   const enrolledIds = new Set(state.trainingPathEnrollments.filter(e=>e.pathId===pathId).map(e=>e.personId));
   const available = state.people.filter(p=>!enrolledIds.has(p.id));
   openModal(`
@@ -3303,7 +3313,7 @@ function openEnrollInPathModal(pathId){
           <label class="mt-2">Trainer <span class="small" style="font-weight:400;">(optional — whoever's directly mentoring them through this)</span></label>
           <select id="m-enroll-trainer">
             <option value="">— no trainer assigned —</option>
-            ${state.people.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+            ${state.people.map(p=>`<option value="${p.id}" ${path?.defaultTrainerId===p.id?'selected':''}>${p.name}</option>`).join('')}
           </select>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="confirmEnrollInPath('${pathId}',this)">Enroll</button></div>
@@ -3391,6 +3401,11 @@ function openTrainingPathModal(pathId){
           <label>Name</label><input type="text" id="m-tp-name" value="${escAttr(tp?.name)}" placeholder="e.g. First 12 Weeks — Project Manager">
           <label>Role this is for</label>
           <select id="m-tp-role"><option value="">— pick a role —</option>${state.roles.map(r=>`<option value="${r.id}" ${tp?.roleId===r.id?'selected':''}>${r.title}</option>`).join('')}</select>
+          <label class="mt-2">Default trainer <span class="small" style="font-weight:400;">(optional — whoever usually runs this training; applies automatically to anyone enrolled, but can be changed per person)</span></label>
+          <select id="m-tp-default-trainer">
+            <option value="">— no default trainer —</option>
+            ${state.people.map(p=>`<option value="${p.id}" ${tp?.defaultTrainerId===p.id?'selected':''}>${p.name}</option>`).join('')}
+          </select>
           <label class="mt-2">Weeks</label>
           <div id="m-tp-weeks">${(tp?.weeks||[]).map(w=>trainingPathWeekRow(w)).join('')}</div>
           <button class="btn secondary sm mt-2" onclick="addTrainingPathWeekRow()">+ Add Week</button>
@@ -3475,7 +3490,7 @@ function saveTrainingPath(pathId, el){
       tasks
     };
   }).sort((a,b)=>a.weekNumber-b.weekNumber);
-  const data = { name, roleId, weeks };
+  const data = { name, roleId, defaultTrainerId: document.getElementById('m-tp-default-trainer').value || null, weeks };
   if(pathId){ Object.assign(byId(state.trainingPaths, pathId), data); }
   else {
     data.id = 'tp'+Date.now();
@@ -3483,7 +3498,7 @@ function saveTrainingPath(pathId, el){
     if(roleId){
       state.people.filter(p=>personPositions(p.id).some(s=>s.roleId===roleId) || p.roleId===roleId).forEach(p=>{
         if(!state.trainingPathEnrollments.find(e=>e.personId===p.id && e.pathId===data.id)){
-          state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId:p.id, pathId:data.id, startDate:p.startDate||new Date().toISOString().slice(0,10)});
+          state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId:p.id, pathId:data.id, startDate:p.startDate||new Date().toISOString().slice(0,10), trainerId:data.defaultTrainerId});
         }
       });
     }
@@ -5260,7 +5275,7 @@ function syncRoleAssignments(personId){
     });
     const matchingPath = state.trainingPaths.find(tp=>tp.roleId===roleId);
     if(matchingPath && !state.trainingPathEnrollments.find(e=>e.personId===personId && e.pathId===matchingPath.id)){
-      state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId, pathId:matchingPath.id, startDate: p.startDate || today});
+      state.trainingPathEnrollments.push({id:'tpe'+Date.now()+Math.random().toString(36).slice(2), personId, pathId:matchingPath.id, startDate: p.startDate || today, trainerId: matchingPath.defaultTrainerId||null});
     }
   });
   saveState();
@@ -9703,8 +9718,9 @@ function toggleObAddMenu(sectionId){
 function renderSectionEditor(pathId, section, idx, total){
   const menuOpen = obAddMenuOpenFor===section.id;
   return `
-    <div class="ob-section">
-      <div class="flex gap-2" style="align-items:center;margin-bottom:6px;">
+    <div class="ob-section" ondragover="event.preventDefault();" ondrop="onObSectionDrop(event,'${pathId}','${section.id}')">
+      <div class="flex gap-2" style="align-items:center;margin-bottom:6px;" draggable="true" ondragstart="onObSectionDragStart(event,'${pathId}','${section.id}')">
+        <span class="ob-drag-handle" title="Drag to reorder">⠿</span>
         <input type="text" value="${escAttr(section.title)}" onchange="updateSectionTitle('${pathId}','${section.id}',this.value)" style="margin:0;font-weight:700;font-size:15px;">
         <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',-1)" title="Move up">↑</span>
         <span class="miniBtn" onclick="moveSection('${pathId}','${section.id}',1)" title="Move down">↓</span>
@@ -9718,7 +9734,8 @@ function renderSectionEditor(pathId, section, idx, total){
       ${section.tasks.length? section.tasks.map(t=>{
         const meta = OB_TASK_TYPE_META[t.type] || {label:t.type, icon:'•', pill:'gray'};
         return `
-        <div class="ob-task">
+        <div class="ob-task" draggable="true" ondragstart="onObTaskDragStart(event,'${pathId}','${section.id}','${t.id}')" ondragover="event.preventDefault();event.stopPropagation();" ondrop="onObTaskDrop(event,'${pathId}','${section.id}','${t.id}')">
+          <span class="ob-drag-handle" title="Drag to reorder">⠿</span>
           <div style="flex:1;">
             <span class="pill ${meta.pill}">${meta.icon} ${meta.label}</span> <span style="font-weight:600;">${t.title}</span>${t.internal?` <span class="pill amber">Internal</span>`:''}
             ${t.description?`<div class="small mt-1" style="color:var(--slate-light);">${t.description}</div>`:''}
@@ -9771,6 +9788,41 @@ function moveSection(pathId, sectionId, dir){
   const j = i+dir;
   if(j<0||j>=path.sections.length) return;
   [path.sections[i],path.sections[j]] = [path.sections[j],path.sections[i]];
+  saveState(); render();
+}
+let obDragState = null;
+function onObSectionDragStart(e, pathId, sectionId){
+  obDragState = { type:'section', pathId, sectionId };
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onObSectionDrop(e, pathId, targetSectionId){
+  e.preventDefault();
+  if(!obDragState || obDragState.type!=='section' || obDragState.pathId!==pathId) return;
+  const path = byId(state.onboardingPaths, pathId);
+  const fromIdx = path.sections.findIndex(s=>s.id===obDragState.sectionId);
+  const toIdx = path.sections.findIndex(s=>s.id===targetSectionId);
+  obDragState = null;
+  if(fromIdx===-1 || toIdx===-1 || fromIdx===toIdx) return;
+  const [moved] = path.sections.splice(fromIdx,1);
+  path.sections.splice(toIdx,0,moved);
+  saveState(); render();
+}
+function onObTaskDragStart(e, pathId, sectionId, taskId){
+  e.stopPropagation();
+  obDragState = { type:'task', pathId, sectionId, taskId };
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onObTaskDrop(e, pathId, sectionId, targetTaskId){
+  e.preventDefault(); e.stopPropagation();
+  if(!obDragState || obDragState.type!=='task' || obDragState.sectionId!==sectionId){ obDragState = null; return; }
+  const path = byId(state.onboardingPaths, pathId);
+  const section = byId(path.sections, sectionId);
+  const fromIdx = section.tasks.findIndex(t=>t.id===obDragState.taskId);
+  const toIdx = section.tasks.findIndex(t=>t.id===targetTaskId);
+  obDragState = null;
+  if(fromIdx===-1 || toIdx===-1 || fromIdx===toIdx) return;
+  const [moved] = section.tasks.splice(fromIdx,1);
+  section.tasks.splice(toIdx,0,moved);
   saveState(); render();
 }
 function updateSectionTitle(pathId, sectionId, val){
