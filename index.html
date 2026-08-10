@@ -755,6 +755,7 @@ function seedData(){
     calculators: [],
     trainingPaths: [],
     trainingPathEnrollments: [],
+    vehicleWeeklyLogs: [],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -972,6 +973,7 @@ function migrateState(parsed){
       if(!parsed.calculators) parsed.calculators = [];
       if(!parsed.trainingPaths) parsed.trainingPaths = [];
       if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
+      if(!parsed.vehicleWeeklyLogs) parsed.vehicleWeeklyLogs = [];
       parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
@@ -1381,6 +1383,7 @@ function openNotification(notifId){
   document.getElementById('notif-panel')?.remove();
   refreshNotifBadge();
   if(n.relatedType==='gearClaim' || n.relatedType==='signup' || n.relatedType==='timeOff' || n.relatedType==='formSubmission') navigate('approvals');
+  else if(n.relatedType==='asset' && n.relatedId) navigate('assetDetail',{id:n.relatedId});
 }
 function showLoginNotificationPopup(){
   if(!anyApprovalPermission(currentUser().id)) return;
@@ -4349,7 +4352,7 @@ function renderPolicies(){
   const filterCat = currentParams.cat || 'all';
   const filterRole = currentParams.role || 'all';
   const cats = [...new Set(state.policies.map(p=>p.category))];
-  const matchesFilters = p => (filterCat==='all'||p.category===filterCat) && (filterRole==='all'||(p.tags||[]).includes(byId(state.roles,filterRole)?.title));
+  const matchesFilters = p => (filterCat==='all'||p.category===filterCat) && (filterRole==='all'||p.appliesToAllRoles||(p.tags||[]).includes(byId(state.roles,filterRole)?.title));
   const filtersActive = filterCat!=='all' || filterRole!=='all';
   const visible = state.policies.filter(matchesFilters);
   return `
@@ -4388,7 +4391,7 @@ function renderPolicyDetail(){
     <div class="page-head"><div><div class="page-title">${p.title}</div><div class="small mt-1">Version ${p.version} · Effective ${fmtDate(p.effectiveDate)} · ${p.category}</div></div>
       ${canEdit()?`<div class="flex gap-2"><button class="btn secondary" onclick="openPolicyModal('${p.id}')">Edit</button><button class="btn secondary" onclick="deletePolicy('${p.id}')">Delete</button></div>`:''}
     </div>
-    <div class="card">${p.body}</div>
+    <div class="card doc-view">${p.body}</div>
     ${(p.attachments||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
       ${p.attachments.map(a=>((a.type||'').startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(a.name||''))
         ? `<img src="${escAttr(a.url)}" style="max-width:280px;max-height:280px;border-radius:8px;cursor:pointer;background:var(--line-soft);object-fit:contain;" onclick="window.open('${escJs(a.url)}','_blank')" title="${escAttr(a.name)} — click to view full size">`
@@ -4422,7 +4425,16 @@ function openPolicyModal(policyId){
             <div><label>Effective date</label><input type="date" id="m-pol-effective" value="${p?.effectiveDate||new Date().toISOString().slice(0,10)}"></div>
             <div><label>Status</label><select id="m-pol-status"><option value="Draft" ${p?.status==='Draft'?'selected':''}>Draft</option><option value="Published" ${!p||p.status==='Published'?'selected':''}>Published</option></select></div>
           </div>
-          <label>Policy text</label><textarea id="m-pol-body" style="min-height:160px;">${p?.body||''}</textarea>
+          <label>Policy text</label>
+          <div class="flex gap-1" style="border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;padding:6px 8px;background:var(--paper);">
+            <span class="btn secondary sm" onclick="polEd('bold')" title="Bold" style="font-weight:700;">B</span>
+            <span class="btn secondary sm" onclick="polEd('italic')" title="Italic" style="font-style:italic;">I</span>
+            <span class="btn secondary sm" onclick="polEd('insertUnorderedList')" title="Bullet list">• List</span>
+            <span class="btn secondary sm" onclick="polEd('insertOrderedList')" title="Numbered list">1. List</span>
+            <span class="btn secondary sm" onclick="polEd('formatBlock','H3')" title="Heading">H</span>
+          </div>
+          <div id="m-pol-body" contenteditable="true" class="editor-canvas" style="min-height:160px;border-radius:0 0 10px 10px;">${p?.body||''}</div>
+          <div class="small mt-1" style="color:var(--slate-light);">Paste directly from ChatGPT, Word, or Google Docs — bold, bullets, and headings carry over as-is.</div>
           ${p?`<div class="small mt-1">Editing the text without changing the version number won't require anyone to re-sign. Bump the version if this is a material change and you want people to re-acknowledge it.</div>`:''}
           <label class="mt-2">Attachments <span class="small" style="font-weight:400;">(PDFs, photos — anything that supports the policy text)</span></label>
           <div id="m-pol-existing-attachments">
@@ -4434,9 +4446,13 @@ function openPolicyModal(policyId){
           <input type="file" id="m-pol-newfiles" multiple accept=".pdf,image/*" onchange="accumulatePolicyFiles(this)">
           <div id="m-pol-pending-files" class="mt-1"></div>
           <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter policies by role)</span></label>
-          <div class="flex gap-2" style="flex-wrap:wrap;">
+          <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-pol-all-roles" style="width:auto;margin:0;" ${p?.appliesToAllRoles?'checked':''} onchange="document.querySelectorAll('.m-pol-role').forEach(cb=>{cb.checked=this.checked;cb.disabled=this.checked;});">
+            Applies to every role <span class="small" style="font-weight:400;">(including any role added later — no need to come back and update this)</span>
+          </label>
+          <div class="flex gap-2 mt-1" style="flex-wrap:wrap;">
             ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
-              <input type="checkbox" class="m-pol-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${(p?.tags||[]).includes(r.title)?'checked':''}> ${r.title}
+              <input type="checkbox" class="m-pol-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${p?.appliesToAllRoles?'checked disabled':''} ${(p?.tags||[]).includes(r.title)?'checked':''}> ${r.title}
             </label>`).join('') || `<div class="small">No roles set up yet.</div>`}
           </div>
         </div>
@@ -4461,6 +4477,10 @@ function removePendingPolicyFile(idx){
   pendingPolicyAttachments.splice(idx,1);
   renderPendingPolicyFiles();
 }
+function polEd(cmd, val){
+  document.getElementById('m-pol-body').focus();
+  document.execCommand(cmd, false, val);
+}
 async function savePolicyForm(policyId, el){
   if(!canEdit()){ toast('Admins only'); return; }
   const title = document.getElementById('m-pol-title').value.trim();
@@ -4483,8 +4503,9 @@ async function savePolicyForm(policyId, el){
     version: document.getElementById('m-pol-version').value.trim() || '1.0',
     effectiveDate: document.getElementById('m-pol-effective').value,
     status: document.getElementById('m-pol-status').value,
-    body: document.getElementById('m-pol-body').value.trim(),
+    body: document.getElementById('m-pol-body').innerHTML.trim(),
     attachments,
+    appliesToAllRoles: document.getElementById('m-pol-all-roles').checked,
     tags: Array.from(document.querySelectorAll('.m-pol-role:checked')).map(el=>el.value)
   };
   let policy;
@@ -6384,6 +6405,35 @@ function renderAssetDetail(){
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
+    ${a.category==='Vehicle' ? (()=>{
+      const weeklyLogs = state.vehicleWeeklyLogs.filter(l=>l.assetId===a.id).sort((x,y)=>new Date(y.date)-new Date(x.date));
+      const canLogWeekly = canEdit() || a.assignedTo===currentUser().id;
+      return `
+      <div class="section-title">Weekly Vehicle Logs<span class="count">${weeklyLogs.length}</span>
+        ${canLogWeekly?`<span class="btn bronze sm" style="margin-left:auto;" onclick="openWeeklyVehicleLogModal('${a.id}')">+ Log This Week</span>`:''}
+      </div>
+      <div class="small mt-1" style="margin-bottom:10px;color:var(--slate-light);">Driven this vehicle? Log mileage and a quick condition check at the end of the week — office staff use this to stay ahead of maintenance and renewals.</div>
+      ${weeklyLogs.length? weeklyLogs.map(l=>{
+        const person = byId(state.people, l.personId);
+        const flags = [];
+        if(l.warningLights) flags.push('Warning light: '+(l.warningLightsNotes||'reported'));
+        if(l.damage) flags.push('Damage: '+l.damage);
+        if(l.mechanicalIssues) flags.push('Mechanical: '+l.mechanicalIssues);
+        return `<div class="card mt-2" ${flags.length?'style="background:var(--rust-tint);border-color:#E7C1B4;"':''}>
+          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+            <div>
+              <strong>${fmtDate(l.date)}</strong> <span class="small" style="color:var(--slate-light);">— ${person?person.name:'Unknown'}</span>
+              <div class="small mt-1">Mileage: <strong>${l.mileage!=null?l.mileage.toLocaleString():'—'}</strong> · Tires: ${l.tireCondition||'—'}</div>
+              ${flags.length? flags.map(f=>`<div class="small mt-1" style="color:var(--rust);font-weight:600;">⚠ ${escHtml(f)}</div>`).join('') : `<div class="small mt-1" style="color:var(--jade);">No issues reported</div>`}
+              <div class="small mt-1" style="color:var(--slate-light);">Initialed: ${escHtml(l.initials||'—')}</div>
+            </div>
+            ${canEdit()?`<span class="miniBtn" onclick="deleteWeeklyVehicleLog('${l.id}','${a.id}')" title="Delete">✕</span>`:''}
+          </div>
+        </div>`;
+      }).join('') : `<div class="empty-inline">No weekly logs yet.</div>`}
+      `;
+    })() : ''}
+
     <div class="section-title">Checkout history<span class="count">${history.length}</span></div>
     ${history.length? `<div class="tbl-card"><table>
       <tr><th>Person</th><th>Checked out</th><th>Checked in</th><th>Photos</th></tr>
@@ -6611,6 +6661,82 @@ function deleteMaintenanceLogEntry(entryId, assetId){
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can remove a service entry'); return; }
   confirmAction('Delete this service entry? This does not undo any usage-reading update it made.', ()=>{
     state.maintenanceLog = state.maintenanceLog.filter(m=>m.id!==entryId);
+    saveState(); toast('Deleted'); render();
+  });
+}
+function openWeeklyVehicleLogModal(assetId){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log this'); return; }
+  const defaultPersonId = a.assignedTo || currentUser().id;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Weekly Vehicle Log — ${escHtml(a.name)}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="field-row">
+            <div><label>Employee / driver</label>
+              <select id="m-wlog-person">${state.people.map(p=>`<option value="${p.id}" ${p.id===defaultPersonId?'selected':''}>${p.name}</option>`).join('')}</select>
+            </div>
+            <div><label>Date</label><input type="date" id="m-wlog-date" value="${new Date().toISOString().slice(0,10)}"></div>
+          </div>
+          <label>Current mileage</label><input type="number" id="m-wlog-mileage" value="${a.currentUsage!=null?a.currentUsage:''}" placeholder="e.g. 48250">
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-wlog-warninglights" style="width:auto;margin:0;" onchange="document.getElementById('m-wlog-warninglights-notes-wrap').style.display=this.checked?'block':'none';">
+            Warning lights on?
+          </label>
+          <div id="m-wlog-warninglights-notes-wrap" style="display:none;" class="mt-1">
+            <input type="text" id="m-wlog-warninglights-notes" placeholder="Which light(s)?">
+          </div>
+          <label class="mt-2">Tire condition</label>
+          <select id="m-wlog-tires">
+            <option value="Good">Good</option>
+            <option value="Fair — watch it">Fair — watch it</option>
+            <option value="Poor — needs attention">Poor — needs attention</option>
+          </select>
+          <label class="mt-2">Any damage? <span class="small" style="font-weight:400;">(leave blank if none)</span></label>
+          <input type="text" id="m-wlog-damage" placeholder="e.g. Scratch on rear bumper">
+          <label class="mt-2">Any mechanical issues or noises? <span class="small" style="font-weight:400;">(leave blank if none)</span></label>
+          <input type="text" id="m-wlog-mech" placeholder="e.g. Squealing when braking">
+          <label class="mt-2">Employee initials</label><input type="text" id="m-wlog-initials" style="max-width:120px;" placeholder="e.g. JM">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveWeeklyVehicleLog('${assetId}',this)">Save Log</button></div>
+      </div>
+    </div>`);
+}
+function saveWeeklyVehicleLog(assetId, el){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log this'); return; }
+  const personId = document.getElementById('m-wlog-person').value;
+  const date = document.getElementById('m-wlog-date').value || new Date().toISOString().slice(0,10);
+  const mileageRaw = document.getElementById('m-wlog-mileage').value;
+  const initials = document.getElementById('m-wlog-initials').value.trim();
+  if(!mileageRaw || !initials){ toast('Mileage and initials are required'); return; }
+  const mileage = parseFloat(mileageRaw);
+  const warningLights = document.getElementById('m-wlog-warninglights').checked;
+  const warningLightsNotes = document.getElementById('m-wlog-warninglights-notes').value.trim();
+  const tireCondition = document.getElementById('m-wlog-tires').value;
+  const damage = document.getElementById('m-wlog-damage').value.trim();
+  const mechanicalIssues = document.getElementById('m-wlog-mech').value.trim();
+  const log = {
+    id: 'wlog'+Date.now(), assetId, personId, date, mileage,
+    warningLights, warningLightsNotes, tireCondition, damage, mechanicalIssues,
+    initials, createdAt: new Date().toISOString()
+  };
+  state.vehicleWeeklyLogs.push(log);
+  // Weekly-reported mileage feeds the same usage tracking that drives maintenance-due alerts —
+  // never let it regress from a lower/out-of-order entry.
+  if(a.currentUsage==null || mileage > a.currentUsage) a.currentUsage = mileage;
+  if(warningLights || damage || mechanicalIssues){
+    const person = byId(state.people, personId);
+    const issues = [warningLights?'warning light':null, damage?'damage':null, mechanicalIssues?'a mechanical issue':null].filter(Boolean).join(', ');
+    createNotification('vehicle_log_flag', `${person?.name||'Someone'}'s weekly log on ${a.name} flagged ${issues} — check ${a.name}'s page for details`, {targetAudience:'admins', relatedType:'asset', relatedId:assetId});
+  }
+  saveState(); closeModal(el); toast('Logged'); render();
+}
+function deleteWeeklyVehicleLog(logId, assetId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Delete this weekly log entry? This cannot be undone.', ()=>{
+    state.vehicleWeeklyLogs = state.vehicleWeeklyLogs.filter(l=>l.id!==logId);
     saveState(); toast('Deleted'); render();
   });
 }
