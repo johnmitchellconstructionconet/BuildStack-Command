@@ -6307,7 +6307,7 @@ async function saveAsset(assetId, el){
   }
   if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
   else { data.id = 'asset'+Date.now(); data.status = 'available'; data.assignedTo = null; data.locationId = null; data.addedDate = new Date().toISOString().slice(0,10); state.companyAssets.push(data); }
-  if(category==='Vehicle') pushPublicVehicleInfo(assetId || data.id);
+  if(category==='Vehicle') pushPublicVehicleInfo(assetId || data.id, true);
   saveState(); closeModal(el); toast('Saved'); render();
 }
 function renderAssetDetail(){
@@ -6324,6 +6324,7 @@ function renderAssetDetail(){
       <div><div class="page-title">${a.name}</div><div class="page-desc">${assetSubtitle(a)}</div></div>
       <div class="flex gap-2">
         <button class="btn secondary" onclick="showAssetQrCode('${a.id}')">📱 QR Code</button>
+        ${a.category==='Vehicle' && canEdit()?`<button class="btn secondary" onclick="pushPublicVehicleInfo('${a.id}')">🔄 Sync Public Info</button>`:''}
         ${canEdit()?`<div class="flex gap-2">
           <button class="btn secondary" onclick="openAssetModal('${a.id}')">Edit</button>
           ${a.status!=='retired'?`<button class="btn secondary" onclick="retireAsset('${a.id}')">Retire</button>`:''}
@@ -6653,7 +6654,7 @@ function logMaintenance(assetId, el){
   a.nextMaintenanceDate = document.getElementById('m-maint-nextdate').value || null;
   const nextUsage = document.getElementById('m-maint-nextusage').value.trim();
   a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
-  if(a.category==='Vehicle') pushPublicVehicleInfo(assetId);
+  if(a.category==='Vehicle') pushPublicVehicleInfo(assetId, true);
   saveState(); closeModal(el); toast('Logged'); render();
 }
 function deleteMaintenanceLogEntry(entryId, assetId){
@@ -11874,10 +11875,10 @@ function setAiProvider(provider){
   state.companySettings.aiProvider = provider;
   saveState(); toast('AI provider set to '+(provider==='claude'?'Claude':'ChatGPT'));
 }
-async function pushPublicVehicleInfo(assetId){
-  if(!supabaseClient) return;
+async function pushPublicVehicleInfo(assetId, silent){
+  if(!supabaseClient) return {ok:false, reason:'No server connection.'};
   const a = byId(state.companyAssets, assetId);
-  if(!a || a.category!=='Vehicle') return;
+  if(!a || a.category!=='Vehicle') return {ok:false, reason:'Not a vehicle.'};
   const lastService = state.maintenanceLog.filter(m=>m.assetId===assetId).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];
   try{
     const { error } = await supabaseClient
@@ -11903,8 +11904,19 @@ async function pushPublicVehicleInfo(assetId){
         last_service_type: lastService?.serviceType || null,
         updated_at: new Date().toISOString()
       });
-    if(error) console.error('Public vehicle info push failed:', error.message);
-  }catch(e){ console.error('Public vehicle info push failed:', e); }
+    if(error){
+      console.error('Public vehicle info push failed:', error.message);
+      const tableMissing = error.code==='42P01' || /relation .* does not exist/i.test(error.message||'');
+      if(!silent) toast(tableMissing ? 'The public_vehicle_info table doesn\u2019t exist in Supabase yet — the QR code won\u2019t work until it\u2019s created.' : 'Couldn\u2019t sync this vehicle\u2019s public info: '+error.message);
+      return {ok:false, reason: tableMissing?'table_missing':error.message};
+    }
+    if(!silent) toast('Synced — the QR code for this vehicle is now up to date.');
+    return {ok:true};
+  }catch(e){
+    console.error('Public vehicle info push failed:', e);
+    if(!silent) toast('Couldn\u2019t sync this vehicle\u2019s public info — check your connection.');
+    return {ok:false, reason:e.message};
+  }
 }
 async function pushPublicBranding(){
   if(!supabaseClient) return;
@@ -12579,8 +12591,15 @@ async function renderPublicVehiclePage(assetId){
   }
   try{
     const { data, error } = await supabaseClient.from('public_vehicle_info').select('*').eq('id', assetId).maybeSingle();
-    if(error || !data){
-      container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#5B6472;">No info found for this vehicle.</div>';
+    if(error){
+      const tableMissing = error.code==='42P01' || /relation .* does not exist/i.test(error.message||'');
+      container.innerHTML = tableMissing
+        ? '<div style="text-align:center;padding:60px 20px;color:#B4462F;">This company hasn\u2019t finished setting up vehicle QR codes yet (the required database table doesn\u2019t exist). An admin needs to set this up.</div>'
+        : '<div style="text-align:center;padding:60px 20px;color:#B4462F;">Something went wrong loading this vehicle\u2019s info. Try scanning again.</div>';
+      return;
+    }
+    if(!data){
+      container.innerHTML = '<div style="text-align:center;padding:60px 20px;color:#5B6472;">No info found for this vehicle yet — an admin needs to open it in BuildStack and click "Sync Public Info" once.</div>';
       return;
     }
     const today = new Date().toISOString().slice(0,10);
