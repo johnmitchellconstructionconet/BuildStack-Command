@@ -664,20 +664,27 @@ function scheduleSupabaseSave(){
 
 async function pullStateFromSupabase(){
   if(!supabaseClient) return 'error';
+  let data, error;
   try{
-    const { data, error } = await supabaseClient
+    const result = await supabaseClient
       .from('app_state')
       .select('data')
       .eq('id', 'main')
       .maybeSingle();
-    if(error){ console.error('Supabase load failed:', error.message); return 'error'; }
-    if(data && data.data){
+    data = result.data; error = result.error;
+  }catch(e){ console.error('Supabase connection/query failed:', e); return 'error'; }
+  if(error){ console.error('Supabase load failed:', error.message); return 'error'; }
+  if(data && data.data){
+    try{
       state = migrateState(data.data);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return 'loaded';
+    }catch(e){
+      console.error('Company data was retrieved successfully, but migrateState() threw while processing it — this is a code bug, not a connection problem:', e);
+      return 'error';
     }
-    return 'empty';
-  }catch(e){ console.error('Supabase load failed:', e); return 'error'; }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return 'loaded';
+  }
+  return 'empty';
 }
 
 async function pushInitialStateToSupabase(){
@@ -927,6 +934,9 @@ function loadState(){
   return seeded;
 }
 function migrateState(parsed){
+      if(!parsed.people) parsed.people = [];
+      if(!parsed.positions) parsed.positions = [];
+      if(!parsed.policies) parsed.policies = [];
       if(!parsed.videos) parsed.videos = [];
       if(!parsed.onboardingPaths) parsed.onboardingPaths = [];
       (parsed.onboardingPaths||[]).forEach(p=>{ if(p.roleId===undefined) p.roleId = null; });
@@ -10560,7 +10570,7 @@ function renderFillableForms(){
   if(!canEdit()){ return `<div class="empty"><h3>Admins only</h3><p>Ask an owner or admin about fillable forms.</p></div>`; }
   const filterCat = currentParams.cat || 'all';
   const filterRole = currentParams.role || 'all';
-  const matchesFilters = f => (filterCat==='all'||f.category===filterCat) && (filterRole==='all'||(f.tags||[]).includes(byId(state.roles,filterRole)?.title));
+  const matchesFilters = f => (filterCat==='all'||f.category===filterCat) && (filterRole==='all'||f.appliesToAllRoles||(f.tags||[]).includes(byId(state.roles,filterRole)?.title));
   const filtersActive = filterCat!=='all' || filterRole!=='all';
   const visible = state.fillableForms.filter(matchesFilters);
   return `
@@ -10601,7 +10611,7 @@ function renderFormBuilder(){
       formBuilderState = JSON.parse(JSON.stringify(byId(state.fillableForms, formId)));
       formBuilderState._loadedFor = loadKey;
     } else {
-      formBuilderState = {id:null, name:'', description:'', category: state.templateCategories[0]||'', tags:[], backgroundImages:[], fields:[], _loadedFor:'new'};
+      formBuilderState = {id:null, name:'', description:'', category: state.templateCategories[0]||'', tags:[], appliesToAllRoles:false, backgroundImages:[], fields:[], _loadedFor:'new'};
     }
     if(!formBuilderState.backgroundImages) formBuilderState.backgroundImages = formBuilderState.backgroundImage ? [formBuilderState.backgroundImage] : [];
     formBuilderState.fields.forEach(f=>{ if(f.page==null) f.page = 0; });
@@ -10628,9 +10638,13 @@ function renderFormBuilder(){
         ${state.templateCategories.map(c=>`<option value="${escAttr(c)}" ${formBuilderState.category===c?'selected':''}>${c}</option>`).join('')}
       </select>
       <label class="mt-2">Relevant to roles <span class="small" style="font-weight:400;">(optional — lets people filter forms by role)</span></label>
-      <div class="flex gap-2" style="flex-wrap:wrap;">
+      <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+        <input type="checkbox" id="fb-all-roles" style="width:auto;margin:0;" ${formBuilderState.appliesToAllRoles?'checked':''} onchange="document.querySelectorAll('.fb-role').forEach(cb=>{cb.checked=this.checked;cb.disabled=this.checked;});">
+        Applies to every role <span class="small" style="font-weight:400;">(including any role added later — no need to come back and update this)</span>
+      </label>
+      <div class="flex gap-2 mt-1" style="flex-wrap:wrap;">
         ${state.roles.map(r=>`<label class="flex gap-2" style="align-items:center;font-weight:500;width:auto;margin-right:14px;">
-          <input type="checkbox" class="fb-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${(formBuilderState.tags||[]).includes(r.title)?'checked':''}> ${r.title}
+          <input type="checkbox" class="fb-role" value="${escAttr(r.title)}" style="width:auto;margin:0;" ${formBuilderState.appliesToAllRoles?'checked disabled':''} ${(formBuilderState.tags||[]).includes(r.title)?'checked':''}> ${r.title}
         </label>`).join('') || `<div class="small">No roles set up yet.</div>`}
       </div>
     </div>
@@ -10716,7 +10730,8 @@ const FORM_FIELD_TYPES = {
   address: {label:'Address', icon:'🏠', inputType:'text'},
   date: {label:'Date', icon:'📅', inputType:'date'},
   number: {label:'Number', icon:'#️⃣', inputType:'number'},
-  checkbox: {label:'Checkbox', icon:'☑️', inputType:'checkbox'},
+  checkbox: {label:'Checkbox', icon:'☐', inputType:'checkbox'},
+  photo: {label:'Photo Upload', icon:'📷', inputType:'file'},
   initials: {label:'Initials', icon:'✒️', inputType:'text'},
   signature: {label:'Signature (type full name)', icon:'✍️', inputType:'text'}
 };
@@ -10730,16 +10745,15 @@ function openFieldConfigModal(xPct, yPct){
           <select id="m-field-type">
             ${Object.keys(FORM_FIELD_TYPES).map(k=>`<option value="${k}">${FORM_FIELD_TYPES[k].icon} ${FORM_FIELD_TYPES[k].label}</option>`).join('')}
           </select>
-          <label>Label</label><input type="text" id="m-field-label" placeholder="e.g. Full Name">
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="confirmAddField(${xPct},${yPct},this)">Add Field</button></div>
       </div>
     </div>`);
 }
 function confirmAddField(xPct, yPct, el){
-  const label = document.getElementById('m-field-label').value.trim();
-  if(!label){ toast('Give the field a label'); return; }
-  formBuilderState.fields.push({id:'ff'+Date.now()+Math.random().toString(36).slice(2), type:document.getElementById('m-field-type').value, label, xPct, yPct, widthPct:20, page: formBuilderState.currentPage||0});
+  const type = document.getElementById('m-field-type').value;
+  const label = FORM_FIELD_TYPES[type].label;
+  formBuilderState.fields.push({id:'ff'+Date.now()+Math.random().toString(36).slice(2), type, label, xPct, yPct, widthPct:20, page: formBuilderState.currentPage||0});
   closeModal(el); render();
 }
 function removeBuilderField(fieldId){ formBuilderState.fields = formBuilderState.fields.filter(f=>f.id!==fieldId); render(); }
@@ -10814,11 +10828,12 @@ function saveFillableForm(){
   if(!formBuilderState.name.trim()){ toast('Name the form first'); return; }
   if(!formBuilderState.backgroundImages || !formBuilderState.backgroundImages.length){ toast('Upload a document first'); return; }
   const category = document.getElementById('fb-cat').value;
+  const appliesToAllRoles = document.getElementById('fb-all-roles').checked;
   const tags = Array.from(document.querySelectorAll('.fb-role:checked')).map(el=>el.value);
   if(formBuilderState.id){
-    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, category, tags, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields});
+    Object.assign(byId(state.fillableForms, formBuilderState.id), {name:formBuilderState.name, description:formBuilderState.description, category, tags, appliesToAllRoles, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields});
   } else {
-    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, category, tags, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
+    state.fillableForms.push({id:'form'+Date.now(), name:formBuilderState.name, description:formBuilderState.description, category, tags, appliesToAllRoles, backgroundImages:formBuilderState.backgroundImages, fields:formBuilderState.fields, createdBy:currentUser().id, createdAt:new Date().toISOString().slice(0,10)});
   }
   saveState(); formBuilderState=null; toast('Saved'); navigate('fillableForms');
 }
@@ -10838,14 +10853,29 @@ function fieldOverlayHtml(form, mode, submissionValues, page){
           <input type="checkbox" class="fb-fill-input" data-field="${f.id}" data-fieldtype="checkbox" style="width:20px;height:20px;margin:0;">
         </div>`;
       }
+      if(f.type==='photo'){
+        return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
+          <input type="file" accept="image/*" class="fb-fill-input" data-field="${f.id}" data-fieldtype="photo" style="font-size:10px;width:100%;" onchange="previewFbPhotoField(this)">
+          <img class="fb-photo-preview" style="display:none;max-width:100%;max-height:80px;margin-top:4px;border-radius:4px;">
+        </div>`;
+      }
       return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
         <input type="${meta.inputType}" class="fb-fill-input" data-field="${f.id}" data-fieldtype="${f.type}" placeholder="${escAttr(f.label)}" style="${f.type==='signature'?'font-family:cursive;font-size:15px;':f.type==='initials'?'font-family:cursive;font-size:14px;':''}">
       </div>`;
     }
     const val = (submissionValues&&submissionValues[f.id]);
     if(f.type==='checkbox') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${val?'☑':'☐'}</div></div>`;
+    if(f.type==='photo') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">${val?`<img src="${escAttr(val)}" style="max-width:100%;max-height:100px;border-radius:4px;cursor:pointer;" onclick="window.open('${escJs(val)}','_blank')">`:`<div class="fb-fill-readonly">—</div>`}</div>`;
     return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${escHtml(val||'')}</div></div>`;
   }).join('');
+}
+function previewFbPhotoField(input){
+  const preview = input.parentElement.querySelector('.fb-photo-preview');
+  const file = input.files[0];
+  if(!file || !preview) return;
+  const reader = new FileReader();
+  reader.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; };
+  reader.readAsDataURL(file);
 }
 function openFillFormModal(personId, formId){
   if(personId!==currentUser().id && !canEdit()){ toast('You can only fill out forms for yourself'); return; }
@@ -10869,19 +10899,24 @@ function openFillFormModal(personId, formId){
       </div>
     </div>`);
 }
-function submitFilledForm(formId, personId, el){
+async function submitFilledForm(formId, personId, el){
   if(personId!==currentUser().id && !canEdit()){ toast('You can only submit forms for yourself'); return; }
   const values = {};
   let allFilled = true;
-  document.querySelectorAll('.fb-fill-input').forEach(input=>{
+  const inputs = Array.from(document.querySelectorAll('.fb-fill-input'));
+  for(const input of inputs){
     if(input.dataset.fieldtype==='checkbox'){
       values[input.dataset.field] = input.checked;
-      if(!input.checked) allFilled = false;
+    } else if(input.dataset.fieldtype==='photo'){
+      const file = input.files[0];
+      if(!file){ allFilled = false; continue; }
+      try{ values[input.dataset.field] = await uploadPhotoToStorage(file, 'form-submissions'); }
+      catch(e){ toast('Photo upload failed: '+(e.message||'unknown error')); return; }
     } else {
       values[input.dataset.field] = input.value.trim();
       if(!input.value.trim()) allFilled = false;
     }
-  });
+  }
   if(!allFilled){ toast('Fill in every field before submitting'); return; }
   const id = 'fsub'+Date.now();
   state.formSubmissions.push({id, formId, personId, values, submittedAt:new Date().toISOString(), status:'submitted'});
@@ -12442,4 +12477,3 @@ initApp();
 </script>
 </body>
 </html>
-  
