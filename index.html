@@ -681,8 +681,9 @@ async function pullStateFromSupabase(){
       console.error('Company data was retrieved successfully, but migrateState() threw while processing it — this is a code bug, not a connection problem:', e);
       return 'error';
     }
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-    catch(e){ console.error('Local cache write failed (likely storage quota) — continuing anyway since the real data already loaded into memory:', e); }
+    idbPut('app_state_cache', state).catch(e=>{
+      console.error('Local cache write failed — continuing anyway since the real data already loaded into memory:', e);
+    });
     return 'loaded';
   }
   return 'empty';
@@ -923,17 +924,21 @@ function backfillPrimaryLocations(s){
   return s;
 }
 
-function loadState(){
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw){
-    try {
-      return migrateState(JSON.parse(raw));
-    } catch(e){}
-  }
-  const seeded = backfillPrimaryLocations(seedData());
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)); }
-  catch(e){ console.error('Local cache write failed (likely storage quota):', e); }
-  return seeded;
+async function loadStateAsync(){
+  try{
+    const cached = await idbGet('app_state_cache');
+    if(cached) return migrateState(cached);
+  }catch(e){ console.error('IndexedDB load failed, falling back:', e); }
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const migrated = migrateState(JSON.parse(raw));
+      idbPut('app_state_cache', migrated).catch(e=>console.error('IndexedDB migration write failed:', e));
+      try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+      return migrated;
+    }
+  }catch(e){ console.error('localStorage fallback read failed:', e); }
+  return backfillPrimaryLocations(seedData());
 }
 function migrateState(parsed){
       if(!parsed.people) parsed.people = [];
@@ -1188,16 +1193,14 @@ function migrateState(parsed){
 let lastLocalChangeAt = 0;
 function saveState(){
   lastLocalChangeAt = Date.now();
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }catch(e){
-    console.error('Local save failed:', e);
-    toast('Couldn\u2019t save locally (storage is full) — trying to sync to the server anyway. Tell an admin if this keeps happening.');
-  }
+  idbPut('app_state_cache', state).catch(e=>{
+    console.error('Local cache write failed:', e);
+    toast('Couldn\u2019t save a local backup copy — trying to sync to the server anyway. Tell an admin if this keeps happening.');
+  });
   scheduleSupabaseSave();
 }
 
-let state = loadState();
+let state = backfillPrimaryLocations(seedData()); // placeholder — real state loads async in boot() below, before initApp() runs
 let currentView = 'dashboard';
 let currentParams = {};
 
@@ -1635,7 +1638,7 @@ async function backgroundSync(){
     const myViewAs = viewAsPersonId;
     state = migrateState(data.data);
     state.currentUserId = myId;
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){ console.error('Local cache write failed (likely storage quota):', e); }
+    idbPut('app_state_cache', state).catch(e=>console.error('Local cache write failed:', e));
     lastSyncedAt = new Date();
     viewAsPersonId = myViewAs;
     render();
@@ -12474,8 +12477,11 @@ async function initApp(){
   } catch(e){ console.error('Session check failed:', e); }
   renderAuthScreen();
 }
-applyBranding();
-initApp();
+(async function boot(){
+  state = await loadStateAsync();
+  applyBranding();
+  await initApp();
+})();
 </script>
 </body>
 </html>
