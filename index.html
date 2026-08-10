@@ -6216,7 +6216,7 @@ function openAssetModal(assetId, defaultCat){
               <div><label>Expires</label><input type="date" id="m-asset-insurance-exp" value="${a?.insuranceExpiry||''}"></div>
             </div>
             <label>Insurance document <span class="small" style="font-weight:400;">(optional — upload the policy PDF or a photo of the card)</span></label>
-            ${a?.insuranceDocKey? `<div class="small mt-1" style="margin-bottom:6px;">📄 A document is already on file. <span onclick="viewAssetDoc('${a.insuranceDocKey}')" style="text-decoration:underline;cursor:pointer;">View it</span> — uploading a new one below will replace it.</div>`:''}
+            ${(a?.insuranceDocUrl || a?.insuranceDocKey)? `<div class="small mt-1" style="margin-bottom:6px;">📄 A document is already on file. <span onclick="${a.insuranceDocUrl?`window.open('${escJs(a.insuranceDocUrl)}','_blank')`:`viewAssetDoc('${a.insuranceDocKey}')`}" style="text-decoration:underline;cursor:pointer;">View it</span> — uploading a new one below will replace it.</div>`:''}
             <input type="file" id="m-asset-insurance-doc" accept="image/*,application/pdf">
           </div>
 
@@ -6298,11 +6298,14 @@ async function saveAsset(assetId, el){
     data.insuranceExpiry = document.getElementById('m-asset-insurance-exp').value || null;
     const docInput = document.getElementById('m-asset-insurance-doc');
     if(docInput.files[0]){
-      const docKey = 'insurance_'+(assetId||'new'+Date.now())+'_'+Date.now();
-      await idbPut(docKey, docInput.files[0]);
-      data.insuranceDocKey = docKey;
-    } else if(existing && existing.insuranceDocKey){
-      data.insuranceDocKey = existing.insuranceDocKey;
+      try{
+        data.insuranceDocUrl = await uploadPhotoToStorage(docInput.files[0], 'insurance-docs');
+      }catch(e){
+        toast('Insurance document upload failed: '+(e.message||'unknown error')+' — saving the rest anyway.');
+      }
+    } else if(existing){
+      if(existing.insuranceDocUrl) data.insuranceDocUrl = existing.insuranceDocUrl;
+      if(existing.insuranceDocKey) data.insuranceDocKey = existing.insuranceDocKey;
     }
   }
   if(assetId){ Object.assign(byId(state.companyAssets, assetId), data); }
@@ -6372,7 +6375,7 @@ function renderAssetDetail(){
         <div class="grid cols-3">
           <div><div class="small" style="color:var(--slate-light);">Policy #</div><div>${a.insurancePolicy||'—'}</div></div>
           <div><div class="small" style="color:var(--slate-light);">Expires</div><div style="${compIssues.find(i=>i.type==='insurance')?'color:var(--rust);font-weight:600;':''}">${a.insuranceExpiry?fmtDate(a.insuranceExpiry):'—'}</div></div>
-          <div><div class="small" style="color:var(--slate-light);">Document</div><div>${a.insuranceDocKey?`<span onclick="viewAssetDoc('${a.insuranceDocKey}')" style="text-decoration:underline;cursor:pointer;">📄 View</span>`:'—'}</div></div>
+          <div><div class="small" style="color:var(--slate-light);">Document</div><div>${a.insuranceDocUrl?`<span onclick="window.open('${escAttr(a.insuranceDocUrl)}','_blank')" style="text-decoration:underline;cursor:pointer;">📄 View</span>`:a.insuranceDocKey?`<span onclick="viewAssetDoc('${a.insuranceDocKey}')" style="text-decoration:underline;cursor:pointer;">📄 View</span>`:'—'}</div></div>
         </div>
         ${compIssues.length? `<div class="mt-2">${compIssues.map(i=>`<span class="pill amber" style="margin-right:6px;">${i.label} — ${fmtDate(i.date)}</span>`).join('')}</div>`:''}
       </div>`;
@@ -11895,6 +11898,7 @@ async function pushPublicVehicleInfo(assetId, silent){
         registration_expiry: a.registrationExpiry || null,
         insurance_policy: a.insurancePolicy || null,
         insurance_expiry: a.insuranceExpiry || null,
+        insurance_doc_url: a.insuranceDocUrl || null,
         next_maintenance_date: a.nextMaintenanceDate || null,
         next_maintenance_usage: a.nextMaintenanceUsage || null,
         current_usage: a.currentUsage || null,
@@ -12616,6 +12620,7 @@ async function renderPublicVehiclePage(assetId){
         <div style="font-weight:700;margin-bottom:10px;">Insurance</div>
         <div style="color:#5B6472;font-size:13px;">Policy #</div><div style="margin-bottom:8px;">${data.insurance_policy || '—'}</div>
         <div style="color:#5B6472;font-size:13px;">Expires</div><div style="font-weight:${insuranceExpired?'700':'400'};color:${insuranceExpired?'#B4462F':'#0F1216'};">${fmt(data.insurance_expiry)}${insuranceExpired?' — EXPIRED':''}</div>
+        ${data.insurance_doc_url?`<a href="${data.insurance_doc_url}" target="_blank" style="display:inline-block;margin-top:10px;color:#8C8079;font-weight:600;text-decoration:underline;">📄 View Insurance Document</a>`:''}
       </div>
       <div style="background:#fff;border:1px solid #E5E2DE;border-radius:11px;padding:20px;margin-bottom:14px;">
         <div style="font-weight:700;margin-bottom:10px;">Registration</div>
