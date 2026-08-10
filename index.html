@@ -974,6 +974,21 @@ function migrateState(parsed){
       if(!parsed.trainingPaths) parsed.trainingPaths = [];
       if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
       if(!parsed.vehicleWeeklyLogs) parsed.vehicleWeeklyLogs = [];
+      (parsed.companyAssets||[]).forEach(a=>{
+        if(!a.maintenanceSchedules){
+          a.maintenanceSchedules = [];
+          if(a.maintenanceIntervalUsage!=null || a.maintenanceIntervalDays!=null){
+            a.maintenanceSchedules.push({
+              id:'msch'+Date.now()+Math.random().toString(36).slice(2),
+              name:'Oil Change',
+              intervalUsage: a.maintenanceIntervalUsage!=null ? a.maintenanceIntervalUsage : null,
+              intervalDays: a.maintenanceIntervalDays!=null ? a.maintenanceIntervalDays : null,
+              nextDueUsage: a.nextMaintenanceUsage!=null ? a.nextMaintenanceUsage : null,
+              nextDueDate: a.nextMaintenanceDate || null
+            });
+          }
+        }
+      });
       parsed.externalTools.forEach(t=>{ if(t.personId===undefined) t.personId = null; });
       if(!parsed.trainingAssignments) parsed.trainingAssignments = [];
       if(!parsed.trainingCompletions) parsed.trainingCompletions = [];
@@ -6023,9 +6038,12 @@ function defaultUsageLabel(category){ return category==='Vehicle' ? 'Mileage' : 
 function assetMaintenanceDue(asset){
   if(!MAINTAINABLE_CATEGORIES.includes(asset.category)) return null;
   const today = new Date().toISOString().slice(0,10);
-  if(asset.nextMaintenanceDate && asset.nextMaintenanceDate <= today) return 'date';
-  if(asset.nextMaintenanceUsage!=null && asset.currentUsage!=null && asset.currentUsage >= asset.nextMaintenanceUsage) return 'usage';
-  return null;
+  const overdue = (asset.maintenanceSchedules||[]).filter(s=>{
+    if(s.nextDueDate && s.nextDueDate <= today) return true;
+    if(s.nextDueUsage!=null && asset.currentUsage!=null && asset.currentUsage >= s.nextDueUsage) return true;
+    return false;
+  }).map(s=>s.name);
+  return overdue.length ? overdue : null;
 }
 function assetComplianceIssues(asset){
   const issues = [];
@@ -6107,22 +6125,24 @@ function renderCompanyAssets(){
     </div>`:''}
     ${view==='maintenance' ? `
     <div class="tbl-card mt-2"><table>
-      <tr><th>Item</th><th>Checked out to</th><th>Schedule</th><th>Last service</th><th>Currently due</th><th>Status</th></tr>
+      <tr><th>Item</th><th>Checked out to</th><th>Schedules</th><th>Last service</th><th>Status</th></tr>
       ${maintainableAssets.length ? maintainableAssets.map(a=>{
         const due = assetMaintenanceDue(a);
         const lastService = state.maintenanceLog.filter(m=>m.assetId===a.id).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];
         const label = a.usageLabel||defaultUsageLabel(a.category);
-        const schedule = [a.maintenanceIntervalDays!=null?`Every ${a.maintenanceIntervalDays}d`:null, a.maintenanceIntervalUsage!=null?`Every ${a.maintenanceIntervalUsage.toLocaleString()} ${label}`:null].filter(Boolean).join(' / ') || '—';
-        const dueBits = [a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):null, a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString()+' '+label:null].filter(Boolean).join(' / ') || '—';
+        const schedules = a.maintenanceSchedules||[];
         return `<tr class="row-click" onclick="navigate('assetDetail',{id:'${a.id}'})">
           <td><strong>${a.name}</strong>${a.specialRequirements?` <span title="Has special requirements — ${escAttr(a.specialRequirements)}">⚠</span>`:''}</td>
           <td>${a.assignedTo?byId(state.people,a.assignedTo)?.name||'—':'<span class="small" style="color:var(--slate-light);">Unassigned</span>'}</td>
-          <td>${schedule}</td>
+          <td>${schedules.length? schedules.map(s=>{
+            const isOverdue = due && due.includes(s.name);
+            const bits = [s.nextDueDate?fmtDate(s.nextDueDate):null, s.nextDueUsage!=null?s.nextDueUsage.toLocaleString()+' '+label:null].filter(Boolean).join(' / ') || 'no next-due set';
+            return `<div class="small" style="${isOverdue?'color:var(--rust);font-weight:600;':''}">${s.name}: ${bits}${isOverdue?' — OVERDUE':''}</div>`;
+          }).join('') : '<span class="small" style="color:var(--slate-light);">No schedules set</span>'}</td>
           <td>${lastService?fmtDate(lastService.date)+' — '+lastService.serviceType:'<span class="small" style="color:var(--slate-light);">Never logged</span>'}</td>
-          <td>${dueBits}</td>
           <td>${due?'<span class="pill rust">Overdue</span>':'<span class="pill jade">On track</span>'}</td>
         </tr>`;
-      }).join('') : `<tr><td colspan="6"><div class="empty-inline">No vehicles or equipment with maintenance tracking yet — mark an item as Vehicle or Equipment category to track its schedule here.</div></td></tr>`}
+      }).join('') : `<tr><td colspan="5"><div class="empty-inline">No vehicles or equipment with maintenance tracking yet — mark an item as Vehicle or Equipment category to track its schedule here.</div></td></tr>`}
     </table></div>
     ` : `
     ${!restricted?`<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
@@ -6157,6 +6177,42 @@ function generateAssetTag(){
     if(m) max = Math.max(max, parseInt(m[1]));
   });
   return 'MCD-' + String(max+1).padStart(4,'0');
+}
+function assetScheduleRow(s){
+  const id = s?.id || 'msch'+Date.now()+Math.random().toString(36).slice(2);
+  return `<div class="card mt-2" data-schedule-id="${id}" style="padding:10px 12px;">
+    <div class="flex gap-2">
+      <input type="text" class="m-asset-sched-name" value="${escAttr(s?.name)}" placeholder="e.g. Oil Change, Fluid Change" style="flex:1;">
+      <span class="miniBtn" onclick="this.closest('[data-schedule-id]').remove()" title="Remove">✕</span>
+    </div>
+    <div class="field-row mt-1">
+      <div><label class="small" style="font-weight:400;">Repeat every (days)</label><input type="text" class="m-asset-sched-days" value="${s?.intervalDays!=null?s.intervalDays:''}" placeholder="e.g. 90" onchange="autoCalcScheduleNextDue(this)"></div>
+      <div><label class="small" style="font-weight:400;">Repeat every (usage)</label><input type="text" class="m-asset-sched-usage" value="${s?.intervalUsage!=null?s.intervalUsage:''}" placeholder="e.g. 5000" onchange="autoCalcScheduleNextDue(this)"></div>
+    </div>
+    <div class="field-row">
+      <div><label class="small" style="font-weight:400;">Next due — date</label><input type="date" class="m-asset-sched-nextdate" value="${s?.nextDueDate||''}"></div>
+      <div><label class="small" style="font-weight:400;">Next due — reading</label><input type="text" class="m-asset-sched-nextusage" value="${s?.nextDueUsage!=null?s.nextDueUsage:''}"></div>
+    </div>
+  </div>`;
+}
+function autoCalcScheduleNextDue(input){
+  const row = input.closest('[data-schedule-id]');
+  const currentUsageEl = document.getElementById('m-asset-usage');
+  const currentUsage = currentUsageEl ? parseFloat(currentUsageEl.value) : NaN;
+  const nextDateInput = row.querySelector('.m-asset-sched-nextdate');
+  const nextUsageInput = row.querySelector('.m-asset-sched-nextusage');
+  const daysVal = row.querySelector('.m-asset-sched-days').value.trim();
+  const usageVal = row.querySelector('.m-asset-sched-usage').value.trim();
+  // Only auto-fill if next-due is currently blank, so we never clobber a value someone already set on purpose
+  if(daysVal && !nextDateInput.value){
+    nextDateInput.value = addDays(new Date().toISOString().slice(0,10), parseInt(daysVal));
+  }
+  if(usageVal && !nextUsageInput.value.trim() && !isNaN(currentUsage)){
+    nextUsageInput.value = currentUsage + parseFloat(usageVal);
+  }
+}
+function addAssetScheduleRow(){
+  document.getElementById('m-asset-schedules-list').insertAdjacentHTML('beforeend', assetScheduleRow(null));
 }
 function openAssetModal(assetId, defaultCat){
   if(!canEdit()){ toast('Admins only'); return; }
@@ -6227,21 +6283,15 @@ function openAssetModal(assetId, defaultCat){
           </div>
 
           <div id="m-asset-maint-fields" style="display:${MAINTAINABLE_CATEGORIES.includes(cat)?'block':'none'};background:var(--paper);border-radius:8px;padding:12px;margin-top:10px;">
-            <div class="block-label">Maintenance schedule</div>
+            <div class="block-label">Maintenance schedules</div>
             <div class="field-row">
               <div><label>Usage tracked in</label><input type="text" id="m-asset-usagelabel" value="${a?.usageLabel||defaultUsageLabel(cat)}" placeholder="e.g. Mileage or Engine Hours"></div>
               <div><label>Current reading</label><input type="text" id="m-asset-usage" value="${a?.currentUsage!=null?a.currentUsage:''}"></div>
             </div>
-            <div class="small mt-1" style="margin-bottom:6px;">Set a repeating rule — e.g. every 5,000 miles, or every 90 days, or both — and each time service gets logged, the next due point is calculated automatically instead of you having to re-enter it.</div>
-            <div class="field-row">
-              <div><label>Repeat every <span class="small" style="font-weight:400;">(days)</span></label><input type="text" id="m-asset-interval-days" value="${a?.maintenanceIntervalDays!=null?a.maintenanceIntervalDays:''}" placeholder="e.g. 90"></div>
-              <div><label>Repeat every <span class="small" style="font-weight:400;">(usage units)</span></label><input type="text" id="m-asset-interval-usage" value="${a?.maintenanceIntervalUsage!=null?a.maintenanceIntervalUsage:''}" placeholder="e.g. 5000"></div>
-            </div>
-            <div class="field-row">
-              <div><label>Currently due — date</label><input type="date" id="m-asset-nextdate" value="${a?.nextMaintenanceDate||''}"></div>
-              <div><label>Currently due — reading</label><input type="text" id="m-asset-nextusage" value="${a?.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}"></div>
-            </div>
-            <label>Special requirements <span class="small" style="font-weight:400;">(anything out of the ordinary — specific fluids/parts, certified operator only, mandatory inspections, warranty conditions)</span></label>
+            <div class="small mt-1" style="margin-bottom:6px;">Track as many separate items as you need — Oil Change every 5,000 miles, Fluid Change every 30,000, whatever applies. Each one's next-due updates on its own whenever service against it is logged.</div>
+            <div id="m-asset-schedules-list">${(a?.maintenanceSchedules||[]).map(s=>assetScheduleRow(s)).join('')}</div>
+            <button type="button" class="btn secondary sm mt-2" onclick="addAssetScheduleRow()">+ Add Maintenance Item</button>
+            <label class="mt-2">Special requirements <span class="small" style="font-weight:400;">(anything out of the ordinary — specific fluids/parts, certified operator only, mandatory inspections, warranty conditions)</span></label>
             <textarea id="m-asset-special-reqs" placeholder="e.g. Synthetic oil only. DOT inspection required annually. CDL required to operate.">${a?.specialRequirements||''}</textarea>
           </div>
         </div>
@@ -6295,10 +6345,18 @@ async function saveAsset(assetId, el){
   if(MAINTAINABLE_CATEGORIES.includes(category)){
     data.usageLabel = document.getElementById('m-asset-usagelabel').value.trim() || defaultUsageLabel(category);
     data.currentUsage = num(document.getElementById('m-asset-usage').value);
-    data.maintenanceIntervalDays = num(document.getElementById('m-asset-interval-days').value);
-    data.maintenanceIntervalUsage = num(document.getElementById('m-asset-interval-usage').value);
-    data.nextMaintenanceDate = document.getElementById('m-asset-nextdate').value || null;
-    data.nextMaintenanceUsage = num(document.getElementById('m-asset-nextusage').value);
+    data.maintenanceSchedules = Array.from(document.querySelectorAll('#m-asset-schedules-list [data-schedule-id]')).map(row=>{
+      const name = row.querySelector('.m-asset-sched-name').value.trim();
+      if(!name) return null;
+      return {
+        id: row.dataset.scheduleId,
+        name,
+        intervalDays: num(row.querySelector('.m-asset-sched-days').value),
+        intervalUsage: num(row.querySelector('.m-asset-sched-usage').value),
+        nextDueDate: row.querySelector('.m-asset-sched-nextdate').value || null,
+        nextDueUsage: num(row.querySelector('.m-asset-sched-nextusage').value)
+      };
+    }).filter(Boolean);
     data.specialRequirements = document.getElementById('m-asset-special-reqs').value.trim();
     data.insurancePolicy = document.getElementById('m-asset-insurance').value.trim();
     data.insuranceExpiry = document.getElementById('m-asset-insurance-exp').value || null;
@@ -6389,23 +6447,25 @@ function renderAssetDetail(){
 
     ${isMaintainable ? `
     <div class="section-title">Maintenance</div>
-    <div class="card">
-      <div class="small" style="color:var(--slate-light);margin-bottom:6px;">Repeating schedule</div>
-      <div style="font-weight:600;margin-bottom:10px;">
-        ${a.maintenanceIntervalDays!=null || a.maintenanceIntervalUsage!=null
-          ? [a.maintenanceIntervalDays!=null?`Every ${a.maintenanceIntervalDays} days`:null, a.maintenanceIntervalUsage!=null?`Every ${a.maintenanceIntervalUsage.toLocaleString()} ${a.usageLabel||defaultUsageLabel(a.category)}`:null].filter(Boolean).join(' or ')
-          : `<span style="color:var(--slate-light);font-weight:400;">No repeating schedule set — add one from Edit.</span>`}
-      </div>
-      <div class="grid cols-3">
-        <div><div class="small" style="color:var(--slate-light);">${a.usageLabel||defaultUsageLabel(a.category)} (current)</div><div>${a.currentUsage!=null?a.currentUsage.toLocaleString():'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Currently due (date)</div><div style="${due==='date'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceDate?fmtDate(a.nextMaintenanceDate):'—'}</div></div>
-        <div><div class="small" style="color:var(--slate-light);">Currently due (${a.usageLabel||defaultUsageLabel(a.category)})</div><div style="${due==='usage'?'color:var(--rust);font-weight:600;':''}">${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage.toLocaleString():'—'}</div></div>
-      </div>
-      <div class="mt-2">${due? `<span class="pill rust">Overdue</span>` : `<span class="pill jade">On track</span>`}</div>
-      ${a.specialRequirements? `<div class="mt-2" style="background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;">
-        <strong>⚠ Special requirements:</strong> ${escHtml(a.specialRequirements)}
-      </div>`:''}
-    </div>
+    ${(a.maintenanceSchedules||[]).length? (a.maintenanceSchedules||[]).map(s=>{
+      const isOverdue = due && due.includes(s.name);
+      return `<div class="card mt-2" ${isOverdue?'style="background:var(--rust-tint);border-color:#E7C1B4;"':''}>
+        <div class="flex" style="justify-content:space-between;align-items:center;">
+          <strong>${escHtml(s.name)}</strong>
+          ${isOverdue?`<span class="pill rust">Overdue</span>`:`<span class="pill jade">On track</span>`}
+        </div>
+        <div class="small mt-1" style="color:var(--slate-light);">
+          Repeats ${[s.intervalDays!=null?`every ${s.intervalDays} days`:null, s.intervalUsage!=null?`every ${s.intervalUsage.toLocaleString()} ${a.usageLabel||defaultUsageLabel(a.category)}`:null].filter(Boolean).join(' or ') || '— no interval set'}
+        </div>
+        <div class="grid cols-2 mt-2">
+          <div><div class="small" style="color:var(--slate-light);">Next due — date</div><div style="${s.nextDueDate && s.nextDueDate<=new Date().toISOString().slice(0,10)?'color:var(--rust);font-weight:600;':''}">${s.nextDueDate?fmtDate(s.nextDueDate):'—'}</div></div>
+          <div><div class="small" style="color:var(--slate-light);">Next due — ${a.usageLabel||defaultUsageLabel(a.category)}</div><div style="${s.nextDueUsage!=null && a.currentUsage!=null && a.currentUsage>=s.nextDueUsage?'color:var(--rust);font-weight:600;':''}">${s.nextDueUsage!=null?s.nextDueUsage.toLocaleString():'—'}</div></div>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty-inline">No maintenance schedules set yet — add one from Edit (e.g. Oil Change every 5,000 miles).</div>`}
+    ${a.specialRequirements? `<div class="mt-2" style="background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;">
+      <strong>⚠ Special requirements:</strong> ${escHtml(a.specialRequirements)}
+    </div>`:''}
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
     </div>
@@ -6610,7 +6670,7 @@ function openLogMaintenanceModal(assetId){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log service on it'); return; }
   const label = a.usageLabel || defaultUsageLabel(a.category);
-  const hasInterval = a.maintenanceIntervalDays!=null || a.maintenanceIntervalUsage!=null;
+  const schedules = a.maintenanceSchedules||[];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -6618,31 +6678,64 @@ function openLogMaintenanceModal(assetId){
         <div class="modal-body">
           ${a.specialRequirements? `<div class="mt-1" style="margin-bottom:12px;background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;"><strong>⚠ Before you start:</strong> ${escHtml(a.specialRequirements)}</div>`:''}
           <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
-          <label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">
+          ${schedules.length? `
+          <label>Which maintenance item is this?</label>
+          <select id="m-maint-schedule" onchange="onMaintScheduleChange('${assetId}')">
+            <option value="">— Something else (no schedule) —</option>
+            ${schedules.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('')}
+          </select>
+          <label class="mt-2">Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection">
+          ` : `<label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">`}
           <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
+          <div id="m-maint-preview" class="small mt-1" style="color:var(--jade);display:none;"></div>
           <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" placeholder="e.g. 85">
           <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor">
           <label>Anything unusual about this service? <span class="small" style="font-weight:400;">(optional — found an issue, used a non-standard part, needs follow-up)</span></label>
           <textarea id="m-maint-notes" placeholder="e.g. Noticed minor rust on the frame, worth checking again next service."></textarea>
-          ${hasInterval? `<div class="small mt-1" style="margin-bottom:6px;">Next due date/reading below is calculated from this item's repeating schedule — adjust if reality's different.</div>`:`<div class="small mt-1" style="margin-bottom:6px;">No repeating schedule is set for this item yet — set one on its Edit page and this will fill in automatically next time.</div>`}
-          <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${hasInterval && a.maintenanceIntervalDays!=null ? addDays(new Date().toISOString().slice(0,10), a.maintenanceIntervalDays) : (a.nextMaintenanceDate||'')}">
-          <label>Next service due — ${label}</label><input type="text" id="m-maint-nextusage" value="${hasInterval && a.maintenanceIntervalUsage!=null && a.currentUsage!=null ? (a.currentUsage + a.maintenanceIntervalUsage) : (a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:'')}">
+          <div id="m-maint-nextdue-wrap" style="display:${schedules.length?'none':'block'};">
+            <div class="small mt-1" style="margin-bottom:6px;">No schedule selected — enter the next due point manually if you want a reminder.</div>
+            <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${a.nextMaintenanceDate||''}">
+            <label>Next service due — ${label}</label><input type="text" id="m-maint-nextusage" value="${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}">
+          </div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="logMaintenance('${assetId}',this)">Log It</button></div>
       </div>
     </div>`);
 }
+function onMaintScheduleChange(assetId){
+  const a = byId(state.companyAssets, assetId);
+  const schedSelect = document.getElementById('m-maint-schedule');
+  const scheduleId = schedSelect.value;
+  const schedule = scheduleId ? byId(a.maintenanceSchedules, scheduleId) : null;
+  const wrap = document.getElementById('m-maint-nextdue-wrap');
+  const typeInput = document.getElementById('m-maint-type');
+  if(schedule){
+    wrap.style.display = 'none';
+    if(!typeInput.value.trim()) typeInput.value = schedule.name;
+  } else {
+    wrap.style.display = 'block';
+  }
+  recalcNextMaintenance(assetId);
+}
 function recalcNextMaintenance(assetId){
   const a = byId(state.companyAssets, assetId);
+  const schedSelect = document.getElementById('m-maint-schedule');
+  const scheduleId = schedSelect ? schedSelect.value : '';
+  const preview = document.getElementById('m-maint-preview');
+  if(!scheduleId){ if(preview) preview.style.display='none'; return; }
+  const schedule = byId(a.maintenanceSchedules, scheduleId);
+  if(!schedule){ if(preview) preview.style.display='none'; return; }
   const dateInput = document.getElementById('m-maint-date');
   const usageInput = document.getElementById('m-maint-usage');
-  const nextDateInput = document.getElementById('m-maint-nextdate');
-  const nextUsageInput = document.getElementById('m-maint-nextusage');
-  if(a.maintenanceIntervalDays!=null && dateInput.value){
-    nextDateInput.value = addDays(dateInput.value, a.maintenanceIntervalDays);
+  const bits = [];
+  if(schedule.intervalDays!=null && dateInput.value) bits.push('due '+fmtDate(addDays(dateInput.value, schedule.intervalDays)));
+  if(schedule.intervalUsage!=null && usageInput.value.trim()!==''){
+    const label = a.usageLabel||defaultUsageLabel(a.category);
+    bits.push('due at '+(parseFloat(usageInput.value)+schedule.intervalUsage).toLocaleString()+' '+label);
   }
-  if(a.maintenanceIntervalUsage!=null && usageInput.value.trim()!==''){
-    nextUsageInput.value = parseFloat(usageInput.value) + a.maintenanceIntervalUsage;
+  if(preview){
+    if(bits.length){ preview.textContent = `✓ Next ${schedule.name} will automatically be set: ${bits.join(', ')}`; preview.style.display='block'; }
+    else preview.style.display='none';
   }
 }
 function logMaintenance(assetId, el){
@@ -6652,17 +6745,35 @@ function logMaintenance(assetId, el){
   if(!serviceType){ toast('Service type is required'); return; }
   const usage = document.getElementById('m-maint-usage').value.trim();
   const cost = document.getElementById('m-maint-cost').value.trim();
+  const schedSelect = document.getElementById('m-maint-schedule');
+  const scheduleId = schedSelect ? schedSelect.value : '';
   state.maintenanceLog.push({
     id:'vm'+Date.now(), assetId, date: document.getElementById('m-maint-date').value,
     serviceType, usage: usage?parseFloat(usage):null, cost: cost?parseFloat(cost):null,
     vendor: document.getElementById('m-maint-vendor').value.trim(),
     notes: document.getElementById('m-maint-notes').value.trim(),
+    scheduleId: scheduleId || null,
     loggedBy: currentUser().id
   });
   if(usage) a.currentUsage = parseFloat(usage);
-  a.nextMaintenanceDate = document.getElementById('m-maint-nextdate').value || null;
-  const nextUsage = document.getElementById('m-maint-nextusage').value.trim();
-  a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
+  if(scheduleId){
+    // A specific schedule was serviced — recalculate ONLY that schedule's next-due, based on the
+    // reading/date just entered, so Oil Change and Fluid Change never affect each other.
+    const schedule = byId(a.maintenanceSchedules, scheduleId);
+    const date = document.getElementById('m-maint-date').value;
+    if(schedule){
+      if(schedule.intervalDays!=null && date) schedule.nextDueDate = addDays(date, schedule.intervalDays);
+      if(schedule.intervalUsage!=null && usage) schedule.nextDueUsage = parseFloat(usage) + schedule.intervalUsage;
+    }
+  } else {
+    const nextDateEl = document.getElementById('m-maint-nextdate');
+    const nextUsageEl = document.getElementById('m-maint-nextusage');
+    if(nextDateEl) a.nextMaintenanceDate = nextDateEl.value || null;
+    if(nextUsageEl){
+      const nextUsage = nextUsageEl.value.trim();
+      a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
+    }
+  }
   if(a.category==='Vehicle') pushPublicVehicleInfo(assetId, true);
   saveState(); closeModal(el); toast('Logged'); render();
 }
@@ -7135,10 +7246,12 @@ function renderPersonEquipmentSection(personId){
         let maintCell = '—';
         if(isMaintainable){
           const label = a.usageLabel||defaultUsageLabel(a.category);
-          const parts = [];
-          if(a.nextMaintenanceDate) parts.push('Due '+fmtDate(a.nextMaintenanceDate));
-          if(a.nextMaintenanceUsage!=null) parts.push('at '+a.nextMaintenanceUsage.toLocaleString()+' '+label);
-          maintCell = due ? `<span class="pill rust">Overdue${parts.length?' — '+parts.join(', '):''}</span>` : (parts.length? parts.join(', ') : 'No schedule set');
+          const schedules = a.maintenanceSchedules||[];
+          const parts = schedules.map(s=>{
+            const bits = [s.nextDueDate?fmtDate(s.nextDueDate):null, s.nextDueUsage!=null?'at '+s.nextDueUsage.toLocaleString()+' '+label:null].filter(Boolean).join(', ');
+            return bits ? `${s.name} (${bits})` : null;
+          }).filter(Boolean);
+          maintCell = due ? `<span class="pill rust">Overdue${parts.length?' — '+parts.join('; '):''}</span>` : (parts.length? parts.join('; ') : 'No schedule set');
         }
         return `<tr class="row-click" onclick="navigate('assetDetail',{id:'${a.id}'})">
         <td><strong>${a.name}</strong>${a.assetTag?` <span class="small" style="color:var(--slate-light);">#${a.assetTag}</span>`:''}</td>
@@ -11889,6 +12002,13 @@ async function pushPublicVehicleInfo(assetId, silent){
   const a = byId(state.companyAssets, assetId);
   if(!a || a.category!=='Vehicle') return {ok:false, reason:'Not a vehicle.'};
   const lastService = state.maintenanceLog.filter(m=>m.assetId===assetId).sort((x,y)=>new Date(y.date)-new Date(x.date))[0];
+  const schedules = a.maintenanceSchedules||[];
+  const earliestBydate = [...schedules].filter(s=>s.nextDueDate).sort((x,y)=>x.nextDueDate.localeCompare(y.nextDueDate))[0];
+  const earliestByUsage = [...schedules].filter(s=>s.nextDueUsage!=null).sort((x,y)=>x.nextDueUsage-y.nextDueUsage)[0];
+  const maintenanceSummary = schedules.map(s=>{
+    const bits = [s.nextDueDate?fmtDate(s.nextDueDate):null, s.nextDueUsage!=null?s.nextDueUsage.toLocaleString()+' '+(a.usageLabel||'mi'):null].filter(Boolean).join(' / ');
+    return bits ? `${s.name}: ${bits}` : null;
+  }).filter(Boolean).join('; ');
   try{
     const { error } = await supabaseClient
       .from('public_vehicle_info')
@@ -11905,8 +12025,9 @@ async function pushPublicVehicleInfo(assetId, silent){
         insurance_policy: a.insurancePolicy || null,
         insurance_expiry: a.insuranceExpiry || null,
         insurance_doc_url: a.insuranceDocUrl || null,
-        next_maintenance_date: a.nextMaintenanceDate || null,
-        next_maintenance_usage: a.nextMaintenanceUsage || null,
+        next_maintenance_date: earliestBydate?.nextDueDate || null,
+        next_maintenance_usage: earliestByUsage?.nextDueUsage || null,
+        maintenance_summary: maintenanceSummary || null,
         current_usage: a.currentUsage || null,
         usage_label: a.usageLabel || null,
         special_requirements: a.specialRequirements || null,
@@ -12635,7 +12756,7 @@ async function renderPublicVehiclePage(assetId){
       <div style="background:#fff;border:1px solid #E5E2DE;border-radius:11px;padding:20px;margin-bottom:14px;">
         <div style="font-weight:700;margin-bottom:10px;">Maintenance</div>
         <div style="color:#5B6472;font-size:13px;">Last service</div><div style="margin-bottom:8px;">${data.last_service_type?data.last_service_type+' — '+fmt(data.last_service_date):'No service logged yet'}</div>
-        <div style="color:#5B6472;font-size:13px;">Next due</div><div>${data.next_maintenance_date?fmt(data.next_maintenance_date):'—'}${data.next_maintenance_usage?` / ${data.next_maintenance_usage.toLocaleString()} ${data.usage_label||''}`:''}</div>
+        <div style="color:#5B6472;font-size:13px;">Next due</div><div>${data.maintenance_summary || (data.next_maintenance_date?fmt(data.next_maintenance_date):'—')+(data.next_maintenance_usage?` / ${data.next_maintenance_usage.toLocaleString()} ${data.usage_label||''}`:'')}</div>
       </div>
       ${data.special_requirements?`<div style="background:#F7EFD9;border-radius:11px;padding:16px 20px;margin-bottom:14px;"><div style="font-weight:700;margin-bottom:4px;">⚠ Special Requirements</div><div style="font-size:14px;">${data.special_requirements}</div></div>`:''}
       ${data.vin?`<div style="text-align:center;color:#8A8F98;font-size:12px;margin-top:20px;">VIN: ${data.vin}</div>`:''}
