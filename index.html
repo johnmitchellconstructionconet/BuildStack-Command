@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Montserrat:wght@300;400;500;600&family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Montserrat:wght@300;400;500;600&family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Caveat:wght@500;600&family=Dancing+Script:wght@600;700&family=Sacramento&family=Great+Vibes&display=swap" rel="stylesheet">
 <style>
 :root{
   --nav-bg-1:#15171C;
@@ -10727,6 +10727,12 @@ function handleBuilderCanvasClick(e){
   const yPct = ((e.clientY - rect.top) / rect.height) * 100;
   openFieldConfigModal(xPct, yPct);
 }
+const SIGNATURE_STYLES = {
+  caveat: {label:'Style 1', fontFamily:"'Caveat',cursive"},
+  dancing: {label:'Style 2', fontFamily:"'Dancing Script',cursive"},
+  sacramento: {label:'Style 3', fontFamily:"'Sacramento',cursive"},
+  greatvibes: {label:'Style 4', fontFamily:"'Great Vibes',cursive"}
+};
 const FORM_FIELD_TYPES = {
   text: {label:'Text', icon:'📝', inputType:'text'},
   name: {label:'Name', icon:'👤', inputType:'text'},
@@ -10864,15 +10870,41 @@ function fieldOverlayHtml(form, mode, submissionValues, page){
           <img class="fb-photo-preview" style="display:none;max-width:100%;max-height:80px;margin-top:4px;border-radius:4px;">
         </div>`;
       }
+      if(f.type==='signature'){
+        const defaultStyle = 'caveat';
+        return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
+          <input type="text" class="fb-fill-input fb-sig-text" data-field="${f.id}" data-fieldtype="signature" data-sigstyle="${defaultStyle}" placeholder="Type your full name" oninput="updateFbSignaturePreview(this)" style="font-family:${SIGNATURE_STYLES[defaultStyle].fontFamily};font-size:20px;">
+          <select class="fb-sig-style-picker" style="font-size:10px;margin-top:2px;padding:1px;" onchange="onFbSignatureStyleChange(this)">
+            ${Object.keys(SIGNATURE_STYLES).map(k=>`<option value="${k}" ${k===defaultStyle?'selected':''} style="font-family:${SIGNATURE_STYLES[k].fontFamily};">${SIGNATURE_STYLES[k].label}</option>`).join('')}
+          </select>
+        </div>`;
+      }
       return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">
-        <input type="${meta.inputType}" class="fb-fill-input" data-field="${f.id}" data-fieldtype="${f.type}" placeholder="${escAttr(f.label)}" style="${f.type==='signature'?'font-family:cursive;font-size:15px;':f.type==='initials'?'font-family:cursive;font-size:14px;':''}">
+        <input type="${meta.inputType}" class="fb-fill-input" data-field="${f.id}" data-fieldtype="${f.type}" placeholder="${escAttr(f.label)}" style="${f.type==='initials'?'font-family:cursive;font-size:14px;':''}">
       </div>`;
     }
     const val = (submissionValues&&submissionValues[f.id]);
     if(f.type==='checkbox') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${val?'☑':'☐'}</div></div>`;
     if(f.type==='photo') return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;">${val?`<img src="${escAttr(val)}" style="max-width:100%;max-height:100px;border-radius:4px;cursor:pointer;" onclick="window.open('${escJs(val)}','_blank')">`:`<div class="fb-fill-readonly">—</div>`}</div>`;
+    if(f.type==='signature'){
+      // Backward compatible: old submissions stored a plain string; new ones store {text, styleKey}
+      const isObj = val && typeof val==='object';
+      const sigText = isObj ? val.text : (val||'');
+      const sigFont = isObj && SIGNATURE_STYLES[val.styleKey] ? SIGNATURE_STYLES[val.styleKey].fontFamily : "'Caveat',cursive";
+      return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly" style="font-family:${sigFont};font-size:20px;">${escHtml(sigText)}</div></div>`;
+    }
     return `<div class="fb-field-input-wrap" style="left:${f.xPct}%;top:${f.yPct}%;width:${f.widthPct}%;"><div class="fb-fill-readonly">${escHtml(val||'')}</div></div>`;
   }).join('');
+}
+function updateFbSignaturePreview(input){
+  const styleKey = input.dataset.sigstyle;
+  input.style.fontFamily = SIGNATURE_STYLES[styleKey].fontFamily;
+}
+function onFbSignatureStyleChange(select){
+  const wrap = select.closest('.fb-field-input-wrap');
+  const textInput = wrap.querySelector('.fb-sig-text');
+  textInput.dataset.sigstyle = select.value;
+  textInput.style.fontFamily = SIGNATURE_STYLES[select.value].fontFamily;
 }
 function previewFbPhotoField(input){
   const preview = input.parentElement.querySelector('.fb-photo-preview');
@@ -10917,6 +10949,10 @@ async function submitFilledForm(formId, personId, el){
       if(!file){ allFilled = false; continue; }
       try{ values[input.dataset.field] = await uploadPhotoToStorage(file, 'form-submissions'); }
       catch(e){ toast('Photo upload failed: '+(e.message||'unknown error')); return; }
+    } else if(input.dataset.fieldtype==='signature'){
+      const text = input.value.trim();
+      if(!text) allFilled = false;
+      values[input.dataset.field] = { text, styleKey: input.dataset.sigstyle };
     } else {
       values[input.dataset.field] = input.value.trim();
       if(!input.value.trim()) allFilled = false;
