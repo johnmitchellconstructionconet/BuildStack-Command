@@ -1632,9 +1632,15 @@ function isSafeToBackgroundSync(){
 async function backgroundSync(){
   if(!supabaseClient || !state.currentUserId) return;
   if(!isSafeToBackgroundSync()) return;
+  const fetchStartedAt = Date.now();
   try{
     const { data, error } = await supabaseClient.from('app_state').select('data,updated_at').eq('id','main').maybeSingle();
     if(error || !data || !data.data) return;
+    // Re-check: if a local edit happened WHILE this fetch was in flight, the data we just got back
+    // predates that edit and must never be applied — otherwise we'd silently overwrite a fresh
+    // change with a stale snapshot fetched before it existed.
+    if(lastLocalChangeAt >= fetchStartedAt) return;
+    if(!isSafeToBackgroundSync()) return;
     const remoteJson = JSON.stringify(data.data);
     if(remoteJson === JSON.stringify(state)) { lastSyncedAt = new Date(); updateSyncIndicator(); return; }
     const myId = state.currentUserId;
