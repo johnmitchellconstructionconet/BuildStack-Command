@@ -681,7 +681,8 @@ async function pullStateFromSupabase(){
       console.error('Company data was retrieved successfully, but migrateState() threw while processing it — this is a code bug, not a connection problem:', e);
       return 'error';
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ console.error('Local cache write failed (likely storage quota) — continuing anyway since the real data already loaded into memory:', e); }
     return 'loaded';
   }
   return 'empty';
@@ -930,7 +931,8 @@ function loadState(){
     } catch(e){}
   }
   const seeded = backfillPrimaryLocations(seedData());
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded)); }
+  catch(e){ console.error('Local cache write failed (likely storage quota):', e); }
   return seeded;
 }
 function migrateState(parsed){
@@ -1633,7 +1635,7 @@ async function backgroundSync(){
     const myViewAs = viewAsPersonId;
     state = migrateState(data.data);
     state.currentUserId = myId;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){ console.error('Local cache write failed (likely storage quota):', e); }
     lastSyncedAt = new Date();
     viewAsPersonId = myViewAs;
     render();
@@ -2874,7 +2876,7 @@ function deleteBoardReply(postId, replyId){
 let workMode = localStorage.getItem('buildstack_workmode') || 'mine';
 function setWorkMode(mode){
   workMode = mode;
-  localStorage.setItem('buildstack_workmode', mode);
+  try{ localStorage.setItem('buildstack_workmode', mode); }catch(e){}
   navHistory = []; currentView = null;
   refreshSidebarChrome();
   navigate('dashboard');
@@ -7827,9 +7829,9 @@ async function getVideoPlayableUrl(video){
 const AI_KEY_STORAGE = 'buildstack_anthropic_key';
 const OPENAI_KEY_STORAGE = 'buildstack_openai_key';
 function getAiKey(){ return localStorage.getItem(AI_KEY_STORAGE) || ''; }
-function setAiKey(k){ localStorage.setItem(AI_KEY_STORAGE, k); }
+function setAiKey(k){ try{ localStorage.setItem(AI_KEY_STORAGE, k); }catch(e){} }
 function getOpenAiKey(){ return localStorage.getItem(OPENAI_KEY_STORAGE) || ''; }
-function setOpenAiKey(k){ localStorage.setItem(OPENAI_KEY_STORAGE, k); }
+function setOpenAiKey(k){ try{ localStorage.setItem(OPENAI_KEY_STORAGE, k); }catch(e){} }
 /* Single entry point every AI feature calls — routes to whichever provider is active in Company Settings. */
 async function callAI(systemPrompt, userPrompt, images){
   const provider = state.companySettings.aiProvider || 'claude';
