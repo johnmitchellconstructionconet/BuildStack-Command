@@ -6517,18 +6517,25 @@ function renderAssetDetail(){
     ${(a.flaggedServiceNotes||[]).filter(n=>!n.resolved).length? (a.flaggedServiceNotes||[]).filter(n=>!n.resolved).sort((x,y)=>new Date(y.flaggedDate)-new Date(x.flaggedDate)).map(n=>`
       <div class="card mt-2" style="background:var(--amber-tint);border-color:#E8D9B0;">
         <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-          <div>${escHtml(n.note)}<div class="small mt-1" style="color:var(--slate-light);">Flagged ${fmtDate(n.flaggedDate)}</div></div>
+          <div>${escHtml(n.note)}<div class="small mt-1" style="color:var(--slate-light);">Flagged ${fmtDate(n.flaggedDate)} by ${byId(state.people,n.addedBy)?.name||'—'}</div></div>
           ${canLogMaintenance?`<span class="miniBtn" onclick="resolveFlaggedService('${a.id}','${n.id}')" title="Mark resolved">✓</span>`:''}
         </div>
       </div>
     `).join('') : `<div class="empty-inline">Nothing flagged — if a shop mentions something else that needs attention, note it here so it doesn't get forgotten.</div>`}
+    ${(()=>{
+      const resolvedNotes = (a.flaggedServiceNotes||[]).filter(n=>n.resolved).sort((x,y)=>new Date(y.resolvedDate)-new Date(x.resolvedDate));
+      if(!resolvedNotes.length) return '';
+      return `<div class="small mt-2" style="color:var(--slate-light);">
+        ${resolvedNotes.map(n=>`✓ "${escHtml(n.note)}" — resolved ${fmtDate(n.resolvedDate)} by ${byId(state.people,n.resolvedBy)?.name||'—'}`).join('<br>')}
+      </div>`;
+    })()}
 
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
     </div>
     ${maintLog.length? `<div class="tbl-card"><table>
-      <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th><th></th></tr>
-      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${escHtml(m.serviceType)}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${escHtml(m.notes)}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${escHtml(m.vendor)||'—'}</td><td class="flex gap-1">${canLogMaintenance?`<span class="miniBtn" onclick="openLogMaintenanceModal('${a.id}','${m.id}')" title="Edit">✎</span><span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
+      <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th><th>Logged by</th><th></th></tr>
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${escHtml(m.serviceType)}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${escHtml(m.notes)}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${escHtml(m.vendor)||'—'}</td><td class="small">${byId(state.people,m.loggedBy)?.name||'—'}</td><td class="flex gap-1">${canLogMaintenance?`<span class="miniBtn" onclick="openLogMaintenanceModal('${a.id}','${m.id}')" title="Edit">✎</span><span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
@@ -6841,6 +6848,7 @@ function resolveFlaggedService(assetId, noteId, logId, silent){
     note.resolved = true;
     note.resolvedDate = new Date().toISOString().slice(0,10);
     note.resolvedByLogId = logId || null;
+    note.resolvedBy = currentUser().id;
   }
   if(!silent){ saveState(); toast('Marked resolved'); render(); }
 }
@@ -6896,7 +6904,7 @@ function saveMaintenanceLogEntry(assetId, entryId, el){
   const checkedNoteIds = new Set(Array.from(document.querySelectorAll('.m-maint-flag-check:checked')).map(cb=>cb.dataset.noteId));
   (a.flaggedServiceNotes||[]).forEach(n=>{
     if(checkedNoteIds.has(n.id)) resolveFlaggedService(assetId, n.id, logEntryId, true);
-    else if(n.resolvedByLogId===logEntryId){ n.resolved=false; n.resolvedDate=null; n.resolvedByLogId=null; }
+    else if(n.resolvedByLogId===logEntryId){ n.resolved=false; n.resolvedDate=null; n.resolvedByLogId=null; n.resolvedBy=null; }
   });
   if(usage) a.currentUsage = parseFloat(usage);
   if(scheduleId){
