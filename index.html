@@ -5738,11 +5738,11 @@ function renderRoleDetail(directRoleId){
     ${r.responsibilities && r.responsibilities.length? `<div class="card"><ul style="margin:0;padding-left:18px;">${r.responsibilities.map(x=>`<li>${x}</li>`).join('')}</ul></div>` : `<div class="empty-inline">No responsibilities listed yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Add some from Edit.</span>`:''}</div>`}
     ${r.kpis && r.kpis.length? `<div class="section-title">KPIs</div><div class="card"><ul style="margin:0;padding-left:18px;">${r.kpis.map(k=>`<li style="margin-bottom:6px;">${k}</li>`).join('')}</ul></div>`:''}
 
+    ${canEdit()? `
     <div class="section-title">Onboarding path for this role</div>
     ${(()=>{
       const linkedPath = state.onboardingPaths.find(p=>p.roleId===r.id);
-      if(linkedPath) return `<div class="card hover" onclick="navigate('onboardingPathEditor',{id:'${linkedPath.id}'})"><strong>${linkedPath.name}</strong><div class="small mt-1">${linkedPath.sections.length} section${linkedPath.sections.length!==1?'s':''}</div></div>${canEdit()?`<span class="small mt-1" style="cursor:pointer;text-decoration:underline;display:inline-block;" onclick="disconnectOnboardingPathFromRole('${r.id}','${linkedPath.id}')">Disconnect</span>`:''}`;
-      if(!canEdit()) return `<div class="empty-inline">No dedicated onboarding path for this role yet.</div>`;
+      if(linkedPath) return `<div class="card hover" onclick="navigate('onboardingPathEditor',{id:'${linkedPath.id}'})"><strong>${linkedPath.name}</strong><div class="small mt-1">${linkedPath.sections.length} section${linkedPath.sections.length!==1?'s':''}</div></div><span class="small mt-1" style="cursor:pointer;text-decoration:underline;display:inline-block;" onclick="disconnectOnboardingPathFromRole('${r.id}','${linkedPath.id}')">Disconnect</span>`;
       const availablePaths = state.onboardingPaths.filter(p=>!p.roleId);
       return `<div class="empty-inline">No dedicated onboarding path for this role yet.
         <span class="btn bronze sm" style="margin-left:8px;" onclick="newOnboardingPathModal('${r.id}')">+ Create One</span>
@@ -5754,51 +5754,9 @@ function renderRoleDetail(directRoleId){
     ${(()=>{
       const linkedTemplate = state.performanceReviewTemplates.find(t=>t.roleId===r.id);
       if(linkedTemplate) return `<div class="card hover" onclick="openReviewTemplateModal('${linkedTemplate.id}')"><strong>${linkedTemplate.name}</strong><div class="small mt-1">${linkedTemplate.criteria.length} evaluation criteri${linkedTemplate.criteria.length===1?'on':'a'}</div></div>`;
-      if(!canEdit()) return `<div class="empty-inline">Uses the general review template — no role-specific one set up yet.</div>`;
       return `<div class="empty-inline">Uses the general review template. <span class="btn bronze sm" style="margin-left:8px;" onclick="openReviewTemplateModal(null,'${r.id}')">+ Create Role-Specific One</span></div>`;
     })()}
-
-    ${(()=>{
-      const explicitRequired = new Set(r.requiredTopics);
-      const explicitReference = new Set(r.referenceTopics);
-      const tagMatched = state.topics.filter(t=>!explicitRequired.has(t.id) && !explicitReference.has(t.id) && ((t.tags||[]).includes(r.title) || t.appliesToAllRoles));
-      const totalCount = r.requiredTopics.length + r.referenceTopics.length + tagMatched.length;
-      return `
-      <div class="section-title">SOPs for this role<span class="count">${totalCount}</span>
-        ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="addReferenceTopicModal('${r.id}')">+ Add Reference SOP</span>`:''}
-      </div>
-      <div class="grid cols-2">
-        ${r.requiredTopics.map(tid=>{
-          const t = byId(state.topics, tid);
-          if(!t) return '';
-          return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
-            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-              <strong>${t.name}</strong><span class="pill jade">Required</span>
-            </div>
-            <div class="small mt-1">Auto-assigned to anyone in this role · training tracked</div>
-          </div>`;
-        }).join('')}
-        ${r.referenceTopics.map(tid=>{
-          const t = byId(state.topics, tid);
-          if(!t) return '';
-          return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
-            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-              <strong>${t.name}</strong><span class="pill gray">Reference</span>
-            </div>
-            <div class="small mt-1">Relevant to this role, not required or tracked</div>
-            ${canEdit()?`<span class="btn secondary sm mt-2" onclick="event.stopPropagation();removeReferenceTopic('${r.id}','${tid}')">Remove</span>`:''}
-          </div>`;
-        }).join('')}
-        ${tagMatched.map(t=>`<div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
-          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-            <strong>${t.name}</strong><span class="pill bronze">${t.appliesToAllRoles?'Applies to all':'Tagged to this role'}</span>
-          </div>
-          <div class="small mt-1">${t.appliesToAllRoles?'Applies to every role — set in the Knowledge Library':'Tagged to this role in the Knowledge Library'}</div>
-        </div>`).join('')}
-        ${!totalCount? `<div class="empty"><h3>No SOPs linked yet</h3><p>Link the processes this role actually uses, required or just for reference — or tag an SOP to this role from the Knowledge Library.</p></div>`:''}
-      </div>
-      `;
-    })()}
+    ` : ''}
 
     ${(()=>{
       const explicitPolicyIds = new Set(r.requiredPolicies);
