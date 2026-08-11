@@ -6191,7 +6191,7 @@ function renderCompanyAssets(){
             ${due?`<span class="pill rust">Service due</span>`:''}
           </div>
           <div class="small mt-1">${assetSubtitle(a)}</div>
-          <div class="mt-2">${assetStatusPill(a)}</div>
+          <div class="mt-2 flex gap-1" style="flex-wrap:wrap;">${assetStatusPill(a)}${(a.flaggedServiceNotes||[]).length?`<span class="pill amber">⚠ ${a.flaggedServiceNotes.length} flagged</span>`:''}</div>
         </div>`;
       }).join('')}
     </div>`}
@@ -6221,6 +6221,10 @@ function assetScheduleRow(s){
       <div><label class="small" style="font-weight:400;">Next due — date</label><input type="date" class="m-asset-sched-nextdate" value="${s?.nextDueDate||''}"></div>
       <div><label class="small" style="font-weight:400;">Next due — reading</label><input type="text" class="m-asset-sched-nextusage" value="${s?.nextDueUsage!=null?s.nextDueUsage:''}"></div>
     </div>
+    <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+      <input type="checkbox" class="m-asset-sched-override" style="width:auto;margin:0;" ${s?.manualOverride?'checked':''}>
+      Override — keep this fixed, don't recalculate it when service gets logged
+    </label>
   </div>`;
 }
 function autoCalcScheduleNextDue(input){
@@ -6382,7 +6386,8 @@ async function saveAsset(assetId, el){
         intervalDays: num(row.querySelector('.m-asset-sched-days').value),
         intervalUsage: num(row.querySelector('.m-asset-sched-usage').value),
         nextDueDate: row.querySelector('.m-asset-sched-nextdate').value || null,
-        nextDueUsage: num(row.querySelector('.m-asset-sched-nextusage').value)
+        nextDueUsage: num(row.querySelector('.m-asset-sched-nextusage').value),
+        manualOverride: row.querySelector('.m-asset-sched-override').checked
       };
     }).filter(Boolean);
     data.specialRequirements = document.getElementById('m-asset-special-reqs').value.trim();
@@ -6494,12 +6499,25 @@ function renderAssetDetail(){
     ${a.specialRequirements? `<div class="mt-2" style="background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;">
       <strong>⚠ Special requirements:</strong> ${escHtml(a.specialRequirements)}
     </div>`:''}
+
+    <div class="section-title">Upcoming service the shop flagged<span class="count">${(a.flaggedServiceNotes||[]).length}</span>
+      ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openFlagServiceModal('${a.id}')">+ Add</span>`:''}
+    </div>
+    ${(a.flaggedServiceNotes||[]).length? (a.flaggedServiceNotes||[]).slice().sort((x,y)=>new Date(y.flaggedDate)-new Date(x.flaggedDate)).map(n=>`
+      <div class="card mt-2" style="background:var(--amber-tint);border-color:#E8D9B0;">
+        <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+          <div>${escHtml(n.note)}<div class="small mt-1" style="color:var(--slate-light);">Flagged ${fmtDate(n.flaggedDate)}</div></div>
+          ${canLogMaintenance?`<span class="miniBtn" onclick="removeFlaggedService('${a.id}','${n.id}')" title="Resolved / remove">✕</span>`:''}
+        </div>
+      </div>
+    `).join('') : `<div class="empty-inline">Nothing flagged — if a shop mentions something else that needs attention, note it here so it doesn't get forgotten.</div>`}
+
     <div class="section-title">Maintenance log<span class="count">${maintLog.length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openLogMaintenanceModal('${a.id}')">+ Log Service</span>`:''}
     </div>
     ${maintLog.length? `<div class="tbl-card"><table>
       <tr><th>Date</th><th>Service</th><th>${a.usageLabel||defaultUsageLabel(a.category)}</th><th>Cost</th><th>Vendor</th><th></th></tr>
-      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${escHtml(m.serviceType)}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${escHtml(m.notes)}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${escHtml(m.vendor)||'—'}</td><td>${canLogMaintenance?`<span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
+      ${maintLog.map(m=>`<tr><td>${fmtDate(m.date)}</td><td>${escHtml(m.serviceType)}${m.notes?`<div class="small mt-1" style="color:var(--rust);">⚠ ${escHtml(m.notes)}</div>`:''}</td><td>${m.usage!=null?m.usage.toLocaleString():'—'}</td><td>${m.cost!=null?fmtMoney(m.cost):'—'}</td><td>${escHtml(m.vendor)||'—'}</td><td class="flex gap-1">${canLogMaintenance?`<span class="miniBtn" onclick="openLogMaintenanceModal('${a.id}','${m.id}')" title="Edit">✎</span><span class="miniBtn" onclick="deleteMaintenanceLogEntry('${m.id}','${a.id}')" title="Delete">✕</span>`:''}</td></tr>`).join('')}
     </table></div>` : `<div class="empty-inline">No service logged yet.</div>`}
     ` : ''}
 
@@ -6694,39 +6712,41 @@ function deleteAsset(assetId){
     saveState(); toast('Deleted'); navigate('companyAssets');
   });
 }
-function openLogMaintenanceModal(assetId){
+function openLogMaintenanceModal(assetId, entryId){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log service on it'); return; }
+  const entry = entryId ? byId(state.maintenanceLog, entryId) : null;
   const label = a.usageLabel || defaultUsageLabel(a.category);
   const schedules = a.maintenanceSchedules||[];
+  const noScheduleSelected = entry ? !entry.scheduleId : false;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
-        <div class="modal-head"><strong>Log Service — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-head"><strong>${entry?'Edit Service Entry':'Log Service'} — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
           ${a.specialRequirements? `<div class="mt-1" style="margin-bottom:12px;background:var(--amber-tint);border:1px solid #E8D9B0;border-radius:8px;padding:10px 12px;"><strong>⚠ Before you start:</strong> ${escHtml(a.specialRequirements)}</div>`:''}
-          <label>Date</label><input type="date" id="m-maint-date" value="${new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
+          <label>Date</label><input type="date" id="m-maint-date" value="${entry?entry.date:new Date().toISOString().slice(0,10)}" onchange="recalcNextMaintenance('${assetId}')">
           ${schedules.length? `
           <label>Which maintenance item is this?</label>
           <select id="m-maint-schedule" onchange="onMaintScheduleChange('${assetId}')">
             <option value="">— Something else (no schedule) —</option>
-            ${schedules.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('')}
+            ${schedules.map(s=>`<option value="${s.id}" ${entry?.scheduleId===s.id?'selected':''}>${escHtml(s.name)}</option>`).join('')}
           </select>
-          <label class="mt-2">Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection">
-          ` : `<label>Service type</label><input type="text" id="m-maint-type" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">`}
-          <label>${label} at service</label><input type="text" id="m-maint-usage" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
+          <label class="mt-2">Service type</label><input type="text" id="m-maint-type" value="${escAttr(entry?.serviceType)}" placeholder="e.g. Oil change, tire rotation, inspection">
+          ` : `<label>Service type</label><input type="text" id="m-maint-type" value="${escAttr(entry?.serviceType)}" placeholder="e.g. Oil change, tire rotation, inspection, filter replacement">`}
+          <label>${label} at service</label><input type="text" id="m-maint-usage" value="${entry?.usage!=null?entry.usage:''}" placeholder="Updates the current reading too" onchange="recalcNextMaintenance('${assetId}')">
           <div id="m-maint-preview" class="small mt-1" style="color:var(--jade);display:none;"></div>
-          <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" placeholder="e.g. 85">
-          <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor">
+          <label>Cost <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-cost" value="${entry?.cost!=null?entry.cost:''}" placeholder="e.g. 85">
+          <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor" value="${escAttr(entry?.vendor)}">
           <label>Anything unusual about this service? <span class="small" style="font-weight:400;">(optional — found an issue, used a non-standard part, needs follow-up)</span></label>
-          <textarea id="m-maint-notes" placeholder="e.g. Noticed minor rust on the frame, worth checking again next service."></textarea>
-          <div id="m-maint-nextdue-wrap" style="display:${schedules.length?'none':'block'};">
+          <textarea id="m-maint-notes" placeholder="e.g. Noticed minor rust on the frame, worth checking again next service.">${entry?.notes||''}</textarea>
+          <div id="m-maint-nextdue-wrap" style="display:${(schedules.length&&!noScheduleSelected)?'none':'block'};">
             <div class="small mt-1" style="margin-bottom:6px;">No schedule selected — enter the next due point manually if you want a reminder.</div>
             <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${a.nextMaintenanceDate||''}">
             <label>Next service due — ${label}</label><input type="text" id="m-maint-nextusage" value="${a.nextMaintenanceUsage!=null?a.nextMaintenanceUsage:''}">
           </div>
         </div>
-        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="logMaintenance('${assetId}',this)">Log It</button></div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveMaintenanceLogEntry('${assetId}','${entryId||''}',this)">${entry?'Save Changes':'Log It'}</button></div>
       </div>
     </div>`);
 }
@@ -6766,7 +6786,56 @@ function recalcNextMaintenance(assetId){
     else preview.style.display='none';
   }
 }
-function logMaintenance(assetId, el){
+function openFlagServiceModal(assetId){
+  if(!canEdit() && byId(state.companyAssets,assetId)?.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can add this'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Flag Upcoming Service</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>What did the shop say?</label>
+          <textarea id="m-flag-note" placeholder="e.g. Brake pads getting thin, shop recommends replacing within the next 3,000 miles"></textarea>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveFlaggedService('${assetId}',this)">Add</button></div>
+      </div>
+    </div>`);
+}
+function saveFlaggedService(assetId, el){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can add this'); return; }
+  const note = document.getElementById('m-flag-note').value.trim();
+  if(!note){ toast('Enter what the shop flagged'); return; }
+  a.flaggedServiceNotes = a.flaggedServiceNotes || [];
+  a.flaggedServiceNotes.push({id:'fsn'+Date.now(), note, flaggedDate:new Date().toISOString().slice(0,10), addedBy:currentUser().id});
+  saveState(); closeModal(el); toast('Added'); render();
+}
+function removeFlaggedService(assetId, noteId){
+  if(!canEdit() && byId(state.companyAssets,assetId)?.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can remove this'); return; }
+  const a = byId(state.companyAssets, assetId);
+  a.flaggedServiceNotes = (a.flaggedServiceNotes||[]).filter(n=>n.id!==noteId);
+  saveState(); toast('Removed'); render();
+}
+function recomputeScheduleNextDue(assetId, scheduleId){
+  if(!scheduleId) return;
+  const a = byId(state.companyAssets, assetId);
+  const schedule = a && byId(a.maintenanceSchedules, scheduleId);
+  if(!schedule || schedule.manualOverride) return; // manual overrides are never touched by this
+  const entriesForSchedule = state.maintenanceLog
+    .filter(m=>m.assetId===assetId && m.scheduleId===scheduleId)
+    .sort((x,y)=> new Date(y.date) - new Date(x.date));
+  const mostRecent = entriesForSchedule[0];
+  if(!mostRecent){
+    // No logged service remains for this schedule — nothing to derive from, so leave next-due as is
+    return;
+  }
+  if(schedule.intervalUsage!=null && mostRecent.usage!=null){
+    schedule.nextDueUsage = mostRecent.usage + schedule.intervalUsage;
+  }
+  if(schedule.intervalDays!=null && mostRecent.date){
+    schedule.nextDueDate = addDays(mostRecent.date, schedule.intervalDays);
+  }
+}
+function saveMaintenanceLogEntry(assetId, entryId, el){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can log service on it'); return; }
   const serviceType = document.getElementById('m-maint-type').value.trim();
@@ -6775,25 +6844,25 @@ function logMaintenance(assetId, el){
   const cost = document.getElementById('m-maint-cost').value.trim();
   const schedSelect = document.getElementById('m-maint-schedule');
   const scheduleId = schedSelect ? schedSelect.value : '';
-  state.maintenanceLog.push({
-    id:'vm'+Date.now(), assetId, date: document.getElementById('m-maint-date').value,
+  const existingEntry = entryId ? byId(state.maintenanceLog, entryId) : null;
+  const oldScheduleId = existingEntry ? existingEntry.scheduleId : null;
+  const entryData = {
+    assetId, date: document.getElementById('m-maint-date').value,
     serviceType, usage: usage?parseFloat(usage):null, cost: cost?parseFloat(cost):null,
     vendor: document.getElementById('m-maint-vendor').value.trim(),
     notes: document.getElementById('m-maint-notes').value.trim(),
     scheduleId: scheduleId || null,
     loggedBy: currentUser().id
-  });
+  };
+  if(existingEntry){
+    Object.assign(existingEntry, entryData);
+  } else {
+    state.maintenanceLog.push({id:'vm'+Date.now(), ...entryData});
+  }
   if(usage) a.currentUsage = parseFloat(usage);
   if(scheduleId){
-    // A specific schedule was serviced — recalculate ONLY that schedule's next-due, based on the
-    // reading/date just entered, so Oil Change and Fluid Change never affect each other.
-    const schedule = byId(a.maintenanceSchedules, scheduleId);
-    const date = document.getElementById('m-maint-date').value;
-    if(schedule){
-      if(schedule.intervalDays!=null && date) schedule.nextDueDate = addDays(date, schedule.intervalDays);
-      if(schedule.intervalUsage!=null && usage) schedule.nextDueUsage = parseFloat(usage) + schedule.intervalUsage;
-    }
-  } else {
+    recomputeScheduleNextDue(assetId, scheduleId);
+  } else if(!existingEntry) {
     const nextDateEl = document.getElementById('m-maint-nextdate');
     const nextUsageEl = document.getElementById('m-maint-nextusage');
     if(nextDateEl) a.nextMaintenanceDate = nextDateEl.value || null;
@@ -6802,14 +6871,20 @@ function logMaintenance(assetId, el){
       a.nextMaintenanceUsage = nextUsage ? parseFloat(nextUsage) : null;
     }
   }
+  // If editing changed which schedule this entry counts toward, the PREVIOUS schedule may have
+  // lost its most-recent entry (or gained a different one) — recompute it too so it's never stale.
+  if(oldScheduleId && oldScheduleId!==scheduleId) recomputeScheduleNextDue(assetId, oldScheduleId);
   if(a.category==='Vehicle') pushPublicVehicleInfo(assetId, true);
-  saveState(); closeModal(el); toast('Logged'); render();
+  saveState(); closeModal(el); toast(existingEntry?'Saved':'Logged'); render();
 }
 function deleteMaintenanceLogEntry(entryId, assetId){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can remove a service entry'); return; }
-  confirmAction('Delete this service entry? This does not undo any usage-reading update it made.', ()=>{
+  confirmAction('Delete this service entry? If it was the most recent for its maintenance item, the next-due point recalculates from whatever entry is now most recent.', ()=>{
+    const entry = byId(state.maintenanceLog, entryId);
+    const scheduleId = entry?.scheduleId;
     state.maintenanceLog = state.maintenanceLog.filter(m=>m.id!==entryId);
+    if(scheduleId) recomputeScheduleNextDue(assetId, scheduleId);
     saveState(); toast('Deleted'); render();
   });
 }
