@@ -5741,9 +5741,13 @@ function renderRoleDetail(directRoleId){
     <div class="section-title">Onboarding path for this role</div>
     ${(()=>{
       const linkedPath = state.onboardingPaths.find(p=>p.roleId===r.id);
-      if(linkedPath) return `<div class="card hover" onclick="navigate('onboardingPathEditor',{id:'${linkedPath.id}'})"><strong>${linkedPath.name}</strong><div class="small mt-1">${linkedPath.sections.length} section${linkedPath.sections.length!==1?'s':''}</div></div>`;
+      if(linkedPath) return `<div class="card hover" onclick="navigate('onboardingPathEditor',{id:'${linkedPath.id}'})"><strong>${linkedPath.name}</strong><div class="small mt-1">${linkedPath.sections.length} section${linkedPath.sections.length!==1?'s':''}</div></div>${canEdit()?`<span class="small mt-1" style="cursor:pointer;text-decoration:underline;display:inline-block;" onclick="disconnectOnboardingPathFromRole('${r.id}','${linkedPath.id}')">Disconnect</span>`:''}`;
       if(!canEdit()) return `<div class="empty-inline">No dedicated onboarding path for this role yet.</div>`;
-      return `<div class="empty-inline">No dedicated onboarding path for this role yet. <span class="btn bronze sm" style="margin-left:8px;" onclick="newOnboardingPathModal('${r.id}')">+ Create One</span></div>`;
+      const availablePaths = state.onboardingPaths.filter(p=>!p.roleId);
+      return `<div class="empty-inline">No dedicated onboarding path for this role yet.
+        <span class="btn bronze sm" style="margin-left:8px;" onclick="newOnboardingPathModal('${r.id}')">+ Create One</span>
+        ${availablePaths.length?`<span class="btn secondary sm" style="margin-left:6px;" onclick="openConnectPathModal('${r.id}')">🔗 Connect Existing</span>`:''}
+      </div>`;
     })()}
 
     <div class="section-title">Performance review template for this role</div>
@@ -5754,36 +5758,75 @@ function renderRoleDetail(directRoleId){
       return `<div class="empty-inline">Uses the general review template. <span class="btn bronze sm" style="margin-left:8px;" onclick="openReviewTemplateModal(null,'${r.id}')">+ Create Role-Specific One</span></div>`;
     })()}
 
-    <div class="section-title">SOPs for this role<span class="count">${r.requiredTopics.length + r.referenceTopics.length}</span>
-      ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="addReferenceTopicModal('${r.id}')">+ Add Reference SOP</span>`:''}
-    </div>
-    <div class="grid cols-2">
-      ${r.requiredTopics.map(tid=>{
-        const t = byId(state.topics, tid);
-        if(!t) return '';
-        return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
+    ${(()=>{
+      const explicitRequired = new Set(r.requiredTopics);
+      const explicitReference = new Set(r.referenceTopics);
+      const tagMatched = state.topics.filter(t=>!explicitRequired.has(t.id) && !explicitReference.has(t.id) && ((t.tags||[]).includes(r.title) || t.appliesToAllRoles));
+      const totalCount = r.requiredTopics.length + r.referenceTopics.length + tagMatched.length;
+      return `
+      <div class="section-title">SOPs for this role<span class="count">${totalCount}</span>
+        ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="addReferenceTopicModal('${r.id}')">+ Add Reference SOP</span>`:''}
+      </div>
+      <div class="grid cols-2">
+        ${r.requiredTopics.map(tid=>{
+          const t = byId(state.topics, tid);
+          if(!t) return '';
+          return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
+            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+              <strong>${t.name}</strong><span class="pill jade">Required</span>
+            </div>
+            <div class="small mt-1">Auto-assigned to anyone in this role · training tracked</div>
+          </div>`;
+        }).join('')}
+        ${r.referenceTopics.map(tid=>{
+          const t = byId(state.topics, tid);
+          if(!t) return '';
+          return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
+            <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+              <strong>${t.name}</strong><span class="pill gray">Reference</span>
+            </div>
+            <div class="small mt-1">Relevant to this role, not required or tracked</div>
+            ${canEdit()?`<span class="btn secondary sm mt-2" onclick="event.stopPropagation();removeReferenceTopic('${r.id}','${tid}')">Remove</span>`:''}
+          </div>`;
+        }).join('')}
+        ${tagMatched.map(t=>`<div class="card hover" onclick="navigate('topicDetail',{id:'${t.id}'})">
           <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-            <strong>${t.name}</strong><span class="pill jade">Required</span>
+            <strong>${t.name}</strong><span class="pill bronze">${t.appliesToAllRoles?'Applies to all':'Tagged to this role'}</span>
           </div>
-          <div class="small mt-1">Auto-assigned to anyone in this role · training tracked</div>
-        </div>`;
-      }).join('')}
-      ${r.referenceTopics.map(tid=>{
-        const t = byId(state.topics, tid);
-        if(!t) return '';
-        return `<div class="card hover" onclick="navigate('topicDetail',{id:'${tid}'})">
-          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-            <strong>${t.name}</strong><span class="pill gray">Reference</span>
-          </div>
-          <div class="small mt-1">Relevant to this role, not required or tracked</div>
-          ${canEdit()?`<span class="btn secondary sm mt-2" onclick="event.stopPropagation();removeReferenceTopic('${r.id}','${tid}')">Remove</span>`:''}
-        </div>`;
-      }).join('')}
-      ${!r.requiredTopics.length && !r.referenceTopics.length? `<div class="empty"><h3>No SOPs linked yet</h3><p>Link the processes this role actually uses, required or just for reference.</p></div>`:''}
-    </div>
+          <div class="small mt-1">${t.appliesToAllRoles?'Applies to every role — set in the Knowledge Library':'Tagged to this role in the Knowledge Library'}</div>
+        </div>`).join('')}
+        ${!totalCount? `<div class="empty"><h3>No SOPs linked yet</h3><p>Link the processes this role actually uses, required or just for reference — or tag an SOP to this role from the Knowledge Library.</p></div>`:''}
+      </div>
+      `;
+    })()}
 
-    <div class="section-title">Required policies</div>
-    ${r.requiredPolicies.length? `<div class="tbl-card"><table><tr><th>Policy</th></tr>${r.requiredPolicies.map(pid=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${pid}'})"><td>${byId(state.policies,pid)?.title}</td></tr>`).join('')}</table></div>` : `<div class="empty-inline">No policies required for this role yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Set some from Edit.</span>`:''}</div>`}
+    ${(()=>{
+      const explicitPolicyIds = new Set(r.requiredPolicies);
+      const tagMatchedPolicies = state.policies.filter(p=>!explicitPolicyIds.has(p.id) && ((p.tags||[]).includes(r.title) || p.appliesToAllRoles));
+      const totalPolicyCount = r.requiredPolicies.length + tagMatchedPolicies.length;
+      return `
+      <div class="section-title">Required policies<span class="count">${totalPolicyCount}</span></div>
+      ${totalPolicyCount? `<div class="tbl-card"><table><tr><th>Policy</th><th></th></tr>
+        ${r.requiredPolicies.map(pid=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${pid}'})"><td>${byId(state.policies,pid)?.title}</td><td></td></tr>`).join('')}
+        ${tagMatchedPolicies.map(p=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${p.id}'})"><td>${p.title}</td><td><span class="pill bronze">${p.appliesToAllRoles?'Applies to all':'Tagged to this role'}</span></td></tr>`).join('')}
+      </table></div>` : `<div class="empty-inline">No policies required for this role yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Set some from Edit</span>, or tag a policy to this role from Policies.`:''}</div>`}
+      `;
+    })()}
+    ${(()=>{
+      const docs = r.documents || [];
+      return `
+      <div class="section-title">Documents<span class="count">${docs.length}</span>
+        ${canEdit()?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openRoleDocumentModal('${r.id}')">+ Add Document</span>`:''}
+      </div>
+      ${docs.length? docs.map(d=>`<div class="card mt-2" style="padding:12px 14px;">
+        <div class="flex" style="justify-content:space-between;align-items:center;">
+          <a href="${escAttr(d.url)}" target="_blank" rel="noopener" style="text-decoration:underline;">📄 ${escHtml(d.name)}</a>
+          ${canEdit()?`<span class="miniBtn" onclick="removeRoleDocument('${r.id}','${d.id}')" title="Remove" style="color:var(--rust);">✕</span>`:''}
+        </div>
+      </div>`).join('') : `<div class="empty-inline">No documents uploaded yet — reference material specific to this role, for whoever holds it to pull up anytime.</div>`}
+      `;
+    })()}
+
     <div class="section-title">Seats on the org chart<span class="count">${seats.length}</span></div>
     ${seats.length? `<div class="tbl-card"><table>
       <tr><th>Seat</th><th>Department</th><th>Occupant</th></tr>
@@ -5879,6 +5922,45 @@ function saveRole(roleId, el){
   if(roleId){ Object.assign(byId(state.roles, roleId), data); }
   else { data.id='r'+Date.now(); data.reportsTo=null; data.referenceTopics=[]; state.roles.push(data); }
   saveState(); closeModal(el); toast('Saved'); render();
+}
+function openRoleDocumentModal(roleId){
+  if(!canEdit()) return;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Add Document</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>File</label>
+          <input type="file" id="m-roledoc-file">
+          <label class="mt-2">Label <span class="small" style="font-weight:400;">(optional — defaults to the file name)</span></label>
+          <input type="text" id="m-roledoc-label" placeholder="e.g. Estimating Software Quick Reference">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveRoleDocument('${roleId}',this)">Save</button></div>
+      </div>
+    </div>`);
+}
+async function saveRoleDocument(roleId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const fileInput = document.getElementById('m-roledoc-file');
+  if(!fileInput.files[0]){ toast('Choose a file first'); return; }
+  const label = document.getElementById('m-roledoc-label').value.trim();
+  try{
+    const url = await uploadPhotoToStorage(fileInput.files[0], 'role-documents');
+    const r = byId(state.roles, roleId);
+    r.documents = r.documents || [];
+    r.documents.push({id:'rdoc'+Date.now(), name: label || fileInput.files[0].name, url, addedBy: currentUser().id, addedAt: new Date().toISOString().slice(0,10)});
+    saveState(); closeModal(el); toast('Saved'); render();
+  }catch(e){
+    toast('Upload failed: '+(e.message||'unknown error'));
+  }
+}
+function removeRoleDocument(roleId, docId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Remove this document? This cannot be undone.', ()=>{
+    const r = byId(state.roles, roleId);
+    r.documents = (r.documents||[]).filter(d=>d.id!==docId);
+    saveState(); toast('Removed'); render();
+  });
 }
 function deleteRole(roleId){
   if(!canEdit()){ toast('Admins only'); return; }
@@ -9301,6 +9383,7 @@ function openTagEditor(topicId){
             ${state.roles.length? `<optgroup label="Roles — also links this SOP as a Reference for that role">
               ${state.roles.map(r=>`<option value="${escAttr(r.title)}">${r.title}</option>`).join('')}
             </optgroup>`:''}
+            <option value="__all_roles__">★ Applies to every role/employee</option>
             ${plainTags.length? `<optgroup label="Categories">
               ${plainTags.map(tag=>`<option value="${escAttr(tag)}">${tag}</option>`).join('')}
             </optgroup>`:''}
@@ -9319,6 +9402,11 @@ function doAddTag(topicId, modalEl){
   const selectEl = document.getElementById('m-tag-select');
   const selected = selectEl ? selectEl.value : '';
   const t = byId(state.topics, topicId);
+  if(selected==='__all_roles__'){
+    t.appliesToAllRoles = true;
+    saveState(); modalEl.remove(); toast('Now applies to every role — it\u2019ll show up on every role\u2019s page automatically'); render();
+    return;
+  }
   if(selected && selected.startsWith('phase:')){
     const phaseId = selected.slice(6);
     t.phaseIds = t.phaseIds || [];
@@ -9795,6 +9883,11 @@ function renderTaskRow(personId, t, locked){
     const submission = state.formSubmissions.find(s=>s.personId===personId && s.formId===t.refId);
     titleClick = submission ? `viewFormSubmission('${submission.id}')` : `openFillFormModal('${personId}','${t.refId}')`;
   }
+  else if(t.type==='role'){
+    const person = byId(state.people, personId);
+    const theirRoleId = person?.roleId;
+    if(theirRoleId) titleClick = `navigate('roleDetail',{id:'${theirRoleId}'})`;
+  }
   else if(t.type!=='external') titleClick = checkClick;
   const typeTag = {video:'📹 Video', template: '📄 Template', external:'🔗 External', bio:'✍️ Bio', form:'📝 Form', topic:'', policy:'', custom:''}[t.type] || '';
   const titleContent = `${typeTag?`<span class="small" style="font-weight:600;">${typeTag}</span> `:''}${t.title}`;
@@ -9897,6 +9990,38 @@ function renderOnboardingManage(){
       ${!state.onboardingPaths.length? `<div class="empty"><h3>No onboarding paths yet</h3><p>Create one to give new hires a structured, checkable ramp-up.</p></div>`:''}
     </div>
   `;
+}
+function openConnectPathModal(roleId){
+  if(!canEdit()) return;
+  const availablePaths = state.onboardingPaths.filter(p=>!p.roleId);
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>Connect an Existing Onboarding Path</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Path</label>
+          <select id="m-connect-path">${availablePaths.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
+          <div class="small mt-1">This path becomes dedicated to this role — it'll stop showing up as available to connect elsewhere.</div>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="connectPathToRole('${roleId}',this)">Connect</button></div>
+      </div>
+    </div>`);
+}
+function connectPathToRole(roleId, el){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const pathId = document.getElementById('m-connect-path').value;
+  const path = byId(state.onboardingPaths, pathId);
+  if(!path){ toast('Pick a path first'); return; }
+  path.roleId = roleId;
+  saveState(); closeModal(el); toast('Connected'); render();
+}
+function disconnectOnboardingPathFromRole(roleId, pathId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  confirmAction('Disconnect this onboarding path from this role? The path itself isn\u2019t deleted — it just won\u2019t be tied to this role anymore.', ()=>{
+    const path = byId(state.onboardingPaths, pathId);
+    if(path) path.roleId = null;
+    saveState(); toast('Disconnected'); render();
+  });
 }
 function newOnboardingPathModal(prefillRoleId){
   const role = prefillRoleId ? byId(state.roles, prefillRoleId) : null;
@@ -10012,7 +10137,8 @@ const OB_TASK_TYPE_META = {
   form: {label:'Form', icon:'🖊', pill:'amber'},
   external: {label:'External', icon:'🔗', pill:'gray'},
   custom: {label:'Custom', icon:'✅', pill:'gray'},
-  bio: {label:'Bio', icon:'🌤', pill:'gray'}
+  bio: {label:'Bio', icon:'🌤', pill:'gray'},
+  role: {label:'Review Role', icon:'🧭', pill:'jade'}
 };
 let obAddMenuOpenFor = null;
 function toggleObAddMenu(sectionId){
@@ -10061,6 +10187,7 @@ function renderSectionEditor(pathId, section, idx, total){
           <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','form')">🖊 Link Fillable Form</span>
           <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','external')">🔗 External Link / Course</span>
           <span class="btn secondary sm" style="justify-content:flex-start;" onclick="addTaskModal('${pathId}','${section.id}','custom')">✅ Custom Task</span>
+          <span class="btn secondary sm" style="justify-content:flex-start;" onclick="saveTaskToSection('${pathId}','${section.id}','role')">🧭 Review Your Role</span>
         </div>`:''}
       </div>
       <div class="ob-quiz-gate">
@@ -10337,13 +10464,18 @@ function saveTaskToSection(pathId, sectionId, type, el){
     const url = document.getElementById('m-task-url').value.trim();
     if(!title || !url){ toast('Title and link are both required'); return; }
     task = {id:'obt'+Date.now(), type:'external', title, url};
+  } else if(type==='role'){
+    task = {id:'obt'+Date.now(), type:'role', title:'Review your role'};
   } else {
     const title = document.getElementById('m-task-title').value.trim();
     if(!title){ toast('Title required'); return; }
     task = {id:'obt'+Date.now(), type:'custom', title, description:document.getElementById('m-task-desc').value.trim(), internal:document.getElementById('m-task-internal')?.checked||false};
   }
   section.tasks.push(task);
-  saveState(); closeModal(el); render();
+  saveState();
+  if(el) closeModal(el);
+  else obAddMenuOpenFor = null;
+  render();
 }
 function enrollPersonModal(pathId){
   openModal(`
