@@ -5759,18 +5759,6 @@ function renderRoleDetail(directRoleId){
     ` : ''}
 
     ${(()=>{
-      const explicitPolicyIds = new Set(r.requiredPolicies);
-      const tagMatchedPolicies = state.policies.filter(p=>!explicitPolicyIds.has(p.id) && ((p.tags||[]).includes(r.title) || p.appliesToAllRoles));
-      const totalPolicyCount = r.requiredPolicies.length + tagMatchedPolicies.length;
-      return `
-      <div class="section-title">Required policies<span class="count">${totalPolicyCount}</span></div>
-      ${totalPolicyCount? `<div class="tbl-card"><table><tr><th>Policy</th><th></th></tr>
-        ${r.requiredPolicies.map(pid=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${pid}'})"><td>${byId(state.policies,pid)?.title}</td><td></td></tr>`).join('')}
-        ${tagMatchedPolicies.map(p=>`<tr class="row-click" onclick="navigate('policyDetail',{id:'${p.id}'})"><td>${p.title}</td><td><span class="pill bronze">${p.appliesToAllRoles?'Applies to all':'Tagged to this role'}</span></td></tr>`).join('')}
-      </table></div>` : `<div class="empty-inline">No policies required for this role yet.${canEdit()?` <span onclick="openRoleModal('${r.id}')" style="text-decoration:underline;cursor:pointer;">Set some from Edit</span>, or tag a policy to this role from Policies.`:''}</div>`}
-      `;
-    })()}
-    ${(()=>{
       const docs = r.documents || [];
       return `
       <div class="section-title">Documents<span class="count">${docs.length}</span>
