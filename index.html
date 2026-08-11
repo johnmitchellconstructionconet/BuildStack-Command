@@ -7346,7 +7346,7 @@ function renderGearSection(personId, canManage){
     ${allClaims.length? `<div class="tbl-card"><table>
       <tr><th>Item</th><th>Year</th><th>Amount</th><th>Requested</th><th>Status</th><th>Payment</th><th></th></tr>
       ${allClaims.map(c=>`<tr>
-        <td>${escHtml(c.title)}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
+        <td>${escHtml(c.title)}${c.size?' <span class="pill gray">Size: '+escHtml(c.size)+'</span>':''}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
         <td>${c.year}</td>
         <td>${fmtMoney(c.amount)}</td>
         <td>${fmtDate(c.requestedDate)}</td>
@@ -7711,6 +7711,8 @@ function renderGearCatalog(){
                   <strong>${g.name}</strong><span class="pill bronze">${fmtMoney(g.price)}</span>
                 </div>
                 <div class="small mt-1">${g.description||''}</div>
+                ${g.sizeType && g.sizeType!=='none'?`<div class="small mt-1" style="color:var(--slate-light);">📏 Comes in sizes — you'll be asked which one</div>`:''}
+                ${g.quantityOnHand!=null && g.quantityOnHand>0?`<div class="small mt-1" style="color:var(--jade);">${g.quantityOnHand} in stock</div>`:`<div class="small mt-1" style="color:var(--slate-light);">Ordered when requested</div>`}
                 <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
                   <button class="btn secondary sm" onclick="requestCatalogItem('${g.id}','${requestingFor}')" ${g.price>stats.available?'disabled style="opacity:.5;"':''}>${g.price>stats.available?'Exceeds balance':'Request This'}</button>
                   ${canEdit()?`<button class="btn secondary sm" onclick="openGearItemModal('${g.id}')">Edit</button><button class="btn secondary sm" onclick="removeGearItem('${g.id}')">Remove</button>`:''}
@@ -7743,6 +7745,15 @@ function openGearItemModal(itemId){
           <datalist id="gc-cat-list">${[...new Set(state.gearCatalog.map(x=>x.category))].map(c=>`<option value="${c}">`).join('')}</datalist>
           <label>Description (optional)</label><textarea id="m-gc-desc">${g?.description||''}</textarea>
           <label>Price</label><input type="text" id="m-gc-price" value="${g?g.price:''}" placeholder="0.00">
+          <label class="mt-2">Quantity on hand <span class="small" style="font-weight:400;">(optional — just for your own reference; leave blank or 0 if you order these as they're requested)</span></label>
+          <input type="text" id="m-gc-qty" value="${g?.quantityOnHand!=null?g.quantityOnHand:''}" placeholder="e.g. 12">
+          <label class="mt-2">Sizing <span class="small" style="font-weight:400;">(if this item comes in sizes, the person requesting it will be asked to pick one)</span></label>
+          <select id="m-gc-sizetype">
+            <option value="none" ${(!g||g.sizeType==='none'||!g.sizeType)?'selected':''}>No sizing needed</option>
+            <option value="clothing" ${g?.sizeType==='clothing'?'selected':''}>Clothing sizes (XS–XXL)</option>
+            <option value="shoe" ${g?.sizeType==='shoe'?'selected':''}>Shoe sizes</option>
+            <option value="custom" ${g?.sizeType==='custom'?'selected':''}>Other (person types in their size)</option>
+          </select>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveGearItem('${itemId||''}',this)">Save</button></div>
       </div>
@@ -7758,7 +7769,9 @@ async function saveGearItem(itemId, el){
     category: document.getElementById('m-gc-cat').value.trim() || 'General',
     description: document.getElementById('m-gc-desc').value.trim(),
     price,
-    imageUrl: document.getElementById('m-gc-imageurl').value.trim()
+    imageUrl: document.getElementById('m-gc-imageurl').value.trim(),
+    sizeType: document.getElementById('m-gc-sizetype').value,
+    quantityOnHand: document.getElementById('m-gc-qty').value.trim()===''?null:parseInt(document.getElementById('m-gc-qty').value)
   };
   if(photo) data.image = photo;
   if(itemId){
@@ -7780,13 +7793,51 @@ function requestCatalogItem(itemId, personId){
   const item = byId(state.gearCatalog, itemId);
   const stats = gearYearStats(personId, currentGearYear());
   if(item.price > stats.available){ toast('This exceeds your available balance for the year'); return; }
+  if(item.sizeType && item.sizeType!=='none'){
+    openGearSizeModal(itemId, personId);
+    return;
+  }
+  submitGearRequest(itemId, personId, null);
+}
+function openGearSizeModal(itemId, personId){
+  const item = byId(state.gearCatalog, itemId);
+  const CLOTHING_SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
+  const SHOE_SIZES = Array.from({length:23}, (_,i)=>(4+i*0.5).toString().replace(/\.0$/,''));
+  let fieldHtml = '';
+  if(item.sizeType==='clothing'){
+    fieldHtml = `<label>Size</label><select id="m-gear-size">${CLOTHING_SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>`;
+  } else if(item.sizeType==='shoe'){
+    fieldHtml = `<label>Shoe size</label><select id="m-gear-size">${SHOE_SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>`;
+  } else {
+    fieldHtml = `<label>Size</label><input type="text" id="m-gear-size" placeholder="e.g. Large, 42mm, One Size">`;
+  }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:340px;">
+        <div class="modal-head"><strong>What size?</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="small mb-2">${escHtml(item.name)}</div>
+          ${fieldHtml}
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="submitGearRequest('${itemId}','${personId}',document.getElementById('m-gear-size').value,this)">Request This</button></div>
+      </div>
+    </div>`);
+}
+function submitGearRequest(itemId, personId, size, el){
+  if(personId!==currentUser().id && !canEdit()){ toast('You can only request items for yourself'); if(el) closeModal(el); return; }
+  const item = byId(state.gearCatalog, itemId);
+  const stats = gearYearStats(personId, currentGearYear());
+  if(item.price > stats.available){ toast('This exceeds your available balance for the year'); if(el) closeModal(el); return; }
+  if(item.sizeType && item.sizeType!=='none' && !size){ toast('Pick a size first'); return; }
   const id = 'gcl'+Date.now();
   state.gearClaims.push({
-    id, personId, type:'catalog', title:item.name, amount:item.price, catalogItemId:itemId,
+    id, personId, type:'catalog', title:item.name, amount:item.price, catalogItemId:itemId, size: size||null,
     status:'pending', requestedDate:new Date().toISOString().slice(0,10), year:currentGearYear()
   });
-  createNotification('gear_claim', `${byId(state.people,personId)?.name} requested "${item.name}" from the Gear Catalog (${fmtMoney(item.price)})`, {targetPermission:'gear', relatedType:'gearClaim', relatedId:id});
-  saveState(); toast('Requested — awaiting approval'); refreshNotifBadge(); navigate('personDetail',{id:personId});
+  createNotification('gear_claim', `${byId(state.people,personId)?.name} requested "${item.name}"${size?' (size: '+size+')':''} from the Gear Catalog (${fmtMoney(item.price)})`, {targetPermission:'gear', relatedType:'gearClaim', relatedId:id});
+  saveState(); toast('Requested — awaiting approval'); refreshNotifBadge();
+  if(el) closeModal(el);
+  navigate('personDetail',{id:personId});
 }
 
 /* ================= APPROVALS / REPORTS ================= */
@@ -7922,9 +7973,10 @@ function renderApprovals(){
       <tr><th>Person</th><th>Item</th><th>Amount</th><th>Requested</th><th></th></tr>
       ${pendingGear.map(c=>{
         const p = byId(state.people, c.personId);
+        const catalogItem = c.catalogItemId ? byId(state.gearCatalog, c.catalogItemId) : null;
         return `<tr>
           <td><strong>${p?.name||'—'}</strong></td>
-          <td>${escHtml(c.title)}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}</td>
+          <td>${escHtml(c.title)}${c.size?' <span class="pill bronze">Size: '+escHtml(c.size)+'</span>':''}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}${catalogItem?(catalogItem.quantityOnHand>0?` <span class="small" style="color:var(--jade);">(${catalogItem.quantityOnHand} in stock)</span>`:` <span class="small" style="color:var(--slate-light);">(will need to order)</span>`):''}</td>
           <td>${fmtMoney(c.amount)}</td>
           <td>${fmtDate(c.requestedDate)}</td>
           <td class="flex gap-2">
