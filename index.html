@@ -3018,7 +3018,7 @@ function renderEmployeeDashboard(){
   const nextReview = reviewsFor(u.id).find(r=>r.status==='scheduled');
   const gearStats = gearYearStats(u.id, currentGearYear());
   const myEquipmentDue = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && assetMaintenanceDue(a));
-  const myEquipmentFlagged = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && (a.flaggedServiceNotes||[]).length);
+  const myEquipmentFlagged = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && (a.flaggedServiceNotes||[]).some(n=>!n.resolved));
   const pendingOnboarding = pendingOnboardingTasksFor(u.id);
   const pendingForms = pendingOnboarding.filter(t=>t.type==='form');
   return `
@@ -3049,7 +3049,7 @@ function renderEmployeeDashboard(){
     ${myEquipmentFlagged.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;">
       <strong>🔧 A shop flagged something on equipment checked out to you:</strong>
       <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
-        ${myEquipmentFlagged.map(a=>`<span class="pill amber" style="cursor:pointer;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name} (${a.flaggedServiceNotes.length})</span>`).join('')}
+        ${myEquipmentFlagged.map(a=>`<span class="pill amber" style="cursor:pointer;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name} (${a.flaggedServiceNotes.filter(n=>!n.resolved).length})</span>`).join('')}
       </div>
     </div>`:''}
     ${nextReview? `<div class="card mt-2" style="background:var(--paper);"><div class="small">📅 Your next review: <strong>${reviewTypeLabel(nextReview.type)}</strong> on ${fmtDate(nextReview.scheduledDate)}${nextReview.reviewerPersonId?' with '+byId(state.people,nextReview.reviewerPersonId)?.name:''}</div></div>`:''}
@@ -3127,7 +3127,7 @@ function renderAdminDashboard(){
   const needsUpdateTopics = state.topics.filter(t=>t.needsUpdate);
   const team = state.people.filter(p=>p.status!=='offboarded');
   const overdueMaintenance = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
-  const flaggedService = state.companyAssets.filter(a=>a.status!=='retired' && (a.flaggedServiceNotes||[]).length);
+  const flaggedService = state.companyAssets.filter(a=>a.status!=='retired' && (a.flaggedServiceNotes||[]).some(n=>!n.resolved));
   const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
   return `
     <div class="page-head">
@@ -6202,7 +6202,7 @@ function renderCompanyAssets(){
             ${due?`<span class="pill rust">Service due</span>`:''}
           </div>
           <div class="small mt-1">${assetSubtitle(a)}</div>
-          <div class="mt-2 flex gap-1" style="flex-wrap:wrap;">${assetStatusPill(a)}${(a.flaggedServiceNotes||[]).length?`<span class="pill amber">⚠ ${a.flaggedServiceNotes.length} flagged</span>`:''}</div>
+          <div class="mt-2 flex gap-1" style="flex-wrap:wrap;">${assetStatusPill(a)}${(a.flaggedServiceNotes||[]).filter(n=>!n.resolved).length?`<span class="pill amber">⚠ ${(a.flaggedServiceNotes||[]).filter(n=>!n.resolved).length} flagged</span>`:''}</div>
         </div>`;
       }).join('')}
     </div>`}
@@ -6511,14 +6511,14 @@ function renderAssetDetail(){
       <strong>⚠ Special requirements:</strong> ${escHtml(a.specialRequirements)}
     </div>`:''}
 
-    <div class="section-title">Upcoming service the shop flagged<span class="count">${(a.flaggedServiceNotes||[]).length}</span>
+    <div class="section-title">Upcoming service the shop flagged<span class="count">${(a.flaggedServiceNotes||[]).filter(n=>!n.resolved).length}</span>
       ${canLogMaintenance?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openFlagServiceModal('${a.id}')">+ Add</span>`:''}
     </div>
-    ${(a.flaggedServiceNotes||[]).length? (a.flaggedServiceNotes||[]).slice().sort((x,y)=>new Date(y.flaggedDate)-new Date(x.flaggedDate)).map(n=>`
+    ${(a.flaggedServiceNotes||[]).filter(n=>!n.resolved).length? (a.flaggedServiceNotes||[]).filter(n=>!n.resolved).sort((x,y)=>new Date(y.flaggedDate)-new Date(x.flaggedDate)).map(n=>`
       <div class="card mt-2" style="background:var(--amber-tint);border-color:#E8D9B0;">
         <div class="flex" style="justify-content:space-between;align-items:flex-start;">
           <div>${escHtml(n.note)}<div class="small mt-1" style="color:var(--slate-light);">Flagged ${fmtDate(n.flaggedDate)}</div></div>
-          ${canLogMaintenance?`<span class="miniBtn" onclick="removeFlaggedService('${a.id}','${n.id}')" title="Resolved / remove">✕</span>`:''}
+          ${canLogMaintenance?`<span class="miniBtn" onclick="resolveFlaggedService('${a.id}','${n.id}')" title="Mark resolved">✓</span>`:''}
         </div>
       </div>
     `).join('') : `<div class="empty-inline">Nothing flagged — if a shop mentions something else that needs attention, note it here so it doesn't get forgotten.</div>`}
@@ -6751,6 +6751,19 @@ function openLogMaintenanceModal(assetId, entryId){
           <label>Vendor/shop <span class="small" style="font-weight:400;">(optional)</span></label><input type="text" id="m-maint-vendor" value="${escAttr(entry?.vendor)}">
           <label>Anything unusual about this service? <span class="small" style="font-weight:400;">(optional — found an issue, used a non-standard part, needs follow-up)</span></label>
           <textarea id="m-maint-notes" placeholder="e.g. Noticed minor rust on the frame, worth checking again next service.">${entry?.notes||''}</textarea>
+          ${(()=>{
+            const openFlags = (a.flaggedServiceNotes||[]).filter(n=>!n.resolved || (entry && n.resolvedByLogId===entry.id));
+            if(!openFlags.length) return '';
+            return `
+            <label class="mt-2">Does this take care of anything flagged by the shop?</label>
+            <div id="m-maint-flags-wrap">
+              ${openFlags.map(n=>`<label class="flex gap-2 mt-1" style="align-items:flex-start;font-weight:400;">
+                <input type="checkbox" class="m-maint-flag-check" data-note-id="${n.id}" style="width:auto;margin-top:2px;" ${entry && n.resolvedByLogId===entry.id?'checked':''}>
+                <span>${escHtml(n.note)}</span>
+              </label>`).join('')}
+            </div>
+            `;
+          })()}
           <div id="m-maint-nextdue-wrap" style="display:${(schedules.length&&!noScheduleSelected)?'none':'block'};">
             <div class="small mt-1" style="margin-bottom:6px;">No schedule selected — enter the next due point manually if you want a reminder.</div>
             <label>Next service due — date</label><input type="date" id="m-maint-nextdate" value="${a.nextMaintenanceDate||''}">
@@ -6820,11 +6833,16 @@ function saveFlaggedService(assetId, el){
   a.flaggedServiceNotes.push({id:'fsn'+Date.now(), note, flaggedDate:new Date().toISOString().slice(0,10), addedBy:currentUser().id});
   saveState(); closeModal(el); toast('Added'); render();
 }
-function removeFlaggedService(assetId, noteId){
-  if(!canEdit() && byId(state.companyAssets,assetId)?.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can remove this'); return; }
+function resolveFlaggedService(assetId, noteId, logId, silent){
+  if(!canEdit() && byId(state.companyAssets,assetId)?.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can resolve this'); return; }
   const a = byId(state.companyAssets, assetId);
-  a.flaggedServiceNotes = (a.flaggedServiceNotes||[]).filter(n=>n.id!==noteId);
-  saveState(); toast('Removed'); render();
+  const note = byId(a.flaggedServiceNotes, noteId);
+  if(note){
+    note.resolved = true;
+    note.resolvedDate = new Date().toISOString().slice(0,10);
+    note.resolvedByLogId = logId || null;
+  }
+  if(!silent){ saveState(); toast('Marked resolved'); render(); }
 }
 function recomputeScheduleNextDue(assetId, scheduleId){
   if(!scheduleId) return;
@@ -6865,11 +6883,21 @@ function saveMaintenanceLogEntry(assetId, entryId, el){
     scheduleId: scheduleId || null,
     loggedBy: currentUser().id
   };
+  let logEntryId;
   if(existingEntry){
     Object.assign(existingEntry, entryData);
+    logEntryId = existingEntry.id;
   } else {
-    state.maintenanceLog.push({id:'vm'+Date.now(), ...entryData});
+    logEntryId = 'vm'+Date.now();
+    state.maintenanceLog.push({id:logEntryId, ...entryData});
   }
+  // Resolve any flagged concerns checked off, and un-resolve anything that was previously
+  // resolved by THIS entry but got unchecked (correcting a mistake during an edit)
+  const checkedNoteIds = new Set(Array.from(document.querySelectorAll('.m-maint-flag-check:checked')).map(cb=>cb.dataset.noteId));
+  (a.flaggedServiceNotes||[]).forEach(n=>{
+    if(checkedNoteIds.has(n.id)) resolveFlaggedService(assetId, n.id, logEntryId, true);
+    else if(n.resolvedByLogId===logEntryId){ n.resolved=false; n.resolvedDate=null; n.resolvedByLogId=null; }
+  });
   if(usage) a.currentUsage = parseFloat(usage);
   if(scheduleId){
     recomputeScheduleNextDue(assetId, scheduleId);
