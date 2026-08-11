@@ -3018,6 +3018,7 @@ function renderEmployeeDashboard(){
   const nextReview = reviewsFor(u.id).find(r=>r.status==='scheduled');
   const gearStats = gearYearStats(u.id, currentGearYear());
   const myEquipmentDue = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && assetMaintenanceDue(a));
+  const myEquipmentFlagged = state.companyAssets.filter(a=>a.assignedTo===u.id && a.status!=='retired' && (a.flaggedServiceNotes||[]).length);
   const pendingOnboarding = pendingOnboardingTasksFor(u.id);
   const pendingForms = pendingOnboarding.filter(t=>t.type==='form');
   return `
@@ -3043,6 +3044,12 @@ function renderEmployeeDashboard(){
       <strong>⚠ Maintenance due on equipment checked out to you:</strong>
       <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
         ${myEquipmentDue.map(a=>`<span class="pill rust" style="cursor:pointer;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name}</span>`).join('')}
+      </div>
+    </div>`:''}
+    ${myEquipmentFlagged.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;">
+      <strong>🔧 A shop flagged something on equipment checked out to you:</strong>
+      <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+        ${myEquipmentFlagged.map(a=>`<span class="pill amber" style="cursor:pointer;" onclick="navigate('assetDetail',{id:'${a.id}'})">${a.name} (${a.flaggedServiceNotes.length})</span>`).join('')}
       </div>
     </div>`:''}
     ${nextReview? `<div class="card mt-2" style="background:var(--paper);"><div class="small">📅 Your next review: <strong>${reviewTypeLabel(nextReview.type)}</strong> on ${fmtDate(nextReview.scheduledDate)}${nextReview.reviewerPersonId?' with '+byId(state.people,nextReview.reviewerPersonId)?.name:''}</div></div>`:''}
@@ -3120,6 +3127,7 @@ function renderAdminDashboard(){
   const needsUpdateTopics = state.topics.filter(t=>t.needsUpdate);
   const team = state.people.filter(p=>p.status!=='offboarded');
   const overdueMaintenance = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
+  const flaggedService = state.companyAssets.filter(a=>a.status!=='retired' && (a.flaggedServiceNotes||[]).length);
   const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
   return `
     <div class="page-head">
@@ -3132,6 +3140,9 @@ function renderAdminDashboard(){
     ${renderExternalToolsSection()}
     ${overdueMaintenance.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
       <strong>⚠ ${overdueMaintenance.length} item${overdueMaintenance.length!==1?'s':''} due for maintenance</strong> — ${overdueMaintenance.map(a=>a.name).join(', ')}
+    </div>`:''}
+    ${flaggedService.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
+      <strong>🔧 ${flaggedService.length} item${flaggedService.length!==1?'s':''} with a shop-flagged concern</strong> — ${flaggedService.map(a=>a.name).join(', ')}
     </div>`:''}
     ${complianceIssues.length? `<div class="card mt-2" style="background:var(--amber-tint);border-color:#E4D19E;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
       <strong>📋 ${complianceIssues.length} item${complianceIssues.length!==1?'s':''} with insurance or registration expiring</strong> — ${complianceIssues.map(a=>a.name).join(', ')}
