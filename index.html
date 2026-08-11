@@ -10034,6 +10034,11 @@ function newOnboardingPathModal(prefillRoleId){
           <label>Description</label><textarea id="m-ob-desc" placeholder="Who is this for and what does it cover?">${role?'Role-specific onboarding for the '+role.title+' seat.':''}</textarea>
           <label>Which role is this for? <span class="small" style="font-weight:400;">(optional — leave as "All roles" for a universal path everyone goes through)</span></label>
           <select id="m-ob-role"><option value="">— All roles / universal —</option>${state.roles.map(r=>`<option value="${r.id}" ${r.id===prefillRoleId?'selected':''}>${r.title}</option>`).join('')}</select>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-ob-include-role-review" style="width:auto;margin:0;" checked>
+            Include a "Review Your Role" step
+          </label>
+          <div class="small mt-1" style="color:var(--slate-light);">Adds a task that opens whoever's enrolled to their own role page — KPIs, responsibilities, and everything else set up for it. Works automatically for whoever gets enrolled, even if this path is used across more than one role.</div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="createOnboardingPath(this)">Create</button></div>
       </div>
@@ -10044,7 +10049,11 @@ function createOnboardingPath(el){
   if(!name){ toast('Name required'); return; }
   const id = 'ob'+Date.now();
   const roleId = document.getElementById('m-ob-role').value || null;
-  state.onboardingPaths.push({id, name, description:document.getElementById('m-ob-desc').value.trim(), roleId, sections:[]});
+  const sections = [];
+  if(document.getElementById('m-ob-include-role-review').checked){
+    sections.push({id:'obs'+Date.now(), title:'Understand Your Role', quizId:null, tasks:[{id:'obt'+Date.now(), type:'role', title:'Review your role'}]});
+  }
+  state.onboardingPaths.push({id, name, description:document.getElementById('m-ob-desc').value.trim(), roleId, sections});
   saveState(); closeModal(el); toast('Path created'); navigate('onboardingPathEditor',{id});
 }
 function deleteOnboardingPath(pathId){
