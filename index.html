@@ -7712,7 +7712,13 @@ function renderGearCatalog(){
                 </div>
                 <div class="small mt-1">${g.description||''}</div>
                 ${g.sizeType && g.sizeType!=='none'?`<div class="small mt-1" style="color:var(--slate-light);">📏 Comes in sizes — you'll be asked which one</div>`:''}
-                ${g.quantityOnHand!=null && g.quantityOnHand>0?`<div class="small mt-1" style="color:var(--jade);">${g.quantityOnHand} in stock</div>`:`<div class="small mt-1" style="color:var(--slate-light);">Ordered when requested</div>`}
+                ${(()=>{
+                  if(g.sizeType==='clothing' || g.sizeType==='shoe'){
+                    const total = Object.values(g.quantityBySize||{}).reduce((a,b)=>a+b,0);
+                    return total>0 ? `<div class="small mt-1" style="color:var(--jade);">${total} total in stock across sizes</div>` : `<div class="small mt-1" style="color:var(--slate-light);">Ordered when requested</div>`;
+                  }
+                  return g.quantityOnHand!=null && g.quantityOnHand>0?`<div class="small mt-1" style="color:var(--jade);">${g.quantityOnHand} in stock</div>`:`<div class="small mt-1" style="color:var(--slate-light);">Ordered when requested</div>`;
+                })()}
                 <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
                   <button class="btn secondary sm" onclick="requestCatalogItem('${g.id}','${requestingFor}')" ${g.price>stats.available?'disabled style="opacity:.5;"':''}>${g.price>stats.available?'Exceeds balance':'Request This'}</button>
                   ${canEdit()?`<button class="btn secondary sm" onclick="openGearItemModal('${g.id}')">Edit</button><button class="btn secondary sm" onclick="removeGearItem('${g.id}')">Remove</button>`:''}
@@ -7724,6 +7730,8 @@ function renderGearCatalog(){
       `).join('')}
   `;
 }
+const CLOTHING_SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
+const SHOE_SIZES = Array.from({length:23}, (_,i)=>(4+i*0.5).toString().replace(/\.0$/,''));
 function openGearItemModal(itemId){
   const g = itemId ? byId(state.gearCatalog, itemId) : null;
   openModal(`
@@ -7745,34 +7753,65 @@ function openGearItemModal(itemId){
           <datalist id="gc-cat-list">${[...new Set(state.gearCatalog.map(x=>x.category))].map(c=>`<option value="${c}">`).join('')}</datalist>
           <label>Description (optional)</label><textarea id="m-gc-desc">${g?.description||''}</textarea>
           <label>Price</label><input type="text" id="m-gc-price" value="${g?g.price:''}" placeholder="0.00">
-          <label class="mt-2">Quantity on hand <span class="small" style="font-weight:400;">(optional — just for your own reference; leave blank or 0 if you order these as they're requested)</span></label>
-          <input type="text" id="m-gc-qty" value="${g?.quantityOnHand!=null?g.quantityOnHand:''}" placeholder="e.g. 12">
           <label class="mt-2">Sizing <span class="small" style="font-weight:400;">(if this item comes in sizes, the person requesting it will be asked to pick one)</span></label>
-          <select id="m-gc-sizetype">
+          <select id="m-gc-sizetype" onchange="renderGearQtySection(document.getElementById('m-gc-sizetype').value)">
             <option value="none" ${(!g||g.sizeType==='none'||!g.sizeType)?'selected':''}>No sizing needed</option>
             <option value="clothing" ${g?.sizeType==='clothing'?'selected':''}>Clothing sizes (XS–XXL)</option>
             <option value="shoe" ${g?.sizeType==='shoe'?'selected':''}>Shoe sizes</option>
             <option value="custom" ${g?.sizeType==='custom'?'selected':''}>Other (person types in their size)</option>
           </select>
+          <div id="m-gc-qty-wrap" class="mt-2">${gearQtySectionHtml(g?.sizeType||'none', g)}</div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveGearItem('${itemId||''}',this)">Save</button></div>
       </div>
     </div>`);
+}
+function gearQtySectionHtml(sizeType, g){
+  if(sizeType==='clothing' || sizeType==='shoe'){
+    const sizes = sizeType==='clothing' ? CLOTHING_SIZES : SHOE_SIZES;
+    const existing = g?.quantityBySize || {};
+    return `
+      <label>Quantity on hand, by size <span class="small" style="font-weight:400;">(optional — for your own reference; leave any size blank or 0 if you order it as requested)</span></label>
+      <div class="grid cols-3" style="gap:8px;">
+        ${sizes.map(s=>`<div><label class="small" style="font-weight:400;">${s}</label><input type="text" class="m-gc-qty-size" data-size="${s}" value="${existing[s]!=null?existing[s]:''}" placeholder="0"></div>`).join('')}
+      </div>
+    `;
+  }
+  return `
+    <label>Quantity on hand <span class="small" style="font-weight:400;">(optional — just for your own reference; leave blank or 0 if you order these as they're requested)</span></label>
+    <input type="text" id="m-gc-qty" value="${g?.quantityOnHand!=null?g.quantityOnHand:''}" placeholder="e.g. 12">
+  `;
+}
+function renderGearQtySection(sizeType){
+  document.getElementById('m-gc-qty-wrap').innerHTML = gearQtySectionHtml(sizeType, null);
 }
 async function saveGearItem(itemId, el){
   const name = document.getElementById('m-gc-name').value.trim();
   const price = parseFloat(document.getElementById('m-gc-price').value);
   if(!name || !price || price<=0){ toast('Name and a valid price are required'); return; }
   const photo = await readPhotoFile('m-gc-photo');
+  const sizeType = document.getElementById('m-gc-sizetype').value;
   const data = {
     name,
     category: document.getElementById('m-gc-cat').value.trim() || 'General',
     description: document.getElementById('m-gc-desc').value.trim(),
     price,
     imageUrl: document.getElementById('m-gc-imageurl').value.trim(),
-    sizeType: document.getElementById('m-gc-sizetype').value,
-    quantityOnHand: document.getElementById('m-gc-qty').value.trim()===''?null:parseInt(document.getElementById('m-gc-qty').value)
+    sizeType,
+    quantityOnHand: null,
+    quantityBySize: null
   };
+  if(sizeType==='clothing' || sizeType==='shoe'){
+    const bySize = {};
+    document.querySelectorAll('.m-gc-qty-size').forEach(input=>{
+      const v = input.value.trim();
+      if(v!=='') bySize[input.dataset.size] = parseInt(v)||0;
+    });
+    data.quantityBySize = bySize;
+  } else {
+    const qtyEl = document.getElementById('m-gc-qty');
+    data.quantityOnHand = qtyEl.value.trim()===''?null:parseInt(qtyEl.value);
+  }
   if(photo) data.image = photo;
   if(itemId){
     Object.assign(byId(state.gearCatalog, itemId), data);
@@ -7801,13 +7840,13 @@ function requestCatalogItem(itemId, personId){
 }
 function openGearSizeModal(itemId, personId){
   const item = byId(state.gearCatalog, itemId);
-  const CLOTHING_SIZES = ['XS','S','M','L','XL','XXL','XXXL'];
-  const SHOE_SIZES = Array.from({length:23}, (_,i)=>(4+i*0.5).toString().replace(/\.0$/,''));
+  const bySize = item.quantityBySize || {};
+  const sizeLabel = (s) => (bySize[s]!=null && bySize[s]>0) ? `${s} (${bySize[s]} in stock)` : `${s} (order as needed)`;
   let fieldHtml = '';
   if(item.sizeType==='clothing'){
-    fieldHtml = `<label>Size</label><select id="m-gear-size">${CLOTHING_SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>`;
+    fieldHtml = `<label>Size</label><select id="m-gear-size">${CLOTHING_SIZES.map(s=>`<option value="${s}">${sizeLabel(s)}</option>`).join('')}</select>`;
   } else if(item.sizeType==='shoe'){
-    fieldHtml = `<label>Shoe size</label><select id="m-gear-size">${SHOE_SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>`;
+    fieldHtml = `<label>Shoe size</label><select id="m-gear-size">${SHOE_SIZES.map(s=>`<option value="${s}">${sizeLabel(s)}</option>`).join('')}</select>`;
   } else {
     fieldHtml = `<label>Size</label><input type="text" id="m-gear-size" placeholder="e.g. Large, 42mm, One Size">`;
   }
@@ -7976,7 +8015,11 @@ function renderApprovals(){
         const catalogItem = c.catalogItemId ? byId(state.gearCatalog, c.catalogItemId) : null;
         return `<tr>
           <td><strong>${p?.name||'—'}</strong></td>
-          <td>${escHtml(c.title)}${c.size?' <span class="pill bronze">Size: '+escHtml(c.size)+'</span>':''}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}${catalogItem?(catalogItem.quantityOnHand>0?` <span class="small" style="color:var(--jade);">(${catalogItem.quantityOnHand} in stock)</span>`:` <span class="small" style="color:var(--slate-light);">(will need to order)</span>`):''}</td>
+          <td>${escHtml(c.title)}${c.size?' <span class="pill bronze">Size: '+escHtml(c.size)+'</span>':''}${c.type==='catalog'?' <span class="pill gray">Catalog</span>':''}${(()=>{
+            if(!catalogItem) return '';
+            const stockForThisSize = c.size ? (catalogItem.quantityBySize||{})[c.size] : catalogItem.quantityOnHand;
+            return stockForThisSize>0 ? ` <span class="small" style="color:var(--jade);">(${stockForThisSize} in stock)</span>` : ` <span class="small" style="color:var(--slate-light);">(will need to order)</span>`;
+          })()}</td>
           <td>${fmtMoney(c.amount)}</td>
           <td>${fmtDate(c.requestedDate)}</td>
           <td class="flex gap-2">
