@@ -757,6 +757,12 @@ function seedData(){
     trainingPathEnrollments: [],
     vehicleWeeklyLogs: [],
     accidentLog: [],
+    smallItemTypes: [
+      {id:'sit1', name:'Office key'},
+      {id:'sit2', name:'Company credit card'},
+      {id:'sit3', name:'Building fob / badge'},
+      {id:'sit4', name:'Gas card'}
+    ],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -976,6 +982,12 @@ function migrateState(parsed){
       if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
       if(!parsed.vehicleWeeklyLogs) parsed.vehicleWeeklyLogs = [];
       if(!parsed.accidentLog) parsed.accidentLog = [];
+      if(!parsed.smallItemTypes) parsed.smallItemTypes = [
+        {id:'sit1', name:'Office key'},
+        {id:'sit2', name:'Company credit card'},
+        {id:'sit3', name:'Building fob / badge'},
+        {id:'sit4', name:'Gas card'}
+      ];
       (parsed.companyAssets||[]).forEach(a=>{
         if(!a.maintenanceSchedules){
           a.maintenanceSchedules = [];
@@ -4755,6 +4767,7 @@ function renderPersonDetail(){
     </div>
     ${renderGearSection(p.id, canApprove(currentUser().id,'gear'))}
     ${renderPersonEquipmentSection(p.id)}
+    ${(canEdit()||isOwnProfile) ? renderSmallItemsSection(p.id) : ''}
     ${renderTimeOffSection(p.id, canApprove(currentUser().id,'timeOff'))}
     ${canSeeReviewsOf(p.id) ? renderReviewsSection(p.id, canEdit()) : ''}
     ${(canEdit() || isOwnProfile) ? renderPersonDocumentsSection(p.id) : ''}
@@ -7806,6 +7819,60 @@ function deleteDisciplinaryAction(id){
   });
 }
 
+function renderSmallItemsSection(personId){
+  const p = byId(state.people, personId);
+  const checkedOut = p.smallItemsCheckedOut || [];
+  const canManage = canEdit();
+  return `
+    <div class="section-title">Other Items Checked Out<span class="count">${checkedOut.length}</span>
+      ${canManage?`<span class="btn secondary sm" style="margin-left:auto;" onclick="openAddSmallItemTypeModal()">+ Add Item Type</span>`:''}
+    </div>
+    <div class="small mt-1" style="color:var(--slate-light);">Small things that don't need a QR code — keys, cards, fobs, and the like.</div>
+    <div class="card mt-2">
+      ${state.smallItemTypes.map(t=>{
+        const entry = checkedOut.find(c=>c.typeId===t.id);
+        return `<label class="flex gap-2 mt-1" style="align-items:center;font-weight:400;${canManage?'cursor:pointer;':'cursor:default;'}">
+          <input type="checkbox" style="width:auto;margin:0;" ${entry?'checked':''} ${canManage?`onchange="toggleSmallItemCheckedOut('${personId}','${t.id}')"`:'disabled'}>
+          <span style="flex:1;">${escHtml(t.name)}</span>
+          ${entry?`<span class="small" style="color:var(--slate-light);">since ${fmtDate(entry.checkedOutDate)}</span>`:''}
+        </label>`;
+      }).join('')}
+      ${!state.smallItemTypes.length?`<div class="empty-inline">No item types set up yet.</div>`:''}
+    </div>
+  `;
+}
+function toggleSmallItemCheckedOut(personId, typeId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const p = byId(state.people, personId);
+  p.smallItemsCheckedOut = p.smallItemsCheckedOut || [];
+  const existing = p.smallItemsCheckedOut.find(c=>c.typeId===typeId);
+  if(existing){
+    p.smallItemsCheckedOut = p.smallItemsCheckedOut.filter(c=>c.typeId!==typeId);
+  } else {
+    p.smallItemsCheckedOut.push({typeId, checkedOutDate:new Date().toISOString().slice(0,10)});
+  }
+  saveState(); render();
+}
+function openAddSmallItemTypeModal(){
+  if(!canEdit()){ toast('Admins only'); return; }
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal" style="max-width:360px;">
+        <div class="modal-head"><strong>Add Item Type</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <label>Item name</label>
+          <input type="text" id="m-smallitem-name" placeholder="e.g. Parking pass, Company laptop charger">
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveSmallItemType(this)">Add</button></div>
+      </div>
+    </div>`);
+}
+function saveSmallItemType(el){
+  const name = document.getElementById('m-smallitem-name').value.trim();
+  if(!name){ toast('Enter a name first'); return; }
+  state.smallItemTypes.push({id:'sit'+Date.now(), name});
+  saveState(); closeModal(el); toast('Added'); render();
+}
 function renderPersonEquipmentSection(personId){
   const assigned = state.companyAssets.filter(a=>a.assignedTo===personId && a.status!=='retired');
   return `
