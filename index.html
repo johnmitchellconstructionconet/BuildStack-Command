@@ -6866,12 +6866,21 @@ function recalcNextMaintenance(assetId){
    record as a vehicle collision, just without the police-report/third-party fields being relevant. */
 function showBrokenPhotoPlaceholder(imgEl){
   const size = imgEl.style.width || '90px';
-  const div = document.createElement('div');
-  div.className = 'small';
-  div.style.cssText = `width:${size};height:${size};display:flex;align-items:center;justify-content:center;background:var(--rust-tint);border-radius:6px;color:var(--rust);text-align:center;padding:4px;`;
-  div.textContent = 'Photo failed to load';
-  div.title = 'Check that the company-photos Supabase storage bucket allows public read access';
-  imgEl.replaceWith(div);
+  const url = imgEl.src;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `width:${size};display:flex;flex-direction:column;align-items:center;`;
+  const box = document.createElement('div');
+  box.className = 'small';
+  box.style.cssText = `width:${size};height:${size};display:flex;align-items:center;justify-content:center;background:var(--rust-tint);border-radius:6px;color:var(--rust);text-align:center;padding:4px;`;
+  box.textContent = 'Photo failed to load';
+  box.title = 'Check that the company-photos Supabase storage bucket allows public read access';
+  const link = document.createElement('a');
+  link.href = url; link.target = '_blank'; link.rel = 'noopener';
+  link.textContent = 'View raw URL';
+  link.style.cssText = 'font-size:10px;color:var(--slate-light);text-decoration:underline;margin-top:2px;word-break:break-all;';
+  wrap.appendChild(box);
+  wrap.appendChild(link);
+  imgEl.replaceWith(wrap);
 }
 let pendingAccidentPhotos = [];
 let accidentPhotosToRemove = [];
