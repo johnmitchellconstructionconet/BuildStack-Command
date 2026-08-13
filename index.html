@@ -756,6 +756,7 @@ function seedData(){
     trainingPaths: [],
     trainingPathEnrollments: [],
     vehicleWeeklyLogs: [],
+    accidentLog: [],
     processSuggestions: [],
     trainings: [],
     trainingAssignments: [],
@@ -974,6 +975,7 @@ function migrateState(parsed){
       if(!parsed.trainingPaths) parsed.trainingPaths = [];
       if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
       if(!parsed.vehicleWeeklyLogs) parsed.vehicleWeeklyLogs = [];
+      if(!parsed.accidentLog) parsed.accidentLog = [];
       (parsed.companyAssets||[]).forEach(a=>{
         if(!a.maintenanceSchedules){
           a.maintenanceSchedules = [];
@@ -1237,6 +1239,7 @@ let viewAsPersonId = null;
 let realUserId = null;
 function currentUser(){ return byId(state.people, viewAsPersonId || state.currentUserId); }
 function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function fmtDateTime(dt){ if(!dt) return '—'; const d=new Date(dt); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' at '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
 function isOverdue(a){ return a.status!=='completed' && new Date(a.dueDate+'T00:00:00') < new Date(new Date().toDateString()); }
 function toast(msg){
   const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
@@ -3128,6 +3131,7 @@ function renderAdminDashboard(){
   const team = state.people.filter(p=>p.status!=='offboarded');
   const overdueMaintenance = state.companyAssets.filter(a=>a.status!=='retired' && assetMaintenanceDue(a));
   const flaggedService = state.companyAssets.filter(a=>a.status!=='retired' && (a.flaggedServiceNotes||[]).some(n=>!n.resolved));
+  const openIncidents = state.accidentLog.filter(x=>x.status!=='closed');
   const complianceIssues = state.companyAssets.filter(a=>a.status!=='retired' && assetComplianceIssues(a).length);
   return `
     <div class="page-head">
@@ -3138,6 +3142,9 @@ function renderAdminDashboard(){
       </div>
     </div>
     ${renderExternalToolsSection()}
+    ${openIncidents.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
+      <strong>🚨 ${openIncidents.length} open incident report${openIncidents.length!==1?'s':''}${openIncidents.some(x=>x.injuryInvolved)?' — INJURY INVOLVED':''}</strong> — ${openIncidents.map(x=>byId(state.companyAssets,x.assetId)?.name).filter(Boolean).join(', ')}
+    </div>`:''}
     ${overdueMaintenance.length? `<div class="card mt-2" style="background:var(--rust-tint);border-color:#E7C1B4;cursor:pointer;" onclick="navigate('companyAssets',{cat:'all'})">
       <strong>⚠ ${overdueMaintenance.length} item${overdueMaintenance.length!==1?'s':''} due for maintenance</strong> — ${overdueMaintenance.map(a=>a.name).join(', ')}
     </div>`:''}
@@ -6489,6 +6496,43 @@ function renderAssetDetail(){
       </div>`;
     })() : ''}
 
+    ${(()=>{
+      const accidents = state.accidentLog.filter(x=>x.assetId===a.id).sort((x,y)=>new Date(y.dateTime)-new Date(x.dateTime));
+      const canReportAccident = canEdit() || a.assignedTo===currentUser().id;
+      return `
+      <div class="section-title">Accident / Incident Log<span class="count">${accidents.length}</span>
+        ${canReportAccident?`<span class="btn ${accidents.some(x=>x.status!=='closed')?'bronze':'secondary'} sm" style="margin-left:auto;" onclick="openAccidentLogModal('${a.id}')">+ Report Incident</span>`:''}
+      </div>
+      ${accidents.length? accidents.map(x=>{
+        const person = byId(state.people, x.personId);
+        const statusPill = x.status==='closed' ? '<span class="pill gray">Closed</span>' : x.status==='in_progress' ? '<span class="pill amber">In Progress</span>' : '<span class="pill rust">Open</span>';
+        return `<div class="card mt-2" style="${x.status!=='closed'?'background:var(--rust-tint);border-color:#E7C1B4;':''}">
+          <div class="flex" style="justify-content:space-between;align-items:flex-start;">
+            <div>
+              <strong>${fmtDateTime(x.dateTime)}</strong> ${statusPill}
+              <div class="small mt-1">${person?person.name:'Unknown'}${x.location?' · '+escHtml(x.location):''}</div>
+            </div>
+            <div class="flex gap-1">
+              ${canReportAccident?`<span class="miniBtn" onclick="openAccidentLogModal('${a.id}','${x.id}')" title="Edit">✎</span>`:''}
+              ${canEdit()?`<span class="miniBtn" onclick="deleteAccidentLogEntry('${x.id}','${a.id}')" title="Delete">✕</span>`:''}
+            </div>
+          </div>
+          <div class="mt-2">${escHtml(x.description)}</div>
+          <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+            ${x.injuryInvolved?`<span class="pill rust">⚠ Injury involved</span>`:''}
+            ${x.thirdPartyInvolved?`<span class="pill amber">Third party involved</span>`:''}
+            ${x.policeReportFiled?`<span class="pill gray">Police report${x.policeReportNumber?': '+escHtml(x.policeReportNumber):''}</span>`:''}
+            ${x.insuranceClaimFiled?`<span class="pill gray">Insurance claim${x.insuranceClaimNumber?': '+escHtml(x.insuranceClaimNumber):''}</span>`:''}
+            ${x.estimatedCost!=null?`<span class="pill gray">Est. ${fmtMoney(x.estimatedCost)}</span>`:''}
+          </div>
+          ${x.thirdPartyDetails?`<div class="small mt-2" style="color:var(--slate-light);"><strong>Third party:</strong> ${escHtml(x.thirdPartyDetails)}</div>`:''}
+          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="window.open('${escAttr(p)}','_blank')">`).join('')}</div>`:''}
+          <div class="small mt-2" style="color:var(--slate-light);">Reported by ${byId(state.people,x.reportedBy)?.name||'—'}</div>
+        </div>`;
+      }).join('') : `<div class="empty-inline">No incidents logged — hopefully it stays that way. If something happens, report it here right away.</div>`}
+      `;
+    })()}
+
     ${isMaintainable ? `
     <div class="section-title">Maintenance</div>
     ${(a.maintenanceSchedules||[]).length? (a.maintenanceSchedules||[]).map(s=>{
@@ -6816,6 +6860,115 @@ function recalcNextMaintenance(assetId){
     if(bits.length){ preview.textContent = `✓ Next ${schedule.name} will automatically be set: ${bits.join(', ')}`; preview.style.display='block'; }
     else preview.style.display='none';
   }
+}
+/* ================= ACCIDENT / INCIDENT LOG ================= */
+/* Applies to any equipment category, not just vehicles — a dropped laptop needs the same kind of
+   record as a vehicle collision, just without the police-report/third-party fields being relevant. */
+function openAccidentLogModal(assetId, entryId){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can report this'); return; }
+  const entry = entryId ? byId(state.accidentLog, entryId) : null;
+  openModal(`
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <div class="modal-head"><strong>${entry?'Edit Incident Report':'Report an Incident'} — ${a.name}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-body">
+          <div class="field-row">
+            <div><label>Date &amp; time</label><input type="datetime-local" id="m-acc-datetime" value="${entry?entry.dateTime:new Date().toISOString().slice(0,16)}"></div>
+            <div><label>Employee involved</label><select id="m-acc-person">${state.people.map(p=>`<option value="${p.id}" ${(entry?entry.personId:a.assignedTo)===p.id?'selected':''}>${p.name}</option>`).join('')}</select></div>
+          </div>
+          <label>Where did this happen?</label><input type="text" id="m-acc-location" value="${escAttr(entry?.location)}" placeholder="e.g. Job site address, intersection, parking lot">
+          <label>What happened?</label>
+          <textarea id="m-acc-description" style="min-height:100px;" placeholder="Describe what happened, as much detail as you have right now — you can always add more later.">${entry?.description||''}</textarea>
+          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(damage, the scene, anything relevant)</span></label>
+          <input type="file" id="m-acc-photos" accept="image/*" multiple>
+          ${entry && (entry.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${entry.photos.map(p=>`<img src="${escAttr(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;">`).join('')}</div><div class="small mt-1" style="color:var(--slate-light);">Existing photos above stay — anything you add here is on top of them.</div>`:''}
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-acc-injury" style="width:auto;margin:0;" ${entry?.injuryInvolved?'checked':''}>
+            <span style="color:var(--rust);">Anyone hurt, even minor?</span>
+          </label>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-acc-thirdparty" style="width:auto;margin:0;" ${entry?.thirdPartyInvolved?'checked':''} onchange="document.getElementById('m-acc-thirdparty-wrap').style.display=this.checked?'block':'none';">
+            Someone else's property or vehicle involved?
+          </label>
+          <div id="m-acc-thirdparty-wrap" style="display:${entry?.thirdPartyInvolved?'block':'none'};" class="mt-1">
+            <input type="text" id="m-acc-thirdparty-details" value="${escAttr(entry?.thirdPartyDetails)}" placeholder="Other party's name, contact, insurance info if you have it">
+          </div>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-acc-police" style="width:auto;margin:0;" ${entry?.policeReportFiled?'checked':''} onchange="document.getElementById('m-acc-police-wrap').style.display=this.checked?'block':'none';">
+            Police report filed?
+          </label>
+          <div id="m-acc-police-wrap" style="display:${entry?.policeReportFiled?'block':'none'};" class="mt-1">
+            <input type="text" id="m-acc-police-number" value="${escAttr(entry?.policeReportNumber)}" placeholder="Report number, if you have it">
+          </div>
+          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
+            <input type="checkbox" id="m-acc-insurance" style="width:auto;margin:0;" ${entry?.insuranceClaimFiled?'checked':''} onchange="document.getElementById('m-acc-insurance-wrap').style.display=this.checked?'block':'none';">
+            Insurance claim filed?
+          </label>
+          <div id="m-acc-insurance-wrap" style="display:${entry?.insuranceClaimFiled?'block':'none'};" class="mt-1">
+            <input type="text" id="m-acc-insurance-number" value="${escAttr(entry?.insuranceClaimNumber)}" placeholder="Claim number, if you have it">
+          </div>
+          <label class="mt-2">Estimated cost <span class="small" style="font-weight:400;">(optional — repair, replacement, whatever you know so far)</span></label>
+          <input type="text" id="m-acc-cost" value="${entry?.estimatedCost!=null?entry.estimatedCost:''}" placeholder="e.g. 200">
+          <label class="mt-2">Status</label>
+          <select id="m-acc-status">
+            <option value="open" ${(!entry||entry.status==='open')?'selected':''}>Open — just reported</option>
+            <option value="in_progress" ${entry?.status==='in_progress'?'selected':''}>In Progress — being handled</option>
+            <option value="closed" ${entry?.status==='closed'?'selected':''}>Closed — fully resolved</option>
+          </select>
+        </div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveAccidentLogEntry('${assetId}','${entryId||''}',this)">${entry?'Save Changes':'Submit Report'}</button></div>
+      </div>
+    </div>`);
+}
+async function saveAccidentLogEntry(assetId, entryId, el){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can report this'); return; }
+  const description = document.getElementById('m-acc-description').value.trim();
+  if(!description){ toast('Describe what happened first'); return; }
+  const existingEntry = entryId ? byId(state.accidentLog, entryId) : null;
+  const costVal = document.getElementById('m-acc-cost').value.trim();
+  const newPhotos = [];
+  const photoFiles = document.getElementById('m-acc-photos').files;
+  for(let i=0; i<photoFiles.length; i++){
+    try{ newPhotos.push(await uploadPhotoToStorage(photoFiles[i], 'accident-photos')); }
+    catch(e){ toast('One or more photos failed to upload — saving the rest of the report anyway.'); }
+  }
+  const data = {
+    assetId,
+    personId: document.getElementById('m-acc-person').value,
+    dateTime: document.getElementById('m-acc-datetime').value,
+    location: document.getElementById('m-acc-location').value.trim(),
+    description,
+    photos: [...(existingEntry?.photos||[]), ...newPhotos],
+    injuryInvolved: document.getElementById('m-acc-injury').checked,
+    thirdPartyInvolved: document.getElementById('m-acc-thirdparty').checked,
+    thirdPartyDetails: document.getElementById('m-acc-thirdparty-details').value.trim(),
+    policeReportFiled: document.getElementById('m-acc-police').checked,
+    policeReportNumber: document.getElementById('m-acc-police-number').value.trim(),
+    insuranceClaimFiled: document.getElementById('m-acc-insurance').checked,
+    insuranceClaimNumber: document.getElementById('m-acc-insurance-number').value.trim(),
+    estimatedCost: costVal ? parseFloat(costVal) : null,
+    status: document.getElementById('m-acc-status').value
+  };
+  if(existingEntry){
+    Object.assign(existingEntry, data);
+  } else {
+    data.id = 'acc'+Date.now();
+    data.reportedBy = currentUser().id;
+    data.reportedAt = new Date().toISOString();
+    state.accidentLog.push(data);
+    const reporter = currentUser();
+    createNotification('accident_reported', `${reporter.name} reported an incident involving ${a.name}${data.injuryInvolved?' — INJURY INVOLVED':''}`, {targetAudience:'admins', relatedType:'asset', relatedId:assetId});
+  }
+  saveState(); closeModal(el); toast(existingEntry?'Saved':'Reported'); refreshNotifBadge(); render();
+}
+function deleteAccidentLogEntry(entryId, assetId){
+  if(!canEdit()){ toast('Admins only — incident reports stay on record for accountability'); return; }
+  confirmAction('Delete this incident report? This cannot be undone.', ()=>{
+    state.accidentLog = state.accidentLog.filter(x=>x.id!==entryId);
+    saveState(); toast('Deleted'); render();
+  });
 }
 function openFlagServiceModal(assetId){
   if(!canEdit() && byId(state.companyAssets,assetId)?.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can add this'); return; }
