@@ -6505,10 +6505,20 @@ function renderAssetDetail(){
       </div>
       ${accidents.length? accidents.map(x=>{
         const person = byId(state.people, x.personId);
-        return `<div class="card mt-2" style="${x.status!=='closed'?'background:var(--rust-tint);border-color:#E7C1B4;':''}">
+        const isClosed = x.status==='closed';
+        const expanded = accidentCardExpanded[x.id]!==undefined ? accidentCardExpanded[x.id] : !isClosed;
+        if(isClosed && !expanded){
+          return `<div class="card mt-2 hover" onclick="toggleAccidentCardExpanded('${x.id}')" style="cursor:pointer;">
+            <div class="flex" style="justify-content:space-between;align-items:center;">
+              <div class="small">✓ <strong>${fmtDateTime(x.dateTime)}</strong> — ${escHtml(x.description).slice(0,80)}${x.description.length>80?'…':''}</div>
+              <span class="pill gray">Closed</span>
+            </div>
+          </div>`;
+        }
+        return `<div class="card mt-2" style="${!isClosed?'background:var(--rust-tint);border-color:#E7C1B4;':''}">
           <div class="flex" style="justify-content:space-between;align-items:flex-start;">
-            <div>
-              <strong>${fmtDateTime(x.dateTime)}</strong>
+            <div style="cursor:pointer;" onclick="${isClosed?`toggleAccidentCardExpanded('${x.id}')`:''}">
+              <strong>${fmtDateTime(x.dateTime)}</strong>${isClosed?' <span class="small" style="color:var(--slate-light);">(click to collapse)</span>':''}
               <div class="small mt-1">${person?person.name:'Unknown'}${x.location?' · '+escHtml(x.location):''}</div>
             </div>
             <div class="flex gap-1" style="align-items:center;">
@@ -6526,11 +6536,30 @@ function renderAssetDetail(){
             ${x.injuryInvolved?`<span class="pill rust">⚠ Injury involved</span>`:''}
             ${x.thirdPartyInvolved?`<span class="pill amber">Third party involved</span>`:''}
             ${x.policeReportFiled?`<span class="pill gray">Police report${x.policeReportNumber?': '+escHtml(x.policeReportNumber):''}</span>`:''}
-            ${x.insuranceClaimFiled?`<span class="pill gray">Insurance claim${x.insuranceClaimNumber?': '+escHtml(x.insuranceClaimNumber):''}</span>`:''}
+            ${x.resolutionPath==='insurance'?`<span class="pill gray">Insurance${x.insuranceClaimFiled?' claim'+(x.insuranceClaimNumber?': '+escHtml(x.insuranceClaimNumber):' filed'):' — not yet filed'}</span>`:''}
+            ${x.resolutionPath==='inhouse'?`<span class="pill gray">Handling in-house</span>`:''}
+            ${x.resolutionPath==='other'?`<span class="pill gray">Other resolution path</span>`:''}
             ${x.estimatedCost!=null?`<span class="pill gray">Est. ${fmtMoney(x.estimatedCost)}</span>`:''}
           </div>
           ${x.thirdPartyDetails?`<div class="small mt-2" style="color:var(--slate-light);"><strong>Third party:</strong> ${escHtml(x.thirdPartyDetails)}</div>`:''}
-          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:140px;height:140px;object-fit:cover;border-radius:8px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.15);" onclick="window.open('${escAttr(p)}','_blank')" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}</div>`:''}
+          <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+            ${(x.photos||[]).length? `<span class="btn secondary sm" onclick="downloadAllAccidentPhotos('${x.id}')">📥 Download All Photos (${x.photos.length})</span>`:''}
+            ${(x.repairReceipts||[]).length? `<span class="btn secondary sm" onclick="downloadAllAccidentReceipts('${x.id}')">📄 Download All Receipts (${x.repairReceipts.length})</span>`:''}
+          </div>
+          ${isClosed && x.resolutionSummary? `<div class="small mt-2" style="background:var(--jade-tint);border-radius:6px;padding:8px 10px;"><strong>✓ Resolution:</strong> ${escHtml(x.resolutionSummary)}</div>`:''}
+          <div class="mt-2" style="border-top:1px solid var(--line-soft);padding-top:8px;">
+            <div class="small" style="font-weight:600;margin-bottom:4px;">Next-action updates</div>
+            ${(x.updates||[]).slice().sort((u1,u2)=>new Date(u2.date)-new Date(u1.date)).map(u=>`
+              <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+                <div class="small">${fmtDateTime(u.date)} — ${escHtml(u.note)} <span style="color:var(--slate-light);">(${byId(state.people,u.addedBy)?.name||'—'})</span></div>
+                ${canEdit()?`<span class="miniBtn" onclick="removeAccidentUpdate('${x.id}','${a.id}','${u.id}')" title="Remove">✕</span>`:''}
+              </div>
+            `).join('') || `<div class="small" style="color:var(--slate-light);">No updates logged yet.</div>`}
+            ${canReportAccident?`<div class="flex gap-2 mt-1">
+              <input type="text" id="m-acc-update-input-${x.id}" placeholder="e.g. Adjuster inspecting Thursday, or Ordered replacement part" style="flex:1;font-size:12px;padding:4px 6px;">
+              <span class="btn secondary sm" onclick="addAccidentUpdate('${x.id}','${a.id}')">+ Add</span>
+            </div>`:''}
+          </div>
           <div class="small mt-2" style="color:var(--slate-light);">Reported by ${byId(state.people,x.reportedBy)?.name||'—'}</div>
         </div>`;
       }).join('') : `<div class="empty-inline">No incidents logged — hopefully it stays that way. If something happens, report it here right away.</div>`}
@@ -6868,6 +6897,40 @@ function recalcNextMaintenance(assetId){
 /* ================= ACCIDENT / INCIDENT LOG ================= */
 /* Applies to any equipment category, not just vehicles — a dropped laptop needs the same kind of
    record as a vehicle collision, just without the police-report/third-party fields being relevant. */
+function downloadAllAccidentPhotos(entryId){
+  const entry = byId(state.accidentLog, entryId);
+  if(!entry || !(entry.photos||[]).length){ toast('No photos on this report'); return; }
+  entry.photos.forEach((url, i)=>{
+    setTimeout(()=>{
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `accident-${entryId}-photo-${i+1}`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i*300); // stagger slightly so the browser doesn't block multiple simultaneous downloads
+  });
+  toast(`Downloading ${entry.photos.length} photo${entry.photos.length!==1?'s':''}...`);
+}
+function downloadAllAccidentReceipts(entryId){
+  const entry = byId(state.accidentLog, entryId);
+  if(!entry || !(entry.repairReceipts||[]).length){ toast('No receipts on this report'); return; }
+  entry.repairReceipts.forEach((url, i)=>{
+    setTimeout(()=>{
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `accident-${entryId}-receipt-${i+1}`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i*300);
+  });
+  toast(`Downloading ${entry.repairReceipts.length} receipt${entry.repairReceipts.length!==1?'s':''}...`);
+}
 function extractStoragePathFromUrl(url){
   const marker = '/object/public/company-photos/';
   const idx = url.indexOf(marker);
@@ -6923,6 +6986,32 @@ function showFinalPhotoFailure(imgEl, errorDetail){
 }
 let pendingAccidentPhotos = [];
 let accidentPhotosToRemove = [];
+let pendingAccidentReceipts = [];
+let accidentReceiptsToRemove = [];
+function accumulateAccidentReceipts(input){
+  Array.from(input.files).forEach(f=>pendingAccidentReceipts.push(f));
+  input.value = '';
+  renderPendingAccidentReceipts();
+}
+function renderPendingAccidentReceipts(){
+  const wrap = document.getElementById('m-acc-receipts-preview');
+  if(!wrap) return;
+  wrap.innerHTML = pendingAccidentReceipts.map((f,i)=>`<div class="flex gap-2 mt-1" style="align-items:center;">
+    <span class="small" style="flex:1;">📎 ${escHtml(f.name)} <span style="color:var(--slate-light);">(will upload on save)</span></span>
+    <span class="miniBtn" onclick="pendingAccidentReceipts.splice(${i},1);renderPendingAccidentReceipts();" title="Remove">✕</span>
+  </div>`).join('');
+}
+function markExistingAccidentReceiptForRemoval(idx){
+  const wrap = document.querySelector(`[data-existing-receipt-idx="${idx}"]`);
+  if(!wrap) return;
+  if(accidentReceiptsToRemove.includes(idx)){
+    accidentReceiptsToRemove = accidentReceiptsToRemove.filter(i=>i!==idx);
+    wrap.style.opacity = '1';
+  } else {
+    accidentReceiptsToRemove.push(idx);
+    wrap.style.opacity = '0.3';
+  }
+}
 function accumulateAccidentPhotos(input){
   Array.from(input.files).forEach(f=>pendingAccidentPhotos.push(f));
   input.value = ''; // clear so the same file can be re-picked later without confusion, now that it's safely queued
@@ -6975,6 +7064,8 @@ function openAccidentLogModal(assetId, entryId){
   const entry = entryId ? byId(state.accidentLog, entryId) : null;
   pendingAccidentPhotos = [];
   accidentPhotosToRemove = [];
+  pendingAccidentReceipts = [];
+  accidentReceiptsToRemove = [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -7009,25 +7100,46 @@ function openAccidentLogModal(assetId, entryId){
           <div id="m-acc-police-wrap" style="display:${entry?.policeReportFiled?'block':'none'};" class="mt-1">
             <input type="text" id="m-acc-police-number" value="${escAttr(entry?.policeReportNumber)}" placeholder="Report number, if you have it">
           </div>
-          <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
-            <input type="checkbox" id="m-acc-insurance" style="width:auto;margin:0;" ${entry?.insuranceClaimFiled?'checked':''} onchange="document.getElementById('m-acc-insurance-wrap').style.display=this.checked?'block':'none';">
-            Insurance claim filed?
-          </label>
-          <div id="m-acc-insurance-wrap" style="display:${entry?.insuranceClaimFiled?'block':'none'};" class="mt-1">
+          <label class="mt-2">How is this being handled? <span class="small" style="font-weight:400;">(optional — set this once you know)</span></label>
+          <select id="m-acc-resolution-path" onchange="onAccidentResolutionPathChange(this)">
+            <option value="" ${!entry?.resolutionPath?'selected':''}>— Not decided yet —</option>
+            <option value="insurance" ${entry?.resolutionPath==='insurance'?'selected':''}>Going through insurance</option>
+            <option value="inhouse" ${entry?.resolutionPath==='inhouse'?'selected':''}>Handling in-house</option>
+            <option value="other" ${entry?.resolutionPath==='other'?'selected':''}>Other</option>
+          </select>
+          <div id="m-acc-insurance-wrap" style="display:${entry?.resolutionPath==='insurance'?'block':'none'};" class="mt-1">
+            <label class="flex gap-2 mt-1" style="align-items:center;font-weight:500;">
+              <input type="checkbox" id="m-acc-insurance" style="width:auto;margin:0;" ${entry?.insuranceClaimFiled?'checked':''}>
+              Insurance claim filed?
+            </label>
             <input type="text" id="m-acc-insurance-number" value="${escAttr(entry?.insuranceClaimNumber)}" placeholder="Claim number, if you have it">
           </div>
           <label class="mt-2">Estimated cost <span class="small" style="font-weight:400;">(optional — repair, replacement, whatever you know so far)</span></label>
           <input type="text" id="m-acc-cost" value="${entry?.estimatedCost!=null?entry.estimatedCost:''}" placeholder="e.g. 200">
+          <label class="mt-2">Repair receipts <span class="small" style="font-weight:400;">(optional — upload as they come in)</span></label>
+          <input type="file" id="m-acc-receipts" accept="image/*,.pdf" multiple onchange="accumulateAccidentReceipts(this)">
+          <div id="m-acc-receipts-preview" class="mt-1"></div>
+          ${entry && (entry.repairReceipts||[]).length? `<div class="mt-1">${entry.repairReceipts.map((r,i)=>`<div class="flex gap-2 mt-1" style="align-items:center;" data-existing-receipt-idx="${i}">
+            <a href="${escAttr(r)}" target="_blank" rel="noopener" class="small" style="flex:1;">📄 Receipt ${i+1}</a>
+            <span class="miniBtn" onclick="markExistingAccidentReceiptForRemoval(${i})" title="Remove">✕</span>
+          </div>`).join('')}</div>`:''}
           <label class="mt-2">Status</label>
-          <select id="m-acc-status">
+          <select id="m-acc-status" onchange="document.getElementById('m-acc-resolution-summary-wrap').style.display=this.value==='closed'?'block':'none';">
             <option value="open" ${(!entry||entry.status==='open')?'selected':''}>Open — just reported</option>
             <option value="in_progress" ${entry?.status==='in_progress'?'selected':''}>In Progress — being handled</option>
             <option value="closed" ${entry?.status==='closed'?'selected':''}>Closed — fully resolved</option>
           </select>
+          <div id="m-acc-resolution-summary-wrap" style="display:${entry?.status==='closed'?'block':'none'};" class="mt-1">
+            <label>How did this get resolved? <span class="small" style="font-weight:400;">(a quick summary for the record)</span></label>
+            <textarea id="m-acc-resolution-summary" placeholder="e.g. Repaired in-house, mirror replaced, cost covered internally.">${entry?.resolutionSummary||''}</textarea>
+          </div>
         </div>
         <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveAccidentLogEntry('${assetId}','${entryId||''}',this)">${entry?'Save Changes':'Submit Report'}</button></div>
       </div>
     </div>`);
+}
+function onAccidentResolutionPathChange(select){
+  document.getElementById('m-acc-insurance-wrap').style.display = select.value==='insurance' ? 'block' : 'none';
 }
 async function saveAccidentLogEntry(assetId, entryId, el){
   const a = byId(state.companyAssets, assetId);
@@ -7044,6 +7156,15 @@ async function saveAccidentLogEntry(assetId, entryId, el){
     catch(e){ failedPhotos.push(photoFiles[i].name); console.error('Accident photo upload failed:', photoFiles[i].name, e); }
   }
   if(failedPhotos.length) toast(`${failedPhotos.length} of ${photoFiles.length} photo(s) failed to upload (${failedPhotos.join(', ')}) — saving the rest of the report anyway.`);
+  const newReceipts = [];
+  const failedReceipts = [];
+  for(let i=0; i<pendingAccidentReceipts.length; i++){
+    try{ newReceipts.push(await uploadPhotoToStorage(pendingAccidentReceipts[i], 'accident-receipts')); }
+    catch(e){ failedReceipts.push(pendingAccidentReceipts[i].name); console.error('Receipt upload failed:', pendingAccidentReceipts[i].name, e); }
+  }
+  if(failedReceipts.length) toast(`${failedReceipts.length} receipt(s) failed to upload (${failedReceipts.join(', ')}) — saving the rest anyway.`);
+  const resolutionPath = document.getElementById('m-acc-resolution-path').value || null;
+  const newStatus = document.getElementById('m-acc-status').value;
   const data = {
     assetId,
     personId: document.getElementById('m-acc-person').value,
@@ -7056,13 +7177,18 @@ async function saveAccidentLogEntry(assetId, entryId, el){
     thirdPartyDetails: document.getElementById('m-acc-thirdparty-details').value.trim(),
     policeReportFiled: document.getElementById('m-acc-police').checked,
     policeReportNumber: document.getElementById('m-acc-police-number').value.trim(),
-    insuranceClaimFiled: document.getElementById('m-acc-insurance').checked,
-    insuranceClaimNumber: document.getElementById('m-acc-insurance-number').value.trim(),
+    resolutionPath,
+    insuranceClaimFiled: resolutionPath==='insurance' ? document.getElementById('m-acc-insurance').checked : false,
+    insuranceClaimNumber: resolutionPath==='insurance' ? document.getElementById('m-acc-insurance-number').value.trim() : '',
     estimatedCost: costVal ? parseFloat(costVal) : null,
-    status: document.getElementById('m-acc-status').value
+    repairReceipts: [...(existingEntry?.repairReceipts||[]).filter((r,i)=>!accidentReceiptsToRemove.includes(i)), ...newReceipts],
+    status: newStatus,
+    resolutionSummary: newStatus==='closed' ? document.getElementById('m-acc-resolution-summary').value.trim() : (existingEntry?.resolutionSummary||''),
+    updates: existingEntry?.updates || []
   };
   if(existingEntry){
     Object.assign(existingEntry, data);
+    accidentCardExpanded[existingEntry.id] = data.status!=='closed';
   } else {
     data.id = 'acc'+Date.now();
     data.reportedBy = currentUser().id;
@@ -7073,7 +7199,31 @@ async function saveAccidentLogEntry(assetId, entryId, el){
   }
   pendingAccidentPhotos = [];
   accidentPhotosToRemove = [];
+  pendingAccidentReceipts = [];
+  accidentReceiptsToRemove = [];
   saveState(); closeModal(el); toast(existingEntry?'Saved':'Reported'); refreshNotifBadge(); render();
+}
+let accidentCardExpanded = {};
+function toggleAccidentCardExpanded(entryId){
+  accidentCardExpanded[entryId] = !accidentCardExpanded[entryId];
+  render();
+}
+function addAccidentUpdate(entryId, assetId){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can add this'); return; }
+  const input = document.getElementById('m-acc-update-input-'+entryId);
+  const note = input.value.trim();
+  if(!note){ toast('Type an update first'); return; }
+  const entry = byId(state.accidentLog, entryId);
+  entry.updates = entry.updates || [];
+  entry.updates.push({id:'accu'+Date.now(), date:new Date().toISOString(), note, addedBy:currentUser().id});
+  saveState(); toast('Update added'); render();
+}
+function removeAccidentUpdate(entryId, assetId, updateId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const entry = byId(state.accidentLog, entryId);
+  entry.updates = (entry.updates||[]).filter(u=>u.id!==updateId);
+  saveState(); toast('Removed'); render();
 }
 function quickSetAccidentStatus(entryId, assetId, newStatus){
   const a = byId(state.companyAssets, assetId);
@@ -7081,6 +7231,7 @@ function quickSetAccidentStatus(entryId, assetId, newStatus){
   const entry = byId(state.accidentLog, entryId);
   if(!entry) return;
   entry.status = newStatus;
+  accidentCardExpanded[entryId] = newStatus!=='closed';
   saveState(); toast('Status updated'); render();
 }
 function deleteAccidentLogEntry(entryId, assetId){
