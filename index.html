@@ -7831,11 +7831,14 @@ function renderSmallItemsSection(personId){
     <div class="card mt-2">
       ${state.smallItemTypes.map(t=>{
         const entry = checkedOut.find(c=>c.typeId===t.id);
-        return `<label class="flex gap-2 mt-1" style="align-items:center;font-weight:400;${canManage?'cursor:pointer;':'cursor:default;'}">
-          <input type="checkbox" style="width:auto;margin:0;" ${entry?'checked':''} ${canManage?`onchange="toggleSmallItemCheckedOut('${personId}','${t.id}')"`:'disabled'}>
-          <span style="flex:1;">${escHtml(t.name)}</span>
-          ${entry?`<span class="small" style="color:var(--slate-light);">since ${fmtDate(entry.checkedOutDate)}</span>`:''}
-        </label>`;
+        return `<div class="flex gap-2 mt-1" style="align-items:center;">
+          <label class="flex gap-2" style="align-items:center;font-weight:400;flex:1;${canManage?'cursor:pointer;':'cursor:default;'}">
+            <input type="checkbox" style="width:auto;margin:0;" ${entry?'checked':''} ${canManage?`onchange="toggleSmallItemCheckedOut('${personId}','${t.id}')"`:'disabled'}>
+            <span style="flex:1;">${escHtml(t.name)}</span>
+            ${entry?`<span class="small" style="color:var(--slate-light);">since ${fmtDate(entry.checkedOutDate)}</span>`:''}
+          </label>
+          ${canManage?`<span class="miniBtn" onclick="openEditSmallItemTypeModal('${t.id}')" title="Rename">✎</span><span class="miniBtn" onclick="deleteSmallItemType('${t.id}')" title="Delete this item type">✕</span>`:''}
+        </div>`;
       }).join('')}
       ${!state.smallItemTypes.length?`<div class="empty-inline">No item types set up yet.</div>`:''}
     </div>
@@ -7853,25 +7856,45 @@ function toggleSmallItemCheckedOut(personId, typeId){
   }
   saveState(); render();
 }
-function openAddSmallItemTypeModal(){
+function openAddSmallItemTypeModal(typeId){
   if(!canEdit()){ toast('Admins only'); return; }
+  const existing = typeId ? byId(state.smallItemTypes, typeId) : null;
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal" style="max-width:360px;">
-        <div class="modal-head"><strong>Add Item Type</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
+        <div class="modal-head"><strong>${existing?'Rename Item Type':'Add Item Type'}</strong><span class="miniBtn" onclick="closeModal(this)">✕</span></div>
         <div class="modal-body">
           <label>Item name</label>
-          <input type="text" id="m-smallitem-name" placeholder="e.g. Parking pass, Company laptop charger">
+          <input type="text" id="m-smallitem-name" value="${escAttr(existing?.name)}" placeholder="e.g. Parking pass, Company laptop charger">
         </div>
-        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveSmallItemType(this)">Add</button></div>
+        <div class="modal-foot"><button class="btn secondary" onclick="closeModal(this)">Cancel</button><button class="btn bronze" onclick="saveSmallItemType('${typeId||''}',this)">${existing?'Save':'Add'}</button></div>
       </div>
     </div>`);
 }
-function saveSmallItemType(el){
+function openEditSmallItemTypeModal(typeId){
+  openAddSmallItemTypeModal(typeId);
+}
+function saveSmallItemType(typeId, el){
   const name = document.getElementById('m-smallitem-name').value.trim();
   if(!name){ toast('Enter a name first'); return; }
-  state.smallItemTypes.push({id:'sit'+Date.now(), name});
-  saveState(); closeModal(el); toast('Added'); render();
+  if(typeId){
+    const existing = byId(state.smallItemTypes, typeId);
+    existing.name = name;
+  } else {
+    state.smallItemTypes.push({id:'sit'+Date.now(), name});
+  }
+  saveState(); closeModal(el); toast(typeId?'Renamed':'Added'); render();
+}
+function deleteSmallItemType(typeId){
+  if(!canEdit()){ toast('Admins only'); return; }
+  const type = byId(state.smallItemTypes, typeId);
+  confirmAction(`Delete "${type.name}" as an item type? This removes it from everyone's checklist, including anyone currently marked as having it.`, ()=>{
+    state.smallItemTypes = state.smallItemTypes.filter(t=>t.id!==typeId);
+    state.people.forEach(p=>{
+      if(p.smallItemsCheckedOut) p.smallItemsCheckedOut = p.smallItemsCheckedOut.filter(c=>c.typeId!==typeId);
+    });
+    saveState(); toast('Deleted'); render();
+  });
 }
 function renderPersonEquipmentSection(personId){
   const assigned = state.companyAssets.filter(a=>a.assignedTo===personId && a.status!=='retired');
