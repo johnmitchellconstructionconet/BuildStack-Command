@@ -6202,8 +6202,11 @@ function renderCompanyAssets(){
     <div class="grid cols-3 mt-2">
       ${assets.map(a=>{
         const due = assetMaintenanceDue(a);
+        const openIncidentsWithPhotos = state.accidentLog.filter(x=>x.assetId===a.id && x.status!=='closed' && (x.photos||[]).length);
+        const damagePhotos = openIncidentsWithPhotos.flatMap(x=>x.photos);
         return `<div class="card hover" onclick="navigate('assetDetail',{id:'${a.id}'})" style="position:relative;">
           <span class="miniBtn" onclick="event.stopPropagation();showAssetQrCode('${a.id}')" title="QR Code" style="position:absolute;top:12px;right:12px;">📱</span>
+          ${damagePhotos.length? `<div class="flex gap-1 mt-1" style="margin-bottom:10px;overflow-x:auto;">${damagePhotos.slice(0,4).map(p=>`<img src="${escAttr(p)}" style="width:100%;max-width:110px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}${damagePhotos.length>4?`<div class="small" style="display:flex;align-items:center;color:var(--slate-light);padding:0 6px;">+${damagePhotos.length-4} more</div>`:''}</div>`:''}
           <div class="flex" style="justify-content:space-between;align-items:flex-start;padding-right:26px;">
             <strong>${a.name}</strong>
             ${due?`<span class="pill rust">Service due</span>`:''}
@@ -6526,7 +6529,7 @@ function renderAssetDetail(){
             ${x.estimatedCost!=null?`<span class="pill gray">Est. ${fmtMoney(x.estimatedCost)}</span>`:''}
           </div>
           ${x.thirdPartyDetails?`<div class="small mt-2" style="color:var(--slate-light);"><strong>Third party:</strong> ${escHtml(x.thirdPartyDetails)}</div>`:''}
-          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="window.open('${escAttr(p)}','_blank')">`).join('')}</div>`:''}
+          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="window.open('${escAttr(p)}','_blank')" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}</div>`:''}
           <div class="small mt-2" style="color:var(--slate-light);">Reported by ${byId(state.people,x.reportedBy)?.name||'—'}</div>
         </div>`;
       }).join('') : `<div class="empty-inline">No incidents logged — hopefully it stays that way. If something happens, report it here right away.</div>`}
@@ -6864,10 +6867,54 @@ function recalcNextMaintenance(assetId){
 /* ================= ACCIDENT / INCIDENT LOG ================= */
 /* Applies to any equipment category, not just vehicles — a dropped laptop needs the same kind of
    record as a vehicle collision, just without the police-report/third-party fields being relevant. */
+function showBrokenPhotoPlaceholder(imgEl){
+  const size = imgEl.style.width || '90px';
+  const div = document.createElement('div');
+  div.className = 'small';
+  div.style.cssText = `width:${size};height:${size};display:flex;align-items:center;justify-content:center;background:var(--rust-tint);border-radius:6px;color:var(--rust);text-align:center;padding:4px;`;
+  div.textContent = 'Photo failed to load';
+  div.title = 'Check that the company-photos Supabase storage bucket allows public read access';
+  imgEl.replaceWith(div);
+}
+let pendingAccidentPhotos = [];
+function accumulateAccidentPhotos(input){
+  Array.from(input.files).forEach(f=>pendingAccidentPhotos.push(f));
+  input.value = ''; // clear so the same file can be re-picked later without confusion, now that it's safely queued
+  renderPendingAccidentPhotos();
+}
+function renderPendingAccidentPhotos(){
+  const wrap = document.getElementById('m-acc-photos-preview');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  if(!pendingAccidentPhotos.length) return;
+  const countLabel = document.createElement('div');
+  countLabel.className = 'small';
+  countLabel.style.color = 'var(--jade)';
+  countLabel.style.width = '100%';
+  countLabel.textContent = `✓ ${pendingAccidentPhotos.length} photo${pendingAccidentPhotos.length!==1?'s':''} queued — will upload when you save`;
+  wrap.appendChild(countLabel);
+  pendingAccidentPhotos.forEach((file,i)=>{
+    const item = document.createElement('div');
+    item.style.cssText = 'position:relative;';
+    const img = document.createElement('img');
+    img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;';
+    img.src = URL.createObjectURL(file);
+    const removeBtn = document.createElement('span');
+    removeBtn.className = 'miniBtn';
+    removeBtn.title = 'Remove';
+    removeBtn.textContent = '✕';
+    removeBtn.style.cssText = 'position:absolute;top:-6px;right:-6px;background:var(--paper);';
+    removeBtn.onclick = () => { pendingAccidentPhotos.splice(i,1); renderPendingAccidentPhotos(); };
+    item.appendChild(img);
+    item.appendChild(removeBtn);
+    wrap.appendChild(item);
+  });
+}
 function openAccidentLogModal(assetId, entryId){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can report this'); return; }
   const entry = entryId ? byId(state.accidentLog, entryId) : null;
+  pendingAccidentPhotos = [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -6880,8 +6927,9 @@ function openAccidentLogModal(assetId, entryId){
           <label>Where did this happen?</label><input type="text" id="m-acc-location" value="${escAttr(entry?.location)}" placeholder="e.g. Job site address, intersection, parking lot">
           <label>What happened?</label>
           <textarea id="m-acc-description" style="min-height:100px;" placeholder="Describe what happened, as much detail as you have right now — you can always add more later.">${entry?.description||''}</textarea>
-          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(damage, the scene, anything relevant)</span></label>
-          <input type="file" id="m-acc-photos" accept="image/*" multiple>
+          <label class="mt-2">Photos <span class="small" style="font-weight:400;">(damage, the scene, anything relevant — select multiple at once if you have them)</span></label>
+          <input type="file" id="m-acc-photos" accept="image/*" multiple onchange="accumulateAccidentPhotos(this)">
+          <div id="m-acc-photos-preview" class="flex gap-2 mt-2" style="flex-wrap:wrap;"></div>
           ${entry && (entry.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${entry.photos.map(p=>`<img src="${escAttr(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;">`).join('')}</div><div class="small mt-1" style="color:var(--slate-light);">Existing photos above stay — anything you add here is on top of them.</div>`:''}
           <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
             <input type="checkbox" id="m-acc-injury" style="width:auto;margin:0;" ${entry?.injuryInvolved?'checked':''}>
@@ -6929,11 +6977,14 @@ async function saveAccidentLogEntry(assetId, entryId, el){
   const existingEntry = entryId ? byId(state.accidentLog, entryId) : null;
   const costVal = document.getElementById('m-acc-cost').value.trim();
   const newPhotos = [];
-  const photoFiles = document.getElementById('m-acc-photos').files;
+  const failedPhotos = [];
+  const photoFiles = pendingAccidentPhotos;
   for(let i=0; i<photoFiles.length; i++){
     try{ newPhotos.push(await uploadPhotoToStorage(photoFiles[i], 'accident-photos')); }
-    catch(e){ toast('One or more photos failed to upload — saving the rest of the report anyway.'); }
+    catch(e){ failedPhotos.push(photoFiles[i].name); console.error('Accident photo upload failed:', photoFiles[i].name, e); }
   }
+  if(failedPhotos.length) toast(`${failedPhotos.length} of ${photoFiles.length} photo(s) failed to upload (${failedPhotos.join(', ')}) — saving the rest of the report anyway.`);
+  pendingAccidentPhotos = [];
   const data = {
     assetId,
     personId: document.getElementById('m-acc-person').value,
