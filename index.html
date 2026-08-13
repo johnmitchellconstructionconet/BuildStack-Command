@@ -6505,14 +6505,18 @@ function renderAssetDetail(){
       </div>
       ${accidents.length? accidents.map(x=>{
         const person = byId(state.people, x.personId);
-        const statusPill = x.status==='closed' ? '<span class="pill gray">Closed</span>' : x.status==='in_progress' ? '<span class="pill amber">In Progress</span>' : '<span class="pill rust">Open</span>';
         return `<div class="card mt-2" style="${x.status!=='closed'?'background:var(--rust-tint);border-color:#E7C1B4;':''}">
           <div class="flex" style="justify-content:space-between;align-items:flex-start;">
             <div>
-              <strong>${fmtDateTime(x.dateTime)}</strong> ${statusPill}
+              <strong>${fmtDateTime(x.dateTime)}</strong>
               <div class="small mt-1">${person?person.name:'Unknown'}${x.location?' · '+escHtml(x.location):''}</div>
             </div>
-            <div class="flex gap-1">
+            <div class="flex gap-1" style="align-items:center;">
+              ${canReportAccident?`<select class="sm" style="width:auto;margin:0;" onchange="quickSetAccidentStatus('${x.id}','${a.id}',this.value)">
+                <option value="open" ${x.status==='open'||!x.status?'selected':''}>Open</option>
+                <option value="in_progress" ${x.status==='in_progress'?'selected':''}>In Progress</option>
+                <option value="closed" ${x.status==='closed'?'selected':''}>Closed</option>
+              </select>`:`<span class="pill ${x.status==='closed'?'gray':x.status==='in_progress'?'amber':'rust'}">${x.status==='closed'?'Closed':x.status==='in_progress'?'In Progress':'Open'}</span>`}
               ${canReportAccident?`<span class="miniBtn" onclick="openAccidentLogModal('${a.id}','${x.id}')" title="Edit">✎</span>`:''}
               ${canEdit()?`<span class="miniBtn" onclick="deleteAccidentLogEntry('${x.id}','${a.id}')" title="Delete">✕</span>`:''}
             </div>
@@ -6526,7 +6530,7 @@ function renderAssetDetail(){
             ${x.estimatedCost!=null?`<span class="pill gray">Est. ${fmtMoney(x.estimatedCost)}</span>`:''}
           </div>
           ${x.thirdPartyDetails?`<div class="small mt-2" style="color:var(--slate-light);"><strong>Third party:</strong> ${escHtml(x.thirdPartyDetails)}</div>`:''}
-          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="window.open('${escAttr(p)}','_blank')" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}</div>`:''}
+          ${(x.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${x.photos.map(p=>`<img src="${escAttr(p)}" style="width:140px;height:140px;object-fit:cover;border-radius:8px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.15);" onclick="window.open('${escAttr(p)}','_blank')" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}</div>`:''}
           <div class="small mt-2" style="color:var(--slate-light);">Reported by ${byId(state.people,x.reportedBy)?.name||'—'}</div>
         </div>`;
       }).join('') : `<div class="empty-inline">No incidents logged — hopefully it stays that way. If something happens, report it here right away.</div>`}
@@ -6864,7 +6868,29 @@ function recalcNextMaintenance(assetId){
 /* ================= ACCIDENT / INCIDENT LOG ================= */
 /* Applies to any equipment category, not just vehicles — a dropped laptop needs the same kind of
    record as a vehicle collision, just without the police-report/third-party fields being relevant. */
-function showBrokenPhotoPlaceholder(imgEl){
+function extractStoragePathFromUrl(url){
+  const marker = '/object/public/company-photos/';
+  const idx = url.indexOf(marker);
+  if(idx===-1) return null;
+  return url.slice(idx + marker.length);
+}
+async function showBrokenPhotoPlaceholder(imgEl){
+  if(imgEl.dataset.fallbackTried){ showFinalPhotoFailure(imgEl); return; }
+  imgEl.dataset.fallbackTried = '1';
+  const path = extractStoragePathFromUrl(imgEl.src);
+  if(path && supabaseClient){
+    try{
+      const { data, error } = await supabaseClient.storage.from('company-photos').download(path);
+      if(error || !data) throw error || new Error('No data returned');
+      imgEl.src = URL.createObjectURL(data);
+      return; // onerror will fire again if this ALSO fails, hitting the fallbackTried branch above
+    }catch(e){
+      console.error('Authenticated photo fallback also failed:', e);
+    }
+  }
+  showFinalPhotoFailure(imgEl);
+}
+function showFinalPhotoFailure(imgEl){
   const size = imgEl.style.width || '90px';
   const url = imgEl.src;
   const wrap = document.createElement('div');
@@ -7035,6 +7061,14 @@ async function saveAccidentLogEntry(assetId, entryId, el){
   pendingAccidentPhotos = [];
   accidentPhotosToRemove = [];
   saveState(); closeModal(el); toast(existingEntry?'Saved':'Reported'); refreshNotifBadge(); render();
+}
+function quickSetAccidentStatus(entryId, assetId, newStatus){
+  const a = byId(state.companyAssets, assetId);
+  if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can change this'); return; }
+  const entry = byId(state.accidentLog, entryId);
+  if(!entry) return;
+  entry.status = newStatus;
+  saveState(); toast('Status updated'); render();
 }
 function deleteAccidentLogEntry(entryId, assetId){
   if(!canEdit()){ toast('Admins only — incident reports stay on record for accountability'); return; }
