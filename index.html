@@ -6875,22 +6875,31 @@ function extractStoragePathFromUrl(url){
   return url.slice(idx + marker.length);
 }
 async function showBrokenPhotoPlaceholder(imgEl){
-  if(imgEl.dataset.fallbackTried){ showFinalPhotoFailure(imgEl); return; }
+  if(imgEl.dataset.fallbackTried){ showFinalPhotoFailure(imgEl, imgEl.dataset.lastError || 'Unknown error'); return; }
   imgEl.dataset.fallbackTried = '1';
   const path = extractStoragePathFromUrl(imgEl.src);
-  if(path && supabaseClient){
-    try{
-      const { data, error } = await supabaseClient.storage.from('company-photos').download(path);
-      if(error || !data) throw error || new Error('No data returned');
-      imgEl.src = URL.createObjectURL(data);
-      return; // onerror will fire again if this ALSO fails, hitting the fallbackTried branch above
-    }catch(e){
-      console.error('Authenticated photo fallback also failed:', e);
-    }
+  if(!path){
+    showFinalPhotoFailure(imgEl, 'Could not recognize this as a company-photos storage URL — the link format looks unexpected.');
+    return;
   }
-  showFinalPhotoFailure(imgEl);
+  if(!supabaseClient){
+    showFinalPhotoFailure(imgEl, 'Not connected to the server right now, so this couldn\u2019t even be attempted.');
+    return;
+  }
+  try{
+    const { data, error } = await supabaseClient.storage.from('company-photos').download(path);
+    if(error) throw error;
+    if(!data) throw new Error('Server returned no data for this file.');
+    imgEl.src = URL.createObjectURL(data);
+    return; // onerror will fire again if this ALSO fails, hitting the fallbackTried branch above
+  }catch(e){
+    const msg = (e && (e.message || e.error_description || e.error)) || JSON.stringify(e) || 'Unknown error';
+    console.error('Authenticated photo fallback also failed:', e);
+    imgEl.dataset.lastError = msg;
+    showFinalPhotoFailure(imgEl, msg);
+  }
 }
-function showFinalPhotoFailure(imgEl){
+function showFinalPhotoFailure(imgEl, errorDetail){
   const size = imgEl.style.width || '90px';
   const url = imgEl.src;
   const wrap = document.createElement('div');
@@ -6899,12 +6908,16 @@ function showFinalPhotoFailure(imgEl){
   box.className = 'small';
   box.style.cssText = `width:${size};height:${size};display:flex;align-items:center;justify-content:center;background:var(--rust-tint);border-radius:6px;color:var(--rust);text-align:center;padding:4px;`;
   box.textContent = 'Photo failed to load';
-  box.title = 'Check that the company-photos Supabase storage bucket allows public read access';
+  const detail = document.createElement('div');
+  detail.className = 'small';
+  detail.style.cssText = 'color:var(--rust);font-weight:600;text-align:center;margin-top:4px;max-width:200px;word-break:break-word;';
+  detail.textContent = errorDetail || 'No further detail available.';
   const link = document.createElement('a');
   link.href = url; link.target = '_blank'; link.rel = 'noopener';
   link.textContent = 'View raw URL';
   link.style.cssText = 'font-size:10px;color:var(--slate-light);text-decoration:underline;margin-top:2px;word-break:break-all;';
   wrap.appendChild(box);
+  wrap.appendChild(detail);
   wrap.appendChild(link);
   imgEl.replaceWith(wrap);
 }
