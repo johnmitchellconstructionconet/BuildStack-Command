@@ -6202,11 +6202,8 @@ function renderCompanyAssets(){
     <div class="grid cols-3 mt-2">
       ${assets.map(a=>{
         const due = assetMaintenanceDue(a);
-        const openIncidentsWithPhotos = state.accidentLog.filter(x=>x.assetId===a.id && x.status!=='closed' && (x.photos||[]).length);
-        const damagePhotos = openIncidentsWithPhotos.flatMap(x=>x.photos);
         return `<div class="card hover" onclick="navigate('assetDetail',{id:'${a.id}'})" style="position:relative;">
           <span class="miniBtn" onclick="event.stopPropagation();showAssetQrCode('${a.id}')" title="QR Code" style="position:absolute;top:12px;right:12px;">📱</span>
-          ${damagePhotos.length? `<div class="flex gap-1 mt-1" style="margin-bottom:10px;overflow-x:auto;">${damagePhotos.slice(0,4).map(p=>`<img src="${escAttr(p)}" style="width:100%;max-width:110px;height:80px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="showBrokenPhotoPlaceholder(this)">`).join('')}${damagePhotos.length>4?`<div class="small" style="display:flex;align-items:center;color:var(--slate-light);padding:0 6px;">+${damagePhotos.length-4} more</div>`:''}</div>`:''}
           <div class="flex" style="justify-content:space-between;align-items:flex-start;padding-right:26px;">
             <strong>${a.name}</strong>
             ${due?`<span class="pill rust">Service due</span>`:''}
@@ -6877,6 +6874,7 @@ function showBrokenPhotoPlaceholder(imgEl){
   imgEl.replaceWith(div);
 }
 let pendingAccidentPhotos = [];
+let accidentPhotosToRemove = [];
 function accumulateAccidentPhotos(input){
   Array.from(input.files).forEach(f=>pendingAccidentPhotos.push(f));
   input.value = ''; // clear so the same file can be re-picked later without confusion, now that it's safely queued
@@ -6910,11 +6908,25 @@ function renderPendingAccidentPhotos(){
     wrap.appendChild(item);
   });
 }
+function markExistingAccidentPhotoForRemoval(idx){
+  const wrap = document.querySelector(`[data-existing-photo-idx="${idx}"]`);
+  if(!wrap) return;
+  if(accidentPhotosToRemove.includes(idx)){
+    accidentPhotosToRemove = accidentPhotosToRemove.filter(i=>i!==idx);
+    wrap.style.opacity = '1';
+    wrap.querySelector('.miniBtn').title = 'Remove this photo';
+  } else {
+    accidentPhotosToRemove.push(idx);
+    wrap.style.opacity = '0.3';
+    wrap.querySelector('.miniBtn').title = 'Click again to keep this photo';
+  }
+}
 function openAccidentLogModal(assetId, entryId){
   const a = byId(state.companyAssets, assetId);
   if(!canEdit() && a.assignedTo!==currentUser().id){ toast('Only an admin or whoever has this checked out can report this'); return; }
   const entry = entryId ? byId(state.accidentLog, entryId) : null;
   pendingAccidentPhotos = [];
+  accidentPhotosToRemove = [];
   openModal(`
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
@@ -6930,7 +6942,7 @@ function openAccidentLogModal(assetId, entryId){
           <label class="mt-2">Photos <span class="small" style="font-weight:400;">(damage, the scene, anything relevant — select multiple at once if you have them)</span></label>
           <input type="file" id="m-acc-photos" accept="image/*" multiple onchange="accumulateAccidentPhotos(this)">
           <div id="m-acc-photos-preview" class="flex gap-2 mt-2" style="flex-wrap:wrap;"></div>
-          ${entry && (entry.photos||[]).length? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap;">${entry.photos.map(p=>`<img src="${escAttr(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;">`).join('')}</div><div class="small mt-1" style="color:var(--slate-light);">Existing photos above stay — anything you add here is on top of them.</div>`:''}
+          ${entry && (entry.photos||[]).length? `<div id="m-acc-existing-photos" class="flex gap-2 mt-2" style="flex-wrap:wrap;">${entry.photos.map((p,i)=>`<div class="flex" style="position:relative;" data-existing-photo-idx="${i}"><img src="${escAttr(p)}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" onerror="showBrokenPhotoPlaceholder(this)"><span class="miniBtn" onclick="markExistingAccidentPhotoForRemoval(${i})" title="Remove this photo" style="position:absolute;top:-6px;right:-6px;background:var(--paper);">✕</span></div>`).join('')}</div><div class="small mt-1" style="color:var(--slate-light);">Existing photos above stay — anything you add here is on top of them.</div>`:''}
           <label class="flex gap-2 mt-2" style="align-items:center;font-weight:500;">
             <input type="checkbox" id="m-acc-injury" style="width:auto;margin:0;" ${entry?.injuryInvolved?'checked':''}>
             <span style="color:var(--rust);">Anyone hurt, even minor?</span>
@@ -6984,14 +6996,13 @@ async function saveAccidentLogEntry(assetId, entryId, el){
     catch(e){ failedPhotos.push(photoFiles[i].name); console.error('Accident photo upload failed:', photoFiles[i].name, e); }
   }
   if(failedPhotos.length) toast(`${failedPhotos.length} of ${photoFiles.length} photo(s) failed to upload (${failedPhotos.join(', ')}) — saving the rest of the report anyway.`);
-  pendingAccidentPhotos = [];
   const data = {
     assetId,
     personId: document.getElementById('m-acc-person').value,
     dateTime: document.getElementById('m-acc-datetime').value,
     location: document.getElementById('m-acc-location').value.trim(),
     description,
-    photos: [...(existingEntry?.photos||[]), ...newPhotos],
+    photos: [...(existingEntry?.photos||[]).filter((p,i)=>!accidentPhotosToRemove.includes(i)), ...newPhotos],
     injuryInvolved: document.getElementById('m-acc-injury').checked,
     thirdPartyInvolved: document.getElementById('m-acc-thirdparty').checked,
     thirdPartyDetails: document.getElementById('m-acc-thirdparty-details').value.trim(),
@@ -7012,6 +7023,8 @@ async function saveAccidentLogEntry(assetId, entryId, el){
     const reporter = currentUser();
     createNotification('accident_reported', `${reporter.name} reported an incident involving ${a.name}${data.injuryInvolved?' — INJURY INVOLVED':''}`, {targetAudience:'admins', relatedType:'asset', relatedId:assetId});
   }
+  pendingAccidentPhotos = [];
+  accidentPhotosToRemove = [];
   saveState(); closeModal(el); toast(existingEntry?'Saved':'Reported'); refreshNotifBadge(); render();
 }
 function deleteAccidentLogEntry(entryId, assetId){
