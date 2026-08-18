@@ -980,6 +980,13 @@ function migrateState(parsed){
       if(!parsed.calculators) parsed.calculators = [];
       if(!parsed.trainingPaths) parsed.trainingPaths = [];
       if(!parsed.trainingPathEnrollments) parsed.trainingPathEnrollments = [];
+      // One-time cleanup: people offboarded before this fix existed may still have stale training
+      // enrollments/trainer assignments left over. Clean those up now so the underlying data matches
+      // what should have happened at offboarding time, not just what the display filters hide.
+      (parsed.people||[]).filter(p=>p.status==='offboarded').forEach(op=>{
+        parsed.trainingPathEnrollments = parsed.trainingPathEnrollments.filter(e=>e.personId!==op.id);
+        parsed.trainingPathEnrollments.forEach(e=>{ if(e.trainerId===op.id) e.trainerId = null; });
+      });
       if(!parsed.vehicleWeeklyLogs) parsed.vehicleWeeklyLogs = [];
       if(!parsed.accidentLog) parsed.accidentLog = [];
       if(!parsed.smallItemTypes) parsed.smallItemTypes = [
@@ -3046,7 +3053,7 @@ function renderEmployeeDashboard(){
     </div>
     ${renderExternalToolsSection()}
     ${(()=>{
-      const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===u.id);
+      const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===u.id && !isOffboarded(e.personId));
       if(!trainingFor.length) return '';
       return `<div class="card mt-2" style="background:var(--bronze-tint);cursor:pointer;" onclick="trainingPageTab='paths';navigate('mytraining',{});">
         <strong>🎓 You're training ${trainingFor.length===1?byId(state.people,trainingFor[0].personId)?.name:trainingFor.length+' people'}</strong>${trainingFor.length>1?` — ${trainingFor.map(e=>byId(state.people,e.personId)?.name).filter(Boolean).join(', ')}`:''}
@@ -3319,7 +3326,7 @@ function renderTrainingPathsTab(){
     `;
   }
   const myEnrollments = state.trainingPathEnrollments.filter(e=>e.personId===currentUser().id);
-  const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===currentUser().id);
+  const trainingFor = state.trainingPathEnrollments.filter(e=>e.trainerId===currentUser().id && !isOffboarded(e.personId));
   if(!myEnrollments.length && !trainingFor.length) return `<div class="empty"><h3>No training path assigned</h3><p>If your role has a structured training plan, it\u2019ll show up here automatically once you\u2019re assigned that role. If you\u2019re training someone else, it\u2019ll show up here once an admin assigns you to them.</p></div>`;
   const viewingEnrollmentId = currentParams.viewTrainee;
   if(viewingEnrollmentId){
@@ -4663,6 +4670,9 @@ function togglePersonDetailSection(key){
 }
 function renderPersonDetail(){
   const p = byId(state.people, currentParams.id);
+  if(p && p.status==='offboarded' && !canEdit()){
+    return `<div class="empty"><h3>Not found</h3><p>This profile is no longer available. <a onclick="navigate('people')" style="text-decoration:underline;cursor:pointer;">Back to People</a></p></div>`;
+  }
   const seats = personPositions(p.id);
   const roles = seats.map(s=>byId(state.roles,s.roleId)).filter(Boolean);
   const mine = myAssignments(p.id);
@@ -7633,6 +7643,11 @@ function confirmOffboard(personId, el){
 
   seats.forEach(s=>{ s.personId = null; s.status = 'Open'; });
   state.performanceReviews.forEach(r=>{ if(r.personId===personId && r.status==='scheduled') r.status='cancelled'; });
+  // Training: they're gone, so their own enrollment as a trainee is removed entirely. If they were
+  // TRAINING someone else, that person's enrollment stays (they still need to finish) — just with the
+  // now-departed trainer cleared off, so it stops showing on anyone's "you're training" list.
+  state.trainingPathEnrollments = state.trainingPathEnrollments.filter(e=>e.personId!==personId);
+  state.trainingPathEnrollments.forEach(e=>{ if(e.trainerId===personId) e.trainerId = null; });
   p.status = 'offboarded';
 
   saveState(); closeModal(el); toast(`${p.name} offboarded — history preserved`); navigate('people');
@@ -8785,7 +8800,7 @@ function renderSearchResults(){
   }).filter(Boolean);
   const policies = state.policies.filter(p=>p.title.toLowerCase().includes(q));
   const roles = state.roles.filter(r=>r.title.toLowerCase().includes(q));
-  const people = state.people.filter(p=>p.name.toLowerCase().includes(q));
+  const people = state.people.filter(p=>p.name.toLowerCase().includes(q) && (canEdit() || p.status!=='offboarded'));
   const total = topicMatches.length+policies.length+roles.length+people.length;
   return `
     <div class="page-head"><div><div class="page-eyebrow">Search</div><div class="page-title">Results for "${currentParams.q}"</div><div class="page-desc">${total} result${total!==1?'s':''}</div></div></div>
